@@ -73,3 +73,13 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Custom ignores
+.bundle/
+.bundle.zip
+*.zip
+*.docx
+docx_extracted/
+.env
+src/backend/.env
+
