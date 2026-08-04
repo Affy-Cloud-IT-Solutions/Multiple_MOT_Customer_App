@@ -31,8 +31,12 @@ const AlertSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Pending', 'Approved', 'Acknowledged'],
+        enum: ['Pending', 'Approved', 'Acknowledged', 'Rejected'],
         default: 'Pending'
+    },
+    rejectionReason: {
+        type: String,
+        default: ''
     }
 }, {
     timestamps: true

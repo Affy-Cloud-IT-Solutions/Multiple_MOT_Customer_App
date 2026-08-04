@@ -40,27 +40,61 @@ export default function BookingScreen({ route, navigation }: any) {
   }
 
   // Date and Time options for slot selection
-  const getNextDays = () => {
+  const [currentViewDate, setCurrentViewDate] = useState(new Date());
+
+  const getDaysInMonth = (year: number, month: number) => {
+    const date = new Date(year, month, 1);
     const days = [];
-    const today = new Date('2026-07-22'); // Aligning with the app's current date reference
-    for (let i = 1; i <= 6; i++) {
-      const nextDay = new Date(today);
-      nextDay.setDate(today.getDate() + i);
-      
-      // Skip Sundays
-      if (nextDay.getDay() === 0) continue;
-
-      const dayName = nextDay.toLocaleDateString('en-GB', { weekday: 'short' });
-      const dayNum = nextDay.getDate();
-      const monthName = nextDay.toLocaleDateString('en-GB', { month: 'short' });
-      const fullDate = nextDay.toISOString().substring(0, 10);
-
-      days.push({ dayName, dayNum, monthName, fullDate });
+    const firstDayIndex = date.getDay(); // 0 = Sun, 6 = Sat
+    
+    // Empty slots before 1st of month
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push(null);
     }
+    
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    for (let d = 1; d <= lastDay; d++) {
+      days.push(new Date(year, month, d));
+    }
+    
     return days;
   };
 
-  const availableDays = getNextDays();
+  const isDateSelectable = (date: Date | null) => {
+    if (!date) return false;
+    const currentToday = new Date();
+    currentToday.setHours(0, 0, 0, 0);
+    
+    // Past days
+    if (date < currentToday) return false;
+    
+    // Sundays
+    if (date.getDay() === 0) return false;
+    
+    return true;
+  };
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const handlePrevMonth = () => {
+    const prev = new Date(currentViewDate.getFullYear(), currentViewDate.getMonth() - 1, 1);
+    const now = new Date();
+    if (prev.getFullYear() < now.getFullYear() || (prev.getFullYear() === now.getFullYear() && prev.getMonth() < now.getMonth())) {
+      return;
+    }
+    setCurrentViewDate(prev);
+  };
+
+  const handleNextMonth = () => {
+    const next = new Date(currentViewDate.getFullYear(), currentViewDate.getMonth() + 1, 1);
+    setCurrentViewDate(next);
+  };
+
+  const calendarDays = getDaysInMonth(currentViewDate.getFullYear(), currentViewDate.getMonth());
+
   const timeSlots = [
     { id: 't1', label: 'Morning', time: '09:00 AM' },
     { id: 't2', label: 'Late Morning', time: '11:30 AM' },
@@ -68,7 +102,16 @@ export default function BookingScreen({ route, navigation }: any) {
     { id: 't4', label: 'Late Afternoon', time: '04:30 PM' },
   ];
 
-  const [selectedDate, setSelectedDate] = useState(availableDays[0]?.fullDate || '');
+  const getTodayISOString = () => {
+    const d = new Date();
+    // If today is Sunday, default to tomorrow (Monday)
+    if (d.getDay() === 0) {
+      d.setDate(d.getDate() + 1);
+    }
+    return d.toISOString().substring(0, 10);
+  };
+
+  const [selectedDate, setSelectedDate] = useState(getTodayISOString());
   const [selectedTime, setSelectedTime] = useState(timeSlots[0]?.time || '');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -81,10 +124,11 @@ export default function BookingScreen({ route, navigation }: any) {
 
     setLoading(true);
     try {
-      const formattedDate = availableDays.find(d => d.fullDate === selectedDate);
-      const displayDateStr = formattedDate 
-        ? `${formattedDate.dayNum} ${formattedDate.monthName}`
-        : selectedDate;
+      const parsedDate = new Date(selectedDate);
+      const monthsList = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const displayDateStr = isNaN(parsedDate.getTime())
+        ? selectedDate
+        : `${parsedDate.getDate()} ${monthsList[parsedDate.getMonth()]}`;
 
       // Add BOOKED alert notification to Admin alerts list
       await addAlert({
@@ -103,23 +147,12 @@ export default function BookingScreen({ route, navigation }: any) {
 
       setLoading(false);
 
-      Alert.alert(
-        isReschedule ? 'Rescheduled Successfully' : 'Booking Request Submitted',
-        isReschedule 
-          ? 'Your appointment has been successfully rescheduled.'
-          : 'Your booking slot has been selected and submitted to the garage. You can review confirmations in the notifications screen.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              navigation.navigate('CustomerPortal', { customerId: customer.id });
-            },
-          },
-        ]
-      );
+      // Navigate back to CustomerPortalScreen immediately
+      navigation.navigate('CustomerPortal', { customerId: customer.id });
     } catch (err: any) {
       setLoading(false);
       Alert.alert('Error', err.message || 'Failed to confirm booking slot.');
+    }
   };
 
   return (
@@ -128,7 +161,7 @@ export default function BookingScreen({ route, navigation }: any) {
       <View style={[styles.navbar, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={22} color={theme.colors.text} />
-          <Text style={[styles.backBtnText, { color: theme.colors.text }]}>Back</Text>
+          {/* <Text style={[styles.backBtnText, { color: theme.colors.text }]}>Back</Text> */}
         </TouchableOpacity>
         <Text style={[styles.navTitle, { color: theme.colors.text }]}>
           {isReschedule ? 'Reschedule MOT Slot' : 'Book MOT Slot'}
@@ -163,33 +196,70 @@ export default function BookingScreen({ route, navigation }: any) {
 
         {/* Date Selector Section */}
         <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>1. Select Appointment Date</Text>
-        <View style={styles.datePickerContainer}>
-          {availableDays.map((day) => {
-            const isSelected = selectedDate === day.fullDate;
-            return (
-              <TouchableOpacity
-                key={day.fullDate}
-                onPress={() => setSelectedDate(day.fullDate)}
-                style={[
-                  styles.dateCard,
-                  {
-                    backgroundColor: isSelected ? theme.colors.secondary : theme.colors.card,
-                    borderColor: isSelected ? theme.colors.secondary : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text style={[styles.dayName, { color: isSelected ? '#FFFFFF' : theme.colors.placeholder }]}>
-                  {day.dayName}
-                </Text>
-                <Text style={[styles.dayNum, { color: isSelected ? '#FFFFFF' : theme.colors.text }]}>
-                  {day.dayNum}
-                </Text>
-                <Text style={[styles.monthName, { color: isSelected ? '#FFFFFF' : theme.colors.placeholder }]}>
-                  {day.monthName}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        <View style={[styles.calendarCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          {/* Header */}
+          <View style={styles.calendarHeader}>
+            <TouchableOpacity onPress={handlePrevMonth} style={styles.calNavBtn}>
+              <MaterialCommunityIcons name="chevron-left" size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.calendarTitle, { color: theme.colors.text }]}>
+              {monthNames[currentViewDate.getMonth()]} {currentViewDate.getFullYear()}
+            </Text>
+            <TouchableOpacity onPress={handleNextMonth} style={styles.calNavBtn}>
+              <MaterialCommunityIcons name="chevron-right" size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Weekday labels */}
+          <View style={styles.weekdayRow}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, index) => (
+              <Text key={d} style={[styles.weekdayText, { color: index === 0 ? theme.colors.error : theme.colors.placeholder }]}>
+                {d}
+              </Text>
+            ))}
+          </View>
+
+          {/* Days Grid */}
+          <View style={styles.daysGrid}>
+            {calendarDays.map((day, idx) => {
+              if (!day) {
+                return <View key={`empty-${idx}`} style={styles.dayCell} />;
+              }
+
+              const isoString = day.toISOString().substring(0, 10);
+              const isSelected = selectedDate === isoString;
+              const selectable = isDateSelectable(day);
+              
+              const todayObj = new Date();
+              const isToday = day.getDate() === todayObj.getDate() && 
+                              day.getMonth() === todayObj.getMonth() && 
+                              day.getFullYear() === todayObj.getFullYear();
+
+              return (
+                <TouchableOpacity
+                  key={isoString}
+                  disabled={!selectable}
+                  onPress={() => setSelectedDate(isoString)}
+                  style={[
+                    styles.dayCell,
+                    isSelected && { backgroundColor: theme.colors.secondary, borderRadius: 18 },
+                    isToday && !isSelected && { borderWidth: 1, borderColor: theme.colors.secondary, borderRadius: 18 }
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dayCellText,
+                      { color: theme.colors.text },
+                      isSelected && { color: '#FFFFFF', fontWeight: 'bold' },
+                      !selectable && { color: theme.colors.placeholder + '40' }
+                    ]}
+                  >
+                    {day.getDate()}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
         {/* Time Selector Section */}
@@ -340,34 +410,57 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 12,
   },
-  datePickerContainer: {
+  calendarCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 24,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  calNavBtn: {
+    padding: 4,
+  },
+  calendarTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  weekdayRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 24,
-    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    paddingBottom: 6,
+    marginBottom: 8,
   },
-  dateCard: {
-    flex: 1,
+  weekdayText: {
+    width: '14.2%',
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 8,
+  },
+  dayCell: {
+    width: '14.2%',
+    height: 36,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    minWidth: 50,
   },
-  dayName: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  dayNum: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-  monthName: {
-    fontSize: 10,
-    fontWeight: '600',
+  dayCellText: {
+    fontSize: 13,
   },
   timePickerContainer: {
     flexDirection: 'row',

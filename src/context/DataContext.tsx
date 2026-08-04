@@ -32,7 +32,8 @@ export interface AlertNotification {
   registrationNumber: string;
   makeModel: string;
   date: string;
-  status: 'Pending' | 'Approved' | 'Acknowledged';
+  status: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected';
+  rejectionReason?: string;
 }
 
 export interface AuditLog {
@@ -62,10 +63,11 @@ interface DataContextType {
   refreshData: () => Promise<void>;
   addCustomer: (customer: Omit<Customer, 'id' | 'createdDate'>) => Promise<string>;
   addVehicle: (vehicle: Omit<Vehicle, 'id'>) => Promise<void>;
-  updateVehicleStatus: (vehicleId: string, status: 'Active' | 'Sold' | 'Scrapped') => Promise<void>;
+  updateVehicleStatus: (vehicleId: string, status: 'Active' | 'Sold' | 'Scrapped' | 'Pending') => Promise<void>;
   addAlert: (alert: Omit<AlertNotification, 'id' | 'status' | 'date'>) => Promise<void>;
   approveAlert: (alertId: string) => Promise<void>;
   acknowledgeAlert: (alertId: string) => Promise<void>;
+  rejectAlert: (alertId: string, reason: string) => Promise<void>;
   addAudit: (activity: string, details: string) => Promise<void>;
   createStaffAccount: (name: string, email: string, password: string) => Promise<void>;
 }
@@ -180,7 +182,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const updateVehicleStatus = async (vehicleId: string, status: 'Active' | 'Sold' | 'Scrapped'): Promise<void> => {
+  const updateVehicleStatus = async (vehicleId: string, status: 'Active' | 'Sold' | 'Scrapped' | 'Pending'): Promise<void> => {
     try {
       const response = await fetch(`${BASE_URL}/vehicles/${vehicleId}`, {
         method: 'PUT',
@@ -304,6 +306,27 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const rejectAlert = async (alertId: string, reason: string): Promise<void> => {
+    try {
+      const response = await fetch(`${BASE_URL}/alerts/${alertId}/reject`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ reason })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to reject booking request');
+      }
+      await refreshData();
+    } catch (error) {
+      console.error('[DATA CONTEXT] rejectAlert error:', error);
+      throw error;
+    }
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -322,6 +345,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         addAlert,
         approveAlert,
         acknowledgeAlert,
+        rejectAlert,
         addAudit,
         createStaffAccount,
       }}

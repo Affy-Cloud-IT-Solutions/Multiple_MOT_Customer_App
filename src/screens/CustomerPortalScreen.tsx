@@ -11,6 +11,7 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  Switch,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
@@ -22,7 +23,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 export default function CustomerPortalScreen({ route, navigation }: any) {
-  const { theme, toggleTheme } = useAppTheme();
+  const { isDarkMode, theme, toggleTheme } = useAppTheme();
   const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData } = useAppValues();
 
   // Find active customer
@@ -55,6 +56,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const [model, setModel] = useState('');
   const [expiry, setExpiry] = useState('');
   const [expandedBookingReg, setExpandedBookingReg] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile'>('home');
 
   const getBookingSlot = (makeModel: string) => {
     const parts = makeModel.split(' - Slot: ');
@@ -151,7 +153,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         model: model.trim().toUpperCase(),
         year: '2018',
         motExpiryDate: expiry,
-        status: 'Active'
+        status: 'Pending'
       });
 
       // 2. Send alert notification to Admin for log/info
@@ -178,8 +180,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       setShowAddForm(false);
 
       Alert.alert(
-        'Vehicle Registered',
-        'Your new vehicle has been registered successfully and is now visible in your portal!'
+        'Vehicle Registration Pending',
+        'Your new vehicle has been registered successfully and is awaiting approval from the garage staff. You will be able to book an MOT once approved!'
       );
     } catch (error: any) {
       setLoadingAction(null);
@@ -191,255 +193,591 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Top Bar / Header */}
-      <View style={[styles.navbar, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.replace('Login')} style={styles.backBtn}>
-          <MaterialCommunityIcons name="logout" size={20} color={theme.colors.error} />
-          <Text style={[styles.backBtnText, { color: theme.colors.error }]}>Exit Portal</Text>
-        </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: theme.colors.text }]}>Self-Service Portal</Text>
-        <View style={styles.rightActionsRow}>
-          <TouchableOpacity onPress={toggleTheme} style={styles.themeBtn}>
-            <MaterialCommunityIcons name="theme-light-dark" size={20} color={theme.colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              setShowAddForm(!showAddForm);
-            }}
-            style={styles.addNavBtn}
-          >
-            <MaterialCommunityIcons name="plus" size={22} color={theme.colors.secondary} />
-          </TouchableOpacity>
-        </View>
+      <View style={[styles.navbar, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, justifyContent: 'flex-start' }]}>
+        <Text style={[styles.navTitle, { color: theme.colors.text, textAlign: 'left' }]}>
+          {activeTab === 'home' ? 'Self-Service Portal' :
+           activeTab === 'history' ? 'MOT History' : 'My Profile'}
+        </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {/* Welcome Block */}
-        <View style={styles.welcomeBlock}>
-          <Text style={[styles.welcomeTitle, { color: theme.colors.text }]}>
-            Hello, {customer.firstName}!
-          </Text>
-          <Text style={[styles.welcomeSubtitle, { color: theme.colors.placeholder }]}>
-            Manage your MOT reminders and update ownership details below.
-          </Text>
-        </View>
-
-        {/* Add New Vehicle Form */}
-        {showAddForm && (
-          <View style={[styles.formCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <Text style={[styles.formTitle, { color: theme.colors.text }]}>Add New Vehicle Details</Text>
-            
-            <Text style={[styles.label, { color: theme.colors.text }]}>Registration Number</Text>
-            <TextInput
-              value={regNo}
-              onChangeText={setRegNo}
-              placeholder="E.g. AB12 XYZ"
-              placeholderTextColor={theme.colors.placeholder}
-              autoCapitalize="characters"
-              style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
-            />
-
-            <View style={styles.formRow}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={[styles.label, { color: theme.colors.text }]}>Make</Text>
-                <TextInput
-                  value={make}
-                  onChangeText={setMake}
-                  placeholder="E.g. FORD"
-                  placeholderTextColor={theme.colors.placeholder}
-                  autoCapitalize="characters"
-                  style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.label, { color: theme.colors.text }]}>Model</Text>
-                <TextInput
-                  value={model}
-                  onChangeText={setModel}
-                  placeholder="E.g. FOCUS"
-                  placeholderTextColor={theme.colors.placeholder}
-                  autoCapitalize="characters"
-                  style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
-                />
-              </View>
+      {/* Tabs Content */}
+      <View style={{ flex: 1 }}>
+        {activeTab === 'home' && (
+          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+            {/* Welcome Block */}
+            <View style={styles.welcomeBlock}>
+              <Text style={[styles.welcomeTitle, { color: theme.colors.text }]}>
+                Hello, {customer.firstName}!
+              </Text>
+              <Text style={[styles.welcomeSubtitle, { color: theme.colors.placeholder }]}>
+                Manage your registered vehicles and request MOT appointment slots.
+              </Text>
             </View>
 
-            <Text style={[styles.label, { color: theme.colors.text }]}>MOT Expiry Date</Text>
-            <TextInput
-              value={expiry}
-              onChangeText={(text) => setExpiry(formatDateInput(text))}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={theme.colors.placeholder}
-              keyboardType="numeric"
-              maxLength={10}
-              style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
-            />
+            {/* Add Vehicle Button & Collapsible Form */}
+            {showAddForm && (
+              <View style={[styles.formCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <Text style={[styles.formTitle, { color: theme.colors.text }]}>Register New Vehicle</Text>
+                
+                <Text style={[styles.label, { color: theme.colors.text }]}>Registration Number</Text>
+                <TextInput
+                  value={regNo}
+                  onChangeText={setRegNo}
+                  placeholder="E.g. AB12 XYZ"
+                  placeholderTextColor={theme.colors.placeholder}
+                  autoCapitalize="characters"
+                  style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                />
 
-            <TouchableOpacity
-              onPress={handleAddNewVehicle}
-              disabled={loadingAction === 'add_vehicle'}
-              style={[styles.submitButton, { backgroundColor: theme.colors.secondary }]}
-            >
-              {loadingAction === 'add_vehicle' ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.submitButtonText}>Request Registration Approval</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Vehicles Registry */}
-        <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>Your Registered Vehicles</Text>
-
-        {customerVehicles.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="car-outline" size={48} color={theme.colors.placeholder} style={{ marginBottom: 12 }} />
-            <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>
-              You have no active vehicles registered for MOT reminders.
-            </Text>
-          </View>
-        ) : (
-          customerVehicles.map((v) => {
-            const isBooked = alerts.some((a) => a.type === 'BOOKED' && a.registrationNumber === v.registrationNumber);
-            return (
-              <View key={v.id} style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                {/* Header Info */}
-                <View style={styles.vehicleHeader}>
-                  <Text style={[styles.makeModelText, { color: theme.colors.text, flex: 1 }]}>
-                    {v.make} {v.model}
-                  </Text>
-                  {isBooked && (
-                    <TouchableOpacity
-                      onPress={() => {
-                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                        setExpandedBookingReg(expandedBookingReg === v.registrationNumber ? null : v.registrationNumber);
-                      }}
-                      style={[styles.bookedBadge, { backgroundColor: theme.colors.success + '20', borderColor: theme.colors.success }]}
-                    >
-                      <MaterialCommunityIcons name="check-circle" size={12} color={theme.colors.success} style={{ marginRight: 2 }} />
-                      <Text style={[styles.bookedBadgeText, { color: theme.colors.success }]}>Booked</Text>
-                      <MaterialCommunityIcons 
-                        name={expandedBookingReg === v.registrationNumber ? "chevron-up" : "chevron-down"} 
-                        size={14} 
-                        color={theme.colors.success} 
-                        style={{ marginLeft: 2 }} 
-                      />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-              <View style={styles.vehicleBody}>
-                <View style={[styles.infoRow, { justifyContent: 'flex-start', alignItems: 'center' }]}>
-                  <Text style={{ color: theme.colors.placeholder, fontSize: 13, marginRight: 8 }}>Registration Number:</Text>
-                  <View style={styles.smallPlate}>
-                    <Text style={styles.smallPlateText}>{v.registrationNumber}</Text>
+                <View style={styles.formRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={[styles.label, { color: theme.colors.text }]}>Make</Text>
+                    <TextInput
+                      value={make}
+                      onChangeText={setMake}
+                      placeholder="E.g. FORD"
+                      placeholderTextColor={theme.colors.placeholder}
+                      autoCapitalize="characters"
+                      style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.label, { color: theme.colors.text }]}>Model</Text>
+                    <TextInput
+                      value={model}
+                      onChangeText={setModel}
+                      placeholder="E.g. FOCUS"
+                      placeholderTextColor={theme.colors.placeholder}
+                      autoCapitalize="characters"
+                      style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    />
                   </View>
                 </View>
-                
-                <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start' }]}>
-                  <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>MOT: </Text>
-                  <Text style={{ color: theme.colors.text, fontWeight: 'bold', fontSize: 13 }}>{formatShortDate(v.motExpiryDate)}</Text>
-                </View>
-                
-                {v.lastServiceDate && (
-                  <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start' }]}>
-                    <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>Last Service: </Text>
-                    <Text style={{ color: theme.colors.text, fontSize: 13 }}>{formatShortDate(v.lastServiceDate)}</Text>
-                  </View>
-                )}
 
-                {isBooked && expandedBookingReg === v.registrationNumber && (() => {
-                  const bookingAlert = alerts.find((a) => a.type === 'BOOKED' && a.registrationNumber === v.registrationNumber);
-                  if (!bookingAlert) return null;
-                  
-                  return (
-                    <View style={[styles.bookingDetailsContainer, { backgroundColor: theme.colors.primaryContainer + '20', borderColor: theme.colors.border }]}>
-                      <View style={styles.bookingDetailsHeader}>
-                        <MaterialCommunityIcons name="calendar-clock" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
-                        <Text style={[styles.bookingDetailsTitle, { color: theme.colors.text }]}>Booking Details</Text>
-                      </View>
-                      <View style={styles.bookingInfoRow}>
-                        <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Slot/Date:</Text>
-                        <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
-                          {getBookingSlot(bookingAlert.makeModel)}
-                        </Text>
-                      </View>
-                      <View style={styles.bookingInfoRow}>
-                        <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Status:</Text>
-                        <Text style={[
-                          styles.bookingInfoValue, 
-                          { 
-                            color: bookingAlert.status === 'Approved' ? theme.colors.success :
-                                   bookingAlert.status === 'Pending' ? theme.colors.warning :
-                                   theme.colors.placeholder,
-                            fontWeight: 'bold'
-                          }
-                        ]}>
-                          {bookingAlert.status === 'Pending' ? 'Pending Confirmation' : 
-                           bookingAlert.status === 'Approved' ? 'Confirmed ✅' : 
-                           'Acknowledged'}
-                        </Text>
-                      </View>
-                      <View style={styles.bookingInfoRow}>
-                        <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Requested On:</Text>
-                        <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
-                          {new Date(bookingAlert.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })()}
-              </View>
+                <Text style={[styles.label, { color: theme.colors.text }]}>MOT Expiry Date</Text>
+                <TextInput
+                  value={expiry}
+                  onChangeText={(text) => setExpiry(formatDateInput(text))}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={theme.colors.placeholder}
+                  keyboardType="numeric"
+                  maxLength={10}
+                  style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                />
 
-              <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
-
-              {/* Action Buttons */}
-              <View style={styles.actionRow}>
                 <TouchableOpacity
-                  onPress={() => handleMarkAsSold(v.id, v.registrationNumber, `${v.make} ${v.model}`)}
-                  disabled={loadingAction !== null}
-                  style={[styles.actionBtn, styles.soldBtn, { borderColor: theme.colors.border }]}
+                  onPress={handleAddNewVehicle}
+                  disabled={loadingAction === 'add_vehicle'}
+                  style={[styles.submitButton, { backgroundColor: theme.colors.secondary }]}
                 >
-                  {loadingAction === `sold_${v.id}` ? (
-                    <ActivityIndicator size="small" color={theme.colors.error} />
+                  {loadingAction === 'add_vehicle' ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
                   ) : (
-                    <View style={styles.actionBtnContent}>
-                      <MaterialCommunityIcons name="car-off" size={16} color={theme.colors.error} style={{ marginRight: 4 }} />
-                      <Text style={[styles.actionBtnText, { color: theme.colors.error }]}>Mark Sold</Text>
-                    </View>
+                    <Text style={styles.submitButtonText}>Request Registration Approval</Text>
                   )}
                 </TouchableOpacity>
+              </View>
+            )}
 
-                {isBooked ? (
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('Booking', { vehicle: v, isReschedule: true })}
-                    disabled={loadingAction !== null}
-                    style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.warning }]}
-                  >
-                    <View style={styles.actionBtnContent}>
-                      <MaterialCommunityIcons name="calendar-edit" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                      <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Reschedule</Text>
+            {/* Vehicles Registry */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>Your Registered Vehicles</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setShowAddForm(!showAddForm);
+                }}
+                style={{ padding: 6 }}
+              >
+                <MaterialCommunityIcons name={showAddForm ? "close" : "plus"} size={22} color={theme.colors.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            {customerVehicles.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <MaterialCommunityIcons name="car-outline" size={48} color={theme.colors.placeholder} style={{ marginBottom: 12 }} />
+                <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>
+                  You have no active vehicles registered for MOT reminders.
+                </Text>
+              </View>
+            ) : (
+              customerVehicles.map((v) => {
+                const bookingAlert = alerts.find((a) => a.type === 'BOOKED' && a.registrationNumber === v.registrationNumber);
+                const isBooked = bookingAlert && (bookingAlert.status === 'Pending' || bookingAlert.status === 'Approved');
+                const isRejected = bookingAlert && bookingAlert.status === 'Rejected';
+                
+                return (
+                  <View key={v.id} style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                    {/* Header Info */}
+                    <View style={styles.vehicleHeader}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <MaterialCommunityIcons name="car-sports" size={20} color={theme.colors.secondary} style={{ marginRight: 8 }} />
+                        <Text style={[styles.makeModelText, { color: theme.colors.text, flex: 1 }]} numberOfLines={1}>
+                          {v.make} {v.model}
+                        </Text>
+                      </View>
+                      {isBooked && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setExpandedBookingReg(expandedBookingReg === v.registrationNumber ? null : v.registrationNumber);
+                          }}
+                          style={[styles.bookedBadge, { backgroundColor: theme.colors.success + '20', borderColor: theme.colors.success }]}
+                        >
+                          <MaterialCommunityIcons name="check-circle" size={12} color={theme.colors.success} style={{ marginRight: 2 }} />
+                          <Text style={[styles.bookedBadgeText, { color: theme.colors.success }]}>Booked</Text>
+                          <MaterialCommunityIcons 
+                            name={expandedBookingReg === v.registrationNumber ? "chevron-up" : "chevron-down"} 
+                            size={14} 
+                            color={theme.colors.success} 
+                            style={{ marginLeft: 2 }} 
+                          />
+                        </TouchableOpacity>
+                      )}
+                      {isRejected && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setExpandedBookingReg(expandedBookingReg === v.registrationNumber ? null : v.registrationNumber);
+                          }}
+                          style={[styles.bookedBadge, { backgroundColor: theme.colors.error + '15', borderColor: theme.colors.error }]}
+                        >
+                          <MaterialCommunityIcons name="close-circle" size={12} color={theme.colors.error} style={{ marginRight: 2 }} />
+                          <Text style={[styles.bookedBadgeText, { color: theme.colors.error }]}>Rejected</Text>
+                          <MaterialCommunityIcons 
+                            name={expandedBookingReg === v.registrationNumber ? "chevron-up" : "chevron-down"} 
+                            size={14} 
+                            color={theme.colors.error} 
+                            style={{ marginLeft: 2 }} 
+                          />
+                        </TouchableOpacity>
+                      )}
                     </View>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => handleBookMOT(v)}
-                    disabled={loadingAction !== null}
-                    style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.secondary }]}
-                  >
-                    <View style={styles.actionBtnContent}>
-                      <MaterialCommunityIcons name="calendar-plus" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                      <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Book MOT</Text>
+
+                    <View style={styles.vehicleBody}>
+                      <View style={[styles.infoRow, { justifyContent: 'flex-start', alignItems: 'center' }]}>
+                        <Text style={{ color: theme.colors.placeholder, fontSize: 13, marginRight: 8 }}>Registration Number:</Text>
+                        <View style={styles.smallPlate}>
+                          <Text style={styles.smallPlateText}>{v.registrationNumber}</Text>
+                        </View>
+                      </View>
+                      
+                      <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start' }]}>
+                        <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>MOT: </Text>
+                        <Text style={{ color: theme.colors.text, fontWeight: 'bold', fontSize: 13 }}>{formatShortDate(v.motExpiryDate)}</Text>
+                      </View>
+                      
+                      {v.lastServiceDate && (
+                        <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start' }]}>
+                          <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>Last Service: </Text>
+                          <Text style={{ color: theme.colors.text, fontSize: 13 }}>{formatShortDate(v.lastServiceDate)}</Text>
+                        </View>
+                      )}
+
+                      {isBooked && expandedBookingReg === v.registrationNumber && (() => {
+                        if (!bookingAlert) return null;
+                        
+                        return (
+                          <View style={[styles.bookingDetailsContainer, { backgroundColor: theme.colors.primaryContainer + '20', borderColor: theme.colors.border }]}>
+                            <View style={styles.bookingDetailsHeader}>
+                              <MaterialCommunityIcons name="calendar-clock" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                              <Text style={[styles.bookingDetailsTitle, { color: theme.colors.text }]}>Booking Details</Text>
+                            </View>
+                            <View style={styles.bookingInfoRow}>
+                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Slot/Date:</Text>
+                              <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
+                                {getBookingSlot(bookingAlert.makeModel)}
+                              </Text>
+                            </View>
+                            <View style={styles.bookingInfoRow}>
+                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Status:</Text>
+                              <Text style={[
+                                styles.bookingInfoValue, 
+                                { 
+                                  color: bookingAlert.status === 'Approved' ? theme.colors.success :
+                                         bookingAlert.status === 'Pending' ? theme.colors.warning :
+                                         theme.colors.placeholder,
+                                  fontWeight: 'bold'
+                                }
+                              ]}>
+                                {bookingAlert.status === 'Pending' ? 'Pending Confirmation' : 
+                                 bookingAlert.status === 'Approved' ? 'Confirmed ✅' : 
+                                 'Acknowledged'}
+                              </Text>
+                            </View>
+                            <View style={styles.bookingInfoRow}>
+                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Requested On:</Text>
+                              <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
+                                {new Date(bookingAlert.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })()}
+
+                      {isRejected && expandedBookingReg === v.registrationNumber && (() => {
+                        if (!bookingAlert) return null;
+                        
+                        return (
+                          <View style={[styles.bookingDetailsContainer, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error }]}>
+                            <View style={styles.bookingDetailsHeader}>
+                              <MaterialCommunityIcons name="alert-circle" size={16} color={theme.colors.error} style={{ marginRight: 6 }} />
+                              <Text style={[styles.bookingDetailsTitle, { color: theme.colors.error, fontWeight: 'bold' }]}>Booking Rejected</Text>
+                            </View>
+                            <View style={styles.bookingInfoRow}>
+                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Slot/Date:</Text>
+                              <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
+                                {getBookingSlot(bookingAlert.makeModel)}
+                              </Text>
+                            </View>
+                            <View style={styles.bookingInfoRow}>
+                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Reason:</Text>
+                              <Text style={[styles.bookingInfoValue, { color: theme.colors.error, fontWeight: 'bold', flex: 1, textAlign: 'right' }]}>
+                                {bookingAlert.rejectionReason || 'No reason provided.'}
+                              </Text>
+                            </View>
+                            <View style={styles.bookingInfoRow}>
+                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Requested On:</Text>
+                              <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
+                                {new Date(bookingAlert.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })()}
                     </View>
-                  </TouchableOpacity>
-                )}
+
+                    <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                    {/* Action Buttons */}
+                    {v.status === 'Pending' ? (
+                      <View style={[styles.pendingApprovalBox, { backgroundColor: theme.colors.warning + '10', borderColor: theme.colors.warning + '30' }]}>
+                        <MaterialCommunityIcons name="clock-outline" size={16} color={theme.colors.warning} style={{ marginRight: 6 }} />
+                        <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: 'bold', flex: 1 }}>
+                          Awaiting registration approval from garage staff. Booking will be enabled once approved.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.actionRow}>
+                        <TouchableOpacity
+                          onPress={() => handleMarkAsSold(v.id, v.registrationNumber, `${v.make} ${v.model}`)}
+                          disabled={loadingAction !== null}
+                          style={[styles.actionBtn, styles.soldBtn, { borderColor: theme.colors.border }]}
+                        >
+                          {loadingAction === `sold_${v.id}` ? (
+                            <ActivityIndicator size="small" color={theme.colors.error} />
+                          ) : (
+                            <View style={styles.actionBtnContent}>
+                              <MaterialCommunityIcons name="car-off" size={16} color={theme.colors.error} style={{ marginRight: 4 }} />
+                              <Text style={[styles.actionBtnText, { color: theme.colors.error }]}>Mark Sold</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+
+                        {isBooked ? (
+                          <TouchableOpacity
+                            onPress={() => navigation.navigate('Booking', { vehicle: v, isReschedule: true })}
+                            disabled={loadingAction !== null}
+                            style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.warning }]}
+                          >
+                            <View style={styles.actionBtnContent}>
+                              <MaterialCommunityIcons name="calendar-edit" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                              <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Reschedule</Text>
+                            </View>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            onPress={() => handleBookMOT(v)}
+                            disabled={loadingAction !== null}
+                            style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.secondary }]}
+                          >
+                            <View style={styles.actionBtnContent}>
+                              <MaterialCommunityIcons name="calendar-plus" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                              <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Book MOT</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </ScrollView>
+        )}
+
+        {activeTab === 'history' && (
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 16 }]}>MOT Booking History</Text>
+            {alerts.filter((a) => a.type === 'BOOKED' && a.customerId === customer.id).length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <MaterialCommunityIcons name="history" size={48} color={theme.colors.placeholder} style={{ marginBottom: 12 }} />
+                <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>
+                  No booking history found.
+                </Text>
+              </View>
+            ) : (
+              alerts
+                .filter((a) => a.type === 'BOOKED' && a.customerId === customer.id)
+                .map((item) => {
+                  const isPending = item.status === 'Pending';
+                  const isApproved = item.status === 'Approved';
+                  const isRejected = item.status === 'Rejected';
+
+                  let statusText = 'Completed';
+                  let statusColor = theme.colors.placeholder;
+                  let statusBg = theme.colors.border + '30';
+
+                  if (isPending) {
+                    statusText = 'Pending';
+                    statusColor = theme.colors.warning;
+                    statusBg = theme.colors.warning + '15';
+                  } else if (isApproved) {
+                    statusText = 'Confirmed';
+                    statusColor = theme.colors.success;
+                    statusBg = theme.colors.success + '15';
+                  } else if (isRejected) {
+                    statusText = 'Rejected';
+                    statusColor = theme.colors.error;
+                    statusBg = theme.colors.error + '15';
+                  }
+
+                  return (
+                    <View
+                      key={item.id}
+                      style={[styles.historyCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                    >
+                      <View style={styles.historyCardHeader}>
+                        <View style={styles.smallPlate}>
+                          <Text style={styles.smallPlateText}>{item.registrationNumber}</Text>
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor + '40' }]}>
+                          <Text style={[styles.statusText, { color: statusColor, fontSize: 10 }]}>{statusText}</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.historyCardBody}>
+                        <Text style={[styles.historyVehicleText, { color: theme.colors.text }]}>
+                          {item.makeModel.split(' - Slot: ')[0]}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                          <MaterialCommunityIcons name="calendar-clock" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                          <Text style={{ fontSize: 13, color: theme.colors.text }}>
+                            Slot: {getBookingSlot(item.makeModel)}
+                          </Text>
+                        </View>
+
+                        {isRejected && (
+                          <View style={[styles.rejectionReasonBox, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error }]}>
+                            <Text style={{ fontSize: 11, color: theme.colors.error, fontWeight: 'bold' }}>Rejection Reason:</Text>
+                            <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>
+                              {item.rejectionReason || 'No reason provided.'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <Text style={[styles.historyDate, { color: theme.colors.placeholder }]}>
+                        Requested: {new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </Text>
+                    </View>
+                  );
+                })
+            )}
+          </ScrollView>
+        )}
+
+        {activeTab === 'profile' && (
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            {/* Avatar & Verification Header Card */}
+            <View style={[styles.profileHeaderCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              <View style={[styles.profileAvatar, { backgroundColor: theme.colors.secondary }]}>
+                <Text style={styles.avatarText}>
+                  {((customer.firstName[0] || '') + (customer.lastName[0] || '')).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ marginLeft: 16, flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.profileName, { color: theme.colors.text }]} numberOfLines={1}>
+                    {customer.firstName} {customer.lastName}
+                  </Text>
+                  <MaterialCommunityIcons name="check-decagram" size={16} color={theme.colors.success} style={{ marginLeft: 4 }} />
+                </View>
+                <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 2 }}>
+                  Member since {new Date(customer.createdAt || Date.now()).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                </Text>
               </View>
             </View>
-          );
-        })
+
+            {/* Section: Personal Info */}
+            <Text style={[styles.profileSectionTitle, { color: theme.colors.text }]}>Personal Details</Text>
+            <View style={[styles.profileInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              <View style={[styles.profileRow, { borderBottomColor: theme.colors.border }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="email-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 10 }} />
+                  <Text style={{ color: theme.colors.text, fontSize: 13 }}>Email</Text>
+                </View>
+                <Text style={{ color: theme.colors.placeholder, fontSize: 13, fontWeight: '500' }}>{customer.email}</Text>
+              </View>
+
+              <View style={[styles.profileRow, { borderBottomColor: 'transparent' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="phone-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 10 }} />
+                  <Text style={{ color: theme.colors.text, fontSize: 13 }}>Mobile</Text>
+                </View>
+                <Text style={{ color: theme.colors.placeholder, fontSize: 13, fontWeight: '500' }}>{customer.mobile}</Text>
+              </View>
+            </View>
+
+            {/* Section: Address */}
+            {customer.address && (
+              <>
+                <Text style={[styles.profileSectionTitle, { color: theme.colors.text }]}>Address</Text>
+                <View style={[styles.profileInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, paddingVertical: 14 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                    <MaterialCommunityIcons name="map-marker-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 10, marginTop: 2 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.text, fontSize: 13, lineHeight: 18 }}>{customer.address}</Text>
+                    </View>
+                  </View>
+                </View>
+              </>
+            )}
+
+            {/* Section: Preferences */}
+            <Text style={[styles.profileSectionTitle, { color: theme.colors.text }]}>Preferences</Text>
+            <View style={[styles.profileInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              {/* Preferred Contact method */}
+              {/* <View style={[styles.profileRow, { borderBottomColor: theme.colors.border, paddingVertical: 12 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="bell-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 10 }} />
+                  <Text style={{ color: theme.colors.text, fontSize: 13 }}>Preferred Contact</Text>
+                </View>
+                <View style={styles.contactPillRow}>
+                  {['SMS', 'Email', 'WhatsApp'].map((method) => {
+                    const isActive = customer.preferredContact === method;
+                    const iconName = method === 'SMS' ? 'message-text-outline' :
+                                     method === 'Email' ? 'email-outline' : 'whatsapp';
+                    return (
+                      <View 
+                        key={method} 
+                        style={[
+                          styles.contactPill, 
+                          isActive ? { backgroundColor: theme.colors.secondary + '20', borderColor: theme.colors.secondary } :
+                                     { backgroundColor: theme.colors.background, borderColor: theme.colors.border }
+                        ]}
+                      >
+                        <MaterialCommunityIcons 
+                          name={iconName} 
+                          size={11} 
+                          color={isActive ? theme.colors.secondary : theme.colors.placeholder} 
+                          style={{ marginRight: 2 }} 
+                        />
+                        <Text 
+                          style={[
+                            styles.contactPillText, 
+                            { color: isActive ? theme.colors.secondary : theme.colors.placeholder }
+                          ]}
+                        >
+                          {method}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View> */}
+
+              {/* Theme Selector */}
+              <View style={[styles.profileRow, { borderBottomColor: 'transparent', paddingVertical: 12 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons 
+                    name={isDarkMode ? "weather-night" : "weather-sunny"} 
+                    size={18} 
+                    color={theme.colors.placeholder} 
+                    style={{ marginRight: 10 }} 
+                  />
+                  <Text style={{ color: theme.colors.text, fontSize: 13 }}>Dark Theme</Text>
+                </View>
+                <Switch
+                  value={isDarkMode}
+                  onValueChange={toggleTheme}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
+                  thumbColor={Platform.OS === 'android' ? '#FFFFFF' : undefined}
+                />
+              </View>
+            </View>
+
+            {/* Logout button */}
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert(
+                  'Sign Out',
+                  'Are you sure you want to sign out?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Sign Out',
+                      style: 'destructive',
+                      onPress: () => {
+                        navigation.replace('Login');
+                      },
+                    },
+                  ]
+                );
+              }}
+              style={[styles.profileLogoutBtn, { backgroundColor: theme.colors.error, borderWidth: 1, borderColor: theme.colors.error }]}
+            >
+              <MaterialCommunityIcons name="logout" size={18} color={"#fff"} style={{ marginRight: 6 }} />
+              <Text style={{ color: "#fff", fontWeight: 'bold', fontSize: 14 }}>Sign Out</Text>
+            </TouchableOpacity>
+          </ScrollView>
         )}
-      </ScrollView>
+      </View>
+
+      {/* Bottom Sticky Tab Footer */}
+      <View style={[styles.footer, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border , borderTopWidth: 1} ]}>
+        <TouchableOpacity
+          onPress={() => setActiveTab('home')}
+          style={styles.tabBtn}
+        >
+          <MaterialCommunityIcons 
+            name={activeTab === 'home' ? "home" : "home-outline"} 
+            size={22} 
+            color={activeTab === 'home' ? theme.colors.secondary : theme.colors.placeholder} 
+          />
+          <Text style={[styles.tabLabel, { color: activeTab === 'home' ? theme.colors.secondary : theme.colors.placeholder }]}>
+            Home
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setActiveTab('history')}
+          style={styles.tabBtn}
+        >
+          <MaterialCommunityIcons 
+            name={activeTab === 'history' ? "calendar-clock" : "calendar-clock-outline"} 
+            size={22} 
+            color={activeTab === 'history' ? theme.colors.secondary : theme.colors.placeholder} 
+          />
+          <Text style={[styles.tabLabel, { color: activeTab === 'history' ? theme.colors.secondary : theme.colors.placeholder }]}>
+            History
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setActiveTab('profile')}
+          style={styles.tabBtn}
+        >
+          <MaterialCommunityIcons 
+            name={activeTab === 'profile' ? "account" : "account-outline"} 
+            size={22} 
+            color={activeTab === 'profile' ? theme.colors.secondary : theme.colors.placeholder} 
+          />
+          <Text style={[styles.tabLabel, { color: activeTab === 'profile' ? theme.colors.secondary : theme.colors.placeholder }]}>
+            Profile
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -472,9 +810,9 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   navTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    textAlign: 'center',
+    textAlign: 'left',
   },
   rightActionsRow: {
     flexDirection: 'row',
@@ -699,5 +1037,158 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 10,
     letterSpacing: 0.5,
+  },
+  footer: {
+    flexDirection: 'row',
+    height: 56,
+    borderTopWidth: 1,
+    paddingBottom: 4,
+    paddingTop: 6,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  tabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  historyCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  historyCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  statusBadge: {
+    borderWidth: 0.5,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+  },
+  statusText: {
+    fontWeight: 'bold',
+  },
+  historyCardBody: {
+    marginBottom: 8,
+  },
+  historyVehicleText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  rejectionReasonBox: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 8,
+  },
+  historyDate: {
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  profileHeaderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  profileSectionTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  contactPillRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  contactPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  contactPillText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  profileAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flexShrink: 1,
+  },
+  profileInfoCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 2,
+    marginBottom: 20,
+  },
+  profileRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  profileLogoutBtn: {
+    height: 46,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // elevation: 1,
+    marginBottom: 24,
+  },
+  pendingApprovalBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginHorizontal: 12,
+    marginVertical: 8,
   },
 });

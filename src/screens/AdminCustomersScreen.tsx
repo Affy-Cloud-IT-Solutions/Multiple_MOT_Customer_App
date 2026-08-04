@@ -23,28 +23,21 @@ export default function AdminCustomersScreen() {
   const { theme } = useAppTheme();
   const { customers, vehicles, addCustomer, addVehicle, updateVehicleStatus } = useAppValues();
 
-  // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
-
-  // Expandable customer ID state
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
-
-  // Add Customer Form states
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
-  const [preferredContact, setPreferredContact] = useState<'SMS' | 'Email' | 'WhatsApp'>('SMS');
-
-  // Add Vehicle Form state (for selected customer)
   const [addingVehicleForCustId, setAddingVehicleForCustId] = useState<string | null>(null);
   const [regNo, setRegNo] = useState('');
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [year, setYear] = useState('');
   const [expiry, setExpiry] = useState('');
+  const [serviceDate, setServiceDate] = useState('');
 
   const formatDateInput = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '');
@@ -56,17 +49,16 @@ export default function AdminCustomersScreen() {
     }
     return formatted;
   };
-  const [serviceDate, setServiceDate] = useState('');
 
   const toggleExpandCustomer = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedCustomerId(expandedCustomerId === id ? null : id);
-    setAddingVehicleForCustId(null); // Reset vehicle form
+    setAddingVehicleForCustId(null);
   };
 
   const handleCreateCustomer = () => {
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !mobile.trim()) {
-      Alert.alert('Error', 'Please fill in Name, Email, and Mobile fields');
+      Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
 
@@ -75,24 +67,21 @@ export default function AdminCustomersScreen() {
       lastName: lastName.trim(),
       email: email.trim(),
       mobile: mobile.trim(),
-      preferredContact,
       address: address.trim() || undefined,
     });
 
-    // Reset Form
     setFirstName('');
     setLastName('');
     setEmail('');
     setMobile('');
     setAddress('');
-    setPreferredContact('SMS');
     setShowAddCustomer(false);
     Alert.alert('Success', 'Customer profile created successfully!');
   };
 
   const handleCreateVehicle = (customerId: string) => {
     if (!regNo.trim() || !make.trim() || !model.trim() || !expiry.trim()) {
-      Alert.alert('Error', 'Please fill in Registration, Make, Model, and MOT Expiry Date');
+      Alert.alert('Error', 'Please fill in all vehicle details');
       return;
     }
 
@@ -107,7 +96,6 @@ export default function AdminCustomersScreen() {
       status: 'Active',
     });
 
-    // Reset Form
     setRegNo('');
     setMake('');
     setModel('');
@@ -115,13 +103,13 @@ export default function AdminCustomersScreen() {
     setExpiry('');
     setServiceDate('');
     setAddingVehicleForCustId(null);
-    Alert.alert('Success', 'Vehicle record added successfully!');
+    Alert.alert('Success', 'Vehicle added successfully!');
   };
 
   const handleChangeVehicleStatus = (vehicleId: string, currentStatus: string) => {
     Alert.alert(
-      'Change Vehicle Status',
-      'Select new ownership/operational status:',
+      'Update Vehicle Status',
+      'Select new status:',
       [
         { text: 'Active', onPress: () => updateVehicleStatus(vehicleId, 'Active') },
         { text: 'Sold', onPress: () => updateVehicleStatus(vehicleId, 'Sold') },
@@ -131,7 +119,6 @@ export default function AdminCustomersScreen() {
     );
   };
 
-  // Filter customers by SearchQuery (PDF criteria: Name, Registration, Mobile, Email)
   const filteredCustomers = customers.filter((c) => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
@@ -139,8 +126,6 @@ export default function AdminCustomersScreen() {
     const nameMatch = `${c.firstName} ${c.lastName}`.toLowerCase().includes(query);
     const emailMatch = c.email.toLowerCase().includes(query);
     const mobileMatch = c.mobile.toLowerCase().includes(query);
-    
-    // Check if any of this customer's vehicles registration matches
     const customerVehicles = vehicles.filter((v) => v.customerId === c.id);
     const regMatch = customerVehicles.some((v) =>
       v.registrationNumber.toLowerCase().includes(query)
@@ -149,17 +134,27 @@ export default function AdminCustomersScreen() {
     return nameMatch || emailMatch || mobileMatch || regMatch;
   });
 
+  const getStatusIcon = (status: string) => {
+    switch(status) {
+      case 'Active': return 'check-circle';
+      case 'Sold': return 'cash';
+      case 'Scrapped': return 'delete-circle';
+      case 'Pending': return 'clock-outline';
+      default: return 'circle';
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Header and Search Box */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.searchRow}>
           <View style={[styles.searchBar, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} style={{ marginRight: 8 }} />
+            <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} />
             <TextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Search by name, plate, mobile, email..."
+              placeholder="Search customers..."
               placeholderTextColor={theme.colors.placeholder}
               style={[styles.searchInput, { color: theme.colors.text }]}
             />
@@ -177,19 +172,22 @@ export default function AdminCustomersScreen() {
             }}
             style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
           >
-            <MaterialCommunityIcons name="account-plus" size={20} color="#FFFFFF" />
+            <MaterialCommunityIcons name={showAddCustomer ? 'close' : 'account-plus'} size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {/* Add Customer Form (Collapsible) */}
+        {/* Add Customer Form */}
         {showAddCustomer && (
           <View style={[styles.formCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <Text style={[styles.formTitle, { color: theme.colors.text }]}>Add New Customer</Text>
+            <View style={styles.formHeader}>
+              <MaterialCommunityIcons name="account-plus" size={24} color={theme.colors.primary} />
+              <Text style={[styles.formTitle, { color: theme.colors.text }]}>New Customer</Text>
+            </View>
 
             <View style={styles.formRow}>
-              <View style={{ flex: 1, marginRight: 8 }}>
+              <View style={styles.formField}>
                 <Text style={[styles.label, { color: theme.colors.text }]}>First Name</Text>
                 <TextInput
                   value={firstName}
@@ -199,7 +197,7 @@ export default function AdminCustomersScreen() {
                   style={[styles.formInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
                 />
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={styles.formField}>
                 <Text style={[styles.label, { color: theme.colors.text }]}>Last Name</Text>
                 <TextInput
                   value={lastName}
@@ -211,74 +209,59 @@ export default function AdminCustomersScreen() {
               </View>
             </View>
 
-            <Text style={[styles.label, { color: theme.colors.text }]}>Email Address</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="john@example.com"
-              placeholderTextColor={theme.colors.placeholder}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={[styles.formInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
-            />
+            <View style={styles.iconInput}>
+              <MaterialCommunityIcons name="email" size={20} color={theme.colors.placeholder} />
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email Address"
+                placeholderTextColor={theme.colors.placeholder}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={[styles.iconInputField, { color: theme.colors.text }]}
+              />
+            </View>
 
-            <Text style={[styles.label, { color: theme.colors.text }]}>Mobile Number</Text>
-            <TextInput
-              value={mobile}
-              onChangeText={setMobile}
-              placeholder="07700 900000"
-              placeholderTextColor={theme.colors.placeholder}
-              keyboardType="phone-pad"
-              style={[styles.formInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
-            />
+            <View style={styles.iconInput}>
+              <MaterialCommunityIcons name="phone" size={20} color={theme.colors.placeholder} />
+              <TextInput
+                value={mobile}
+                onChangeText={setMobile}
+                placeholder="Mobile Number"
+                placeholderTextColor={theme.colors.placeholder}
+                keyboardType="phone-pad"
+                style={[styles.iconInputField, { color: theme.colors.text }]}
+              />
+            </View>
 
-            <Text style={[styles.label, { color: theme.colors.text }]}>Address (Optional)</Text>
-            <TextInput
-              value={address}
-              onChangeText={setAddress}
-              placeholder="E.g. 12 High St, London"
-              placeholderTextColor={theme.colors.placeholder}
-              style={[styles.formInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
-            />
-
-            <Text style={[styles.label, { color: theme.colors.text }]}>Preferred Contact Method</Text>
-            <View style={styles.contactTypeRow}>
-              {(['SMS', 'Email', 'WhatsApp'] as const).map((method) => (
-                <TouchableOpacity
-                  key={method}
-                  onPress={() => setPreferredContact(method)}
-                  style={[
-                    styles.contactOption,
-                    {
-                      borderColor: preferredContact === method ? theme.colors.secondary : theme.colors.border,
-                      backgroundColor: preferredContact === method ? theme.colors.secondary + '15' : 'transparent',
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: preferredContact === method ? theme.colors.secondary : theme.colors.text,
-                      fontWeight: 'bold',
-                      fontSize: 13,
-                    }}
-                  >
-                    {method}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.iconInput}>
+              <MaterialCommunityIcons name="home" size={20} color={theme.colors.placeholder} />
+              <TextInput
+                value={address}
+                onChangeText={setAddress}
+                placeholder="Address (Optional)"
+                placeholderTextColor={theme.colors.placeholder}
+                style={[styles.iconInputField, { color: theme.colors.text }]}
+              />
             </View>
 
             <TouchableOpacity onPress={handleCreateCustomer} style={[styles.submitButton, { backgroundColor: theme.colors.primary }]}>
-              <Text style={styles.submitButtonText}>Create Customer Record</Text>
+              <Text style={styles.submitButtonText}>Create Customer</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Customer Directory List */}
-        <Text style={[styles.directoryTitle, { color: theme.colors.text }]}>Customer Directory</Text>
+        {/* Customer List */}
+        <Text style={[styles.directoryTitle, { color: theme.colors.text }]}>
+          <MaterialCommunityIcons name="account-group" size={20} color={theme.colors.text} /> 
+          {"  "}Customers ({filteredCustomers.length})
+        </Text>
 
         {filteredCustomers.length === 0 ? (
-          <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>No matching customer profiles found.</Text>
+          <View style={styles.emptyState}>
+            <MaterialCommunityIcons name="account-off" size={48} color={theme.colors.placeholder} />
+            <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>No customers found</Text>
+          </View>
         ) : (
           filteredCustomers.map((c) => {
             const customerVehicles = vehicles.filter((v) => v.customerId === c.id);
@@ -286,22 +269,30 @@ export default function AdminCustomersScreen() {
 
             return (
               <View key={c.id} style={[styles.customerCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                {/* Header/Info Box */}
                 <TouchableOpacity onPress={() => toggleExpandCustomer(c.id)} style={styles.customerHeader}>
                   <View style={styles.customerHeaderLeft}>
-                    <Text style={[styles.customerNameText, { color: theme.colors.text }]}>
-                      {c.firstName} {c.lastName}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginTop: 2 }}>
-                      {c.mobile} • {c.email}
-                    </Text>
-                  </View>
-                  <View style={styles.customerHeaderRight}>
-                    <View style={[styles.prefBadge, { backgroundColor: theme.colors.secondary + '15' }]}>
-                      <Text style={{ fontSize: 10, fontWeight: 'bold', color: theme.colors.secondary }}>
-                        {c.preferredContact}
+                    <View style={styles.customerIcon}>
+                      <Text style={styles.customerInitial}>
+                        {c.firstName[0]}{c.lastName[0]}
                       </Text>
                     </View>
+                    <View>
+                      <Text style={[styles.customerNameText, { color: theme.colors.text }]}>
+                        {c.firstName} {c.lastName}
+                      </Text>
+                      <View style={styles.customerInfoRow}>
+                        <MaterialCommunityIcons name="phone" size={12} color={theme.colors.placeholder} />
+                        <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginLeft: 4 }}>
+                          {c.mobile}
+                        </Text>
+                        <MaterialCommunityIcons name="email" size={12} color={theme.colors.placeholder} style={{ marginLeft: 8 }} />
+                        <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginLeft: 4 }}>
+                          {c.email}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.customerHeaderRight}>
                     <MaterialCommunityIcons
                       name={isExpanded ? 'chevron-up' : 'chevron-down'}
                       size={20}
@@ -310,20 +301,24 @@ export default function AdminCustomersScreen() {
                   </View>
                 </TouchableOpacity>
 
-                {/* Expanded Vehicle Details */}
                 {isExpanded && (
                   <View style={styles.expandedContent}>
                     <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
                     
                     {c.address && (
-                      <View style={{ marginBottom: 12 }}>
-                        <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>Address Details:</Text>
-                        <Text style={{ fontSize: 13, color: theme.colors.text, marginTop: 2 }}>{c.address}</Text>
+                      <View style={styles.addressBox}>
+                        <MaterialCommunityIcons name="map-marker" size={16} color={theme.colors.placeholder} />
+                        <Text style={{ fontSize: 13, color: theme.colors.text, marginLeft: 8 }}>{c.address}</Text>
                       </View>
                     )}
 
                     <View style={styles.vehiclesHeaderRow}>
-                      <Text style={[styles.vehiclesTitleText, { color: theme.colors.text }]}>Managed Vehicles</Text>
+                      <View style={styles.vehiclesTitle}>
+                        <MaterialCommunityIcons name="car" size={18} color={theme.colors.text} />
+                        <Text style={[styles.vehiclesTitleText, { color: theme.colors.text }]}>
+                          Vehicles ({customerVehicles.length})
+                        </Text>
+                      </View>
                       <TouchableOpacity
                         onPress={() => {
                           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -331,32 +326,35 @@ export default function AdminCustomersScreen() {
                         }}
                         style={[styles.addVehicleBadge, { borderColor: theme.colors.secondary }]}
                       >
-                        <MaterialCommunityIcons name="plus" size={14} color={theme.colors.secondary} style={{ marginRight: 4 }} />
-                        <Text style={{ fontSize: 11, fontWeight: 'bold', color: theme.colors.secondary }}>Add Vehicle</Text>
+                        <MaterialCommunityIcons name="plus-circle" size={16} color={theme.colors.secondary} />
+                        <Text style={{ fontSize: 11, fontWeight: 'bold', color: theme.colors.secondary, marginLeft: 4 }}>
+                          Add
+                        </Text>
                       </TouchableOpacity>
                     </View>
 
-                    {/* Add Vehicle Sub-Form */}
                     {addingVehicleForCustId === c.id && (
                       <View style={[styles.vehicleForm, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                        <Text style={{ fontWeight: 'bold', fontSize: 13, color: theme.colors.text, marginBottom: 10 }}>Add Vehicle Details</Text>
+                        <Text style={{ fontWeight: 'bold', fontSize: 13, color: theme.colors.text, marginBottom: 10 }}>
+                          <MaterialCommunityIcons name="car-plus" size={16} color={theme.colors.secondary} /> Add Vehicle
+                        </Text>
                         
                         <View style={styles.formRow}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
+                          <View style={styles.formField}>
                             <TextInput
                               value={regNo}
                               onChangeText={setRegNo}
-                              placeholder="Reg Plate (e.g. AB12 XYZ)"
+                              placeholder="Reg Plate"
                               placeholderTextColor={theme.colors.placeholder}
                               autoCapitalize="characters"
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
                             />
                           </View>
-                          <View style={{ flex: 1 }}>
+                          <View style={styles.formField}>
                             <TextInput
                               value={make}
                               onChangeText={setMake}
-                              placeholder="Make (e.g. FORD)"
+                              placeholder="Make"
                               placeholderTextColor={theme.colors.placeholder}
                               autoCapitalize="characters"
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
@@ -365,21 +363,21 @@ export default function AdminCustomersScreen() {
                         </View>
 
                         <View style={styles.formRow}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
+                          <View style={styles.formField}>
                             <TextInput
                               value={model}
                               onChangeText={setModel}
-                              placeholder="Model (e.g. FOCUS)"
+                              placeholder="Model"
                               placeholderTextColor={theme.colors.placeholder}
                               autoCapitalize="characters"
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
                             />
                           </View>
-                          <View style={{ flex: 1 }}>
+                          <View style={styles.formField}>
                             <TextInput
                               value={year}
                               onChangeText={setYear}
-                              placeholder="Year (e.g. 2018)"
+                              placeholder="Year"
                               placeholderTextColor={theme.colors.placeholder}
                               keyboardType="numeric"
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
@@ -388,22 +386,22 @@ export default function AdminCustomersScreen() {
                         </View>
 
                         <View style={styles.formRow}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
+                          <View style={styles.formField}>
                             <TextInput
                               value={expiry}
                               onChangeText={(text) => setExpiry(formatDateInput(text))}
-                              placeholder="Expiry Date (YYYY-MM-DD)"
+                              placeholder="Expiry (YYYY-MM-DD)"
                               placeholderTextColor={theme.colors.placeholder}
                               keyboardType="numeric"
                               maxLength={10}
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
                             />
                           </View>
-                          <View style={{ flex: 1 }}>
+                          <View style={styles.formField}>
                             <TextInput
                               value={serviceDate}
                               onChangeText={setServiceDate}
-                              placeholder="Service Date (Optional)"
+                              placeholder="Service Date"
                               placeholderTextColor={theme.colors.placeholder}
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
                             />
@@ -414,16 +412,18 @@ export default function AdminCustomersScreen() {
                           onPress={() => handleCreateVehicle(c.id)}
                           style={[styles.vehicleSubmitBtn, { backgroundColor: theme.colors.secondary }]}
                         >
-                          <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 }}>Save Vehicle Record</Text>
+                          <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>Save Vehicle</Text>
                         </TouchableOpacity>
                       </View>
                     )}
 
-                    {/* Vehicles List */}
                     {customerVehicles.length === 0 ? (
-                      <Text style={{ fontSize: 13, fontStyle: 'italic', color: theme.colors.placeholder, marginTop: 8 }}>
-                        No vehicles registered under this customer.
-                      </Text>
+                      <View style={styles.emptyVehicleState}>
+                        <MaterialCommunityIcons name="car-off" size={20} color={theme.colors.placeholder} />
+                        <Text style={{ fontSize: 13, color: theme.colors.placeholder, marginLeft: 8 }}>
+                          No vehicles registered
+                        </Text>
+                      </View>
                     ) : (
                       customerVehicles.map((v) => {
                         const isSold = v.status === 'Sold';
@@ -437,10 +437,10 @@ export default function AdminCustomersScreen() {
                               </View>
                               <View style={{ flex: 1, marginLeft: 8 }}>
                                 <Text style={[styles.vehicleMakeText, { color: theme.colors.text }]}>
-                                  {v.make} {v.model} ({v.year})
+                                  {v.make} {v.model}
                                 </Text>
-                                <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 2 }}>
-                                  MOT Expiry: {v.motExpiryDate}
+                                <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                                  {v.year} • MOT: {v.motExpiryDate}
                                 </Text>
                               </View>
                             </View>
@@ -454,18 +454,28 @@ export default function AdminCustomersScreen() {
                                     ? theme.colors.placeholder + '20'
                                     : isScrapped
                                     ? theme.colors.error + '20'
+                                    : v.status === 'Pending'
+                                    ? theme.colors.warning + '20'
                                     : theme.colors.success + '20',
                                 },
                               ]}
                             >
+                              <MaterialCommunityIcons 
+                                name={getStatusIcon(v.status)} 
+                                size={12} 
+                                color={isSold ? theme.colors.placeholder : isScrapped ? theme.colors.error : v.status === 'Pending' ? theme.colors.warning : theme.colors.success} 
+                              />
                               <Text
                                 style={{
                                   fontSize: 10,
                                   fontWeight: 'bold',
+                                  marginLeft: 3,
                                   color: isSold
                                     ? theme.colors.placeholder
                                     : isScrapped
                                     ? theme.colors.error
+                                    : v.status === 'Pending'
+                                    ? theme.colors.warning
                                     : theme.colors.success,
                                 }}
                               >
@@ -504,7 +514,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 44,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 12,
     marginRight: 8,
   },
@@ -512,12 +522,13 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     fontSize: 14,
+    paddingHorizontal: 8,
     padding: 0,
   },
   addButton: {
     width: 44,
     height: 44,
-    borderRadius: 8,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 2,
@@ -537,14 +548,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
+  formHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   formTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 12,
+    marginLeft: 8,
   },
   formRow: {
     flexDirection: 'row',
     marginBottom: 12,
+  },
+  formField: {
+    flex: 1,
+    marginHorizontal: 4,
   },
   label: {
     fontSize: 13,
@@ -554,35 +574,36 @@ const styles = StyleSheet.create({
   formInput: {
     height: 40,
     borderWidth: 1,
-    borderRadius: 6,
+    borderRadius: 8,
     paddingHorizontal: 10,
     fontSize: 14,
-    marginBottom: 12,
   },
   subFormInput: {
     height: 36,
     borderWidth: 1,
-    borderRadius: 4,
+    borderRadius: 6,
     paddingHorizontal: 8,
     fontSize: 12,
-    backgroundColor: '#FFFFFF10',
   },
-  contactTypeRow: {
+  iconInput: {
     flexDirection: 'row',
-    marginBottom: 16,
-  },
-  contactOption: {
-    flex: 1,
-    height: 36,
-    borderWidth: 1.5,
-    borderRadius: 6,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginBottom: 12,
+    height: 40,
+  },
+  iconInputField: {
+    flex: 1,
+    height: '100%',
+    fontSize: 14,
+    paddingHorizontal: 8,
+    padding: 0,
   },
   submitButton: {
     height: 44,
-    borderRadius: 6,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 4,
@@ -597,11 +618,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 14,
   },
+  emptyState: {
+    alignItems: 'center',
+    padding: 40,
+  },
   emptyText: {
     fontSize: 14,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 8,
   },
   customerCard: {
     borderWidth: 1,
@@ -618,32 +643,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 14,
   },
   customerHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
-    paddingRight: 8,
+  },
+  customerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFD300',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  customerInitial: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  customerInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
   },
   customerNameText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
   },
   customerHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  prefBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    marginRight: 8,
-  },
   expandedContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
   },
   divider: {
     height: 1,
+    marginBottom: 12,
+  },
+  addressBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
   },
   vehiclesHeaderRow: {
@@ -653,17 +697,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginTop: 4,
   },
+  vehiclesTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   vehiclesTitleText: {
     fontSize: 14,
     fontWeight: 'bold',
+    marginLeft: 6,
   },
   addVehicleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   vehicleForm: {
     borderWidth: 1,
@@ -672,8 +721,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   vehicleSubmitBtn: {
-    height: 32,
-    borderRadius: 4,
+    height: 36,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 6,
@@ -709,10 +758,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   statusPill: {
+    flexDirection: 'row',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     minWidth: 64,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyVehicleState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
   },
 });

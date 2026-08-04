@@ -158,7 +158,42 @@ async function acknowledgeAlert(req, res) {
     alert.status = 'Acknowledged';
     await alert.save();
 
+    // If it is a NEW_VEHICLE alert, reject/delete the pending vehicle!
+    if (alert.type === 'NEW_VEHICLE') {
+      const vehicle = await Vehicle.findOne({ registrationNumber: alert.registrationNumber, status: 'Pending' });
+      if (vehicle) {
+        await Vehicle.deleteOne({ _id: vehicle._id });
+        await Audit.create({
+          activity: 'Vehicle Registration Rejected',
+          details: `Rejected vehicle registration request for ${alert.makeModel} (${alert.registrationNumber})`
+        });
+      }
+    }
+
     res.json({ message: 'Alert acknowledged successfully.', alert: formatDoc(alert) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function rejectAlert(req, res) {
+  try {
+    const alert = await Alert.findById(req.params.id);
+    if (!alert) {
+      return res.status(404).json({ error: 'Alert not found.' });
+    }
+
+    const { reason } = req.body;
+    alert.status = 'Rejected';
+    alert.rejectionReason = reason || 'Booking request rejected by garage';
+    await alert.save();
+
+    await Audit.create({
+      activity: 'MOT Booking Rejected',
+      details: `Rejected booking request for ${alert.makeModel} (${alert.registrationNumber}). Reason: ${reason || 'None provided'}`
+    });
+
+    res.json({ message: 'Alert rejected successfully.', alert: formatDoc(alert) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -168,5 +203,6 @@ module.exports = {
   getAllAlerts,
   createAlert,
   approveAlert,
-  acknowledgeAlert
+  acknowledgeAlert,
+  rejectAlert
 };

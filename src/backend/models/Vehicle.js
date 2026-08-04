@@ -37,7 +37,7 @@ const VehicleSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Active', 'Sold', 'Scrapped'],
+        enum: ['Active', 'Sold', 'Scrapped', 'Pending'],
         default: 'Active'
     },
     token: {
@@ -49,7 +49,6 @@ const VehicleSchema = new mongoose.Schema({
     timestamps: true
 });
 
-VehicleSchema.index({ registrationNumber: 1 });
 VehicleSchema.index({ motExpiryDate: 1 });
 
 module.exports = mongoose.model('Vehicle', VehicleSchema);

@@ -6,5 +6,6 @@ router.get('/', alertController.getAllAlerts);
 router.post('/', alertController.createAlert);
 router.put('/:id/approve', alertController.approveAlert);
 router.put('/:id/acknowledge', alertController.acknowledgeAlert);
+router.put('/:id/reject', alertController.rejectAlert);
 
 module.exports = router;
