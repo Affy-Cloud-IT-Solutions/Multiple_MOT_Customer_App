@@ -21,6 +21,27 @@ async function createAlert(req, res) {
   try {
     const { type, customerName, customerId, registrationNumber, makeModel } = req.body;
 
+    if (type === 'BOOKED') {
+      const existingAlert = await Alert.findOne({
+        type: 'BOOKED',
+        registrationNumber: registrationNumber.toUpperCase().trim(),
+        status: { $in: ['Pending', 'Approved'] }
+      });
+      if (existingAlert) {
+        existingAlert.makeModel = makeModel;
+        existingAlert.status = 'Pending';
+        existingAlert.date = Date.now();
+        await existingAlert.save();
+
+        await Audit.create({
+          activity: 'MOT Booking Rescheduled',
+          details: `${customerName} rescheduled MOT booking slot for ${makeModel} (${registrationNumber}) via portal.`
+        });
+
+        return res.status(200).json({ message: 'Alert rescheduled successfully.', alert: formatDoc(existingAlert) });
+      }
+    }
+
     const newAlert = await Alert.create({
       type,
       customerName,

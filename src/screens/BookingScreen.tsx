@@ -26,6 +26,8 @@ export default function BookingScreen({ route, navigation }: any) {
     customerId: 'c1',
   };
 
+  const isReschedule = route?.params?.isReschedule || false;
+
   const customer = customers.find((c) => c.id === vehicle.customerId) || customers[0];
 
   if (!customer) {
@@ -71,23 +73,21 @@ export default function BookingScreen({ route, navigation }: any) {
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleConfirmBooking = () => {
+  const handleConfirmBooking = async () => {
     if (!selectedDate || !selectedTime) {
       Alert.alert('Error', 'Please select a date and time slot.');
       return;
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-
+    try {
       const formattedDate = availableDays.find(d => d.fullDate === selectedDate);
       const displayDateStr = formattedDate 
         ? `${formattedDate.dayNum} ${formattedDate.monthName}`
         : selectedDate;
 
       // Add BOOKED alert notification to Admin alerts list
-      addAlert({
+      await addAlert({
         type: 'BOOKED',
         customerName: `${customer.firstName} ${customer.lastName}`,
         customerId: customer.id,
@@ -96,14 +96,18 @@ export default function BookingScreen({ route, navigation }: any) {
       });
 
       // Log to audit history
-      addAudit(
-        'MOT Booking Requested',
-        `${customer.firstName} ${customer.lastName} requested MOT booking slot for ${vehicle.make} ${vehicle.model} (${vehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
+      await addAudit(
+        isReschedule ? 'MOT Booking Rescheduled' : 'MOT Booking Requested',
+        `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} MOT booking slot for ${vehicle.make} ${vehicle.model} (${vehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
       );
 
+      setLoading(false);
+
       Alert.alert(
-        'Booking Request Submitted',
-        'Your booking slot has been selected and submitted to the garage. You can review confirmations in the notifications screen.',
+        isReschedule ? 'Rescheduled Successfully' : 'Booking Request Submitted',
+        isReschedule 
+          ? 'Your appointment has been successfully rescheduled.'
+          : 'Your booking slot has been selected and submitted to the garage. You can review confirmations in the notifications screen.',
         [
           {
             text: 'OK',
@@ -113,7 +117,9 @@ export default function BookingScreen({ route, navigation }: any) {
           },
         ]
       );
-    }, 1200);
+    } catch (err: any) {
+      setLoading(false);
+      Alert.alert('Error', err.message || 'Failed to confirm booking slot.');
   };
 
   return (
@@ -124,7 +130,9 @@ export default function BookingScreen({ route, navigation }: any) {
           <MaterialCommunityIcons name="arrow-left" size={22} color={theme.colors.text} />
           <Text style={[styles.backBtnText, { color: theme.colors.text }]}>Back</Text>
         </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: theme.colors.text }]}>Book MOT Slot</Text>
+        <Text style={[styles.navTitle, { color: theme.colors.text }]}>
+          {isReschedule ? 'Reschedule MOT Slot' : 'Book MOT Slot'}
+        </Text>
         <View style={{ width: 60 }} />
       </View>
 
@@ -139,10 +147,19 @@ export default function BookingScreen({ route, navigation }: any) {
               {vehicle.make} {vehicle.model}
             </Text>
             <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder }]}>
-              Booking an appointment for this vehicle
+              {isReschedule ? 'Rescheduling appointment for this vehicle' : 'Booking an appointment for this vehicle'}
             </Text>
           </View>
         </View>
+
+        {isReschedule && (
+          <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.warning + '15', borderColor: theme.colors.warning }]}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={20} color={theme.colors.warning} style={{ marginRight: 8 }} />
+            <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text }]}>
+              You are rescheduling your existing MOT booking. The new date and slot will replace your current reservation upon confirmation.
+            </Text>
+          </View>
+        )}
 
         {/* Date Selector Section */}
         <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>1. Select Appointment Date</Text>
@@ -231,14 +248,16 @@ export default function BookingScreen({ route, navigation }: any) {
           <TouchableOpacity
             onPress={handleConfirmBooking}
             disabled={loading}
-            style={[styles.submitBtn, { backgroundColor: theme.colors.secondary }]}
+            style={[styles.submitBtn, { backgroundColor: isReschedule ? theme.colors.warning : theme.colors.secondary }]}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <View style={styles.btnContent}>
                 <MaterialCommunityIcons name="calendar-check" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.submitBtnText}>Confirm Appointment Booking</Text>
+                <Text style={styles.submitBtnText}>
+                  {isReschedule ? 'Confirm Rescheduling' : 'Confirm Appointment Booking'}
+                </Text>
               </View>
             )}
           </TouchableOpacity>
@@ -403,5 +422,18 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  rescheduleNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  rescheduleNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

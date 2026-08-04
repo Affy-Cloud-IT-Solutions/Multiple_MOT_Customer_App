@@ -74,7 +74,7 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 // Automatically set base API URL based on Platform
 export const BASE_URL = Platform.OS === 'android' 
-  ? 'http://192.168.1.49:5000/api'  // ✅ Updated to your current host IP
+  ? 'http://localhost:5000/api'  // ✅ Changed to localhost to use adb reverse tunnel
   : 'http://localhost:5000/api';
  
 export const DataProvider = ({ children }: { children: ReactNode }) => {

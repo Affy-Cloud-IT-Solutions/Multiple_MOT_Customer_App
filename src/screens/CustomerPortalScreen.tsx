@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -23,7 +23,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function CustomerPortalScreen({ route, navigation }: any) {
   const { theme, toggleTheme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData } = useAppValues();
 
   // Find active customer
   const customerId = route?.params?.customerId || 'c1';
@@ -41,12 +41,42 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   // Active customer vehicles
   const customerVehicles = vehicles.filter((v) => v.customerId === customer.id && v.status === 'Active');
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshData();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   // New Vehicle form states
   const [showAddForm, setShowAddForm] = useState(false);
   const [regNo, setRegNo] = useState('');
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [expiry, setExpiry] = useState('');
+  const [expandedBookingReg, setExpandedBookingReg] = useState<string | null>(null);
+
+  const getBookingSlot = (makeModel: string) => {
+    const parts = makeModel.split(' - Slot: ');
+    return parts.length > 1 ? parts[1] : makeModel;
+  };
+
+  const formatShortDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const monthIndex = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      if (monthIndex >= 0 && monthIndex < 12) {
+        return `${day} ${months[monthIndex]} ${year}`;
+      }
+    }
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
 
   const formatDateInput = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '');
@@ -276,33 +306,90 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
               <View key={v.id} style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 {/* Header Info */}
                 <View style={styles.vehicleHeader}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
-                    <View style={styles.plate}>
-                      <Text style={styles.plateText}>{v.registrationNumber}</Text>
-                    </View>
-                    <Text style={[styles.makeModelText, { color: theme.colors.text }]}>
-                      {v.make} {v.model}
-                    </Text>
-                  </View>
+                  <Text style={[styles.makeModelText, { color: theme.colors.text, flex: 1 }]}>
+                    {v.make} {v.model}
+                  </Text>
                   {isBooked && (
-                    <View style={[styles.bookedBadge, { backgroundColor: theme.colors.success + '20', borderColor: theme.colors.success }]}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                        setExpandedBookingReg(expandedBookingReg === v.registrationNumber ? null : v.registrationNumber);
+                      }}
+                      style={[styles.bookedBadge, { backgroundColor: theme.colors.success + '20', borderColor: theme.colors.success }]}
+                    >
                       <MaterialCommunityIcons name="check-circle" size={12} color={theme.colors.success} style={{ marginRight: 2 }} />
                       <Text style={[styles.bookedBadgeText, { color: theme.colors.success }]}>Booked</Text>
-                    </View>
+                      <MaterialCommunityIcons 
+                        name={expandedBookingReg === v.registrationNumber ? "chevron-up" : "chevron-down"} 
+                        size={14} 
+                        color={theme.colors.success} 
+                        style={{ marginLeft: 2 }} 
+                      />
+                    </TouchableOpacity>
                   )}
                 </View>
 
               <View style={styles.vehicleBody}>
-                <View style={styles.infoRow}>
-                  <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>MOT Expiry Date:</Text>
-                  <Text style={{ color: theme.colors.text, fontWeight: 'bold', fontSize: 13 }}>{v.motExpiryDate}</Text>
+                <View style={[styles.infoRow, { justifyContent: 'flex-start', alignItems: 'center' }]}>
+                  <Text style={{ color: theme.colors.placeholder, fontSize: 13, marginRight: 8 }}>Registration Number:</Text>
+                  <View style={styles.smallPlate}>
+                    <Text style={styles.smallPlateText}>{v.registrationNumber}</Text>
+                  </View>
                 </View>
+                
+                <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start' }]}>
+                  <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>MOT: </Text>
+                  <Text style={{ color: theme.colors.text, fontWeight: 'bold', fontSize: 13 }}>{formatShortDate(v.motExpiryDate)}</Text>
+                </View>
+                
                 {v.lastServiceDate && (
-                  <View style={[styles.infoRow, { marginTop: 6 }]}>
-                    <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>Last Service Date:</Text>
-                    <Text style={{ color: theme.colors.text, fontSize: 13 }}>{v.lastServiceDate}</Text>
+                  <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start' }]}>
+                    <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>Last Service: </Text>
+                    <Text style={{ color: theme.colors.text, fontSize: 13 }}>{formatShortDate(v.lastServiceDate)}</Text>
                   </View>
                 )}
+
+                {isBooked && expandedBookingReg === v.registrationNumber && (() => {
+                  const bookingAlert = alerts.find((a) => a.type === 'BOOKED' && a.registrationNumber === v.registrationNumber);
+                  if (!bookingAlert) return null;
+                  
+                  return (
+                    <View style={[styles.bookingDetailsContainer, { backgroundColor: theme.colors.primaryContainer + '20', borderColor: theme.colors.border }]}>
+                      <View style={styles.bookingDetailsHeader}>
+                        <MaterialCommunityIcons name="calendar-clock" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                        <Text style={[styles.bookingDetailsTitle, { color: theme.colors.text }]}>Booking Details</Text>
+                      </View>
+                      <View style={styles.bookingInfoRow}>
+                        <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Slot/Date:</Text>
+                        <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
+                          {getBookingSlot(bookingAlert.makeModel)}
+                        </Text>
+                      </View>
+                      <View style={styles.bookingInfoRow}>
+                        <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Status:</Text>
+                        <Text style={[
+                          styles.bookingInfoValue, 
+                          { 
+                            color: bookingAlert.status === 'Approved' ? theme.colors.success :
+                                   bookingAlert.status === 'Pending' ? theme.colors.warning :
+                                   theme.colors.placeholder,
+                            fontWeight: 'bold'
+                          }
+                        ]}>
+                          {bookingAlert.status === 'Pending' ? 'Pending Confirmation' : 
+                           bookingAlert.status === 'Approved' ? 'Confirmed ✅' : 
+                           'Acknowledged'}
+                        </Text>
+                      </View>
+                      <View style={styles.bookingInfoRow}>
+                        <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Requested On:</Text>
+                        <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
+                          {new Date(bookingAlert.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })()}
               </View>
 
               <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
@@ -324,16 +411,29 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                   )}
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={() => handleBookMOT(v)}
-                  disabled={loadingAction !== null}
-                  style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.secondary }]}
-                >
-                  <View style={styles.actionBtnContent}>
-                    <MaterialCommunityIcons name="calendar-check" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                    <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Book MOT</Text>
-                  </View>
-                </TouchableOpacity>
+                {isBooked ? (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('Booking', { vehicle: v, isReschedule: true })}
+                    disabled={loadingAction !== null}
+                    style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.warning }]}
+                  >
+                    <View style={styles.actionBtnContent}>
+                      <MaterialCommunityIcons name="calendar-edit" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                      <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Reschedule</Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => handleBookMOT(v)}
+                    disabled={loadingAction !== null}
+                    style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.secondary }]}
+                  >
+                    <View style={styles.actionBtnContent}>
+                      <MaterialCommunityIcons name="calendar-plus" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                      <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Book MOT</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           );
@@ -555,5 +655,49 @@ const styles = StyleSheet.create({
   bookedBadgeText: {
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  bookingDetailsContainer: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  bookingDetailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    paddingBottom: 4,
+  },
+  bookingDetailsTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  bookingInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 3,
+  },
+  bookingInfoLabel: {
+    fontSize: 12,
+  },
+  bookingInfoValue: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  smallPlate: {
+    backgroundColor: '#FFD300',
+    borderWidth: 1,
+    borderColor: '#000',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+  },
+  smallPlateText: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
 });
