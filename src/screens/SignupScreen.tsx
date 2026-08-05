@@ -25,22 +25,58 @@ export default function SignupScreen({ navigation }: any) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [nameError, setNameError] = useState(false);
+  const [emailError, setEmailError] = useState(false);
+  const [mobileError, setMobileError] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
+  const [confirmPasswordError, setConfirmPasswordError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSignup = async () => {
-    if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
+    let valid = true;
+    if (!name.trim()) {
+      setNameError(true);
+      valid = false;
+    } else {
+      setNameError(false);
+    }
+    if (!email.trim()) {
+      setEmailError(true);
+      valid = false;
+    } else {
+      setEmailError(false);
+    }
+    if (!mobile.trim()) {
+      setMobileError(true);
+      valid = false;
+    } else {
+      setMobileError(false);
+    }
+    if (!password.trim()) {
+      setPasswordError(true);
+      valid = false;
+    } else {
+      setPasswordError(false);
+    }
+    if (!confirmPassword.trim()) {
+      setConfirmPasswordError(true);
+      valid = false;
+    } else {
+      setConfirmPasswordError(false);
     }
 
-    if (!mobile.trim()) {
-      Alert.alert('Error', 'Mobile number is required');
+    if (!valid) {
+      setErrorMessage('Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      setPasswordError(true);
+      setConfirmPasswordError(true);
+      setErrorMessage('Passwords do not match');
       return;
     }
+    setErrorMessage(null);
 
     setLoading(true);
     try {
@@ -93,14 +129,24 @@ export default function SignupScreen({ navigation }: any) {
         {/* Signup Form Card */}
         <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
 
+          {errorMessage && (
+            <View style={[styles.errorContainer, { borderColor: theme.colors.error + '40', backgroundColor: theme.colors.error + '10' }]}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={16} color={theme.colors.error} style={{ marginRight: 6 }} />
+              <Text style={[styles.errorText, { color: theme.colors.error }]}>{errorMessage}</Text>
+            </View>
+          )}
 
           {/* Full Name */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Full Name</Text>
-          <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+          <View style={[styles.inputContainer, { borderColor: nameError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
             <MaterialCommunityIcons name="account-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={name}
-              onChangeText={setName}
+              onChangeText={(text) => {
+                setName(text);
+                setNameError(false);
+                setErrorMessage(null);
+              }}
               placeholder="E.g. Alex Mercer"
               placeholderTextColor={theme.colors.placeholder}
               autoCapitalize="words"
@@ -110,11 +156,15 @@ export default function SignupScreen({ navigation }: any) {
 
           {/* Email */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Email Address</Text>
-          <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+          <View style={[styles.inputContainer, { borderColor: emailError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
             <MaterialCommunityIcons name="email-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                setEmailError(false);
+                setErrorMessage(null);
+              }}
               placeholder="E.g. alex@example.com"
               placeholderTextColor={theme.colors.placeholder}
               keyboardType="email-address"
@@ -125,11 +175,15 @@ export default function SignupScreen({ navigation }: any) {
 
           {/* Mobile Number (Customer only) */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Mobile Number</Text>
-          <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+          <View style={[styles.inputContainer, { borderColor: mobileError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
             <MaterialCommunityIcons name="phone-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={mobile}
-              onChangeText={setMobile}
+              onChangeText={(text) => {
+                setMobile(text);
+                setMobileError(false);
+                setErrorMessage(null);
+              }}
               placeholder="E.g. 07700 900077"
               placeholderTextColor={theme.colors.placeholder}
               keyboardType="phone-pad"
@@ -139,11 +193,15 @@ export default function SignupScreen({ navigation }: any) {
 
           {/* Password */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Password</Text>
-          <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+          <View style={[styles.inputContainer, { borderColor: passwordError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
             <MaterialCommunityIcons name="lock-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                setPasswordError(false);
+                setErrorMessage(null);
+              }}
               placeholder="••••••••"
               placeholderTextColor={theme.colors.placeholder}
               secureTextEntry={!showPassword}
@@ -161,11 +219,15 @@ export default function SignupScreen({ navigation }: any) {
 
           {/* Confirm Password */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Confirm Password</Text>
-          <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+          <View style={[styles.inputContainer, { borderColor: confirmPasswordError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
             <MaterialCommunityIcons name="lock-check-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(text) => {
+                setConfirmPassword(text);
+                setConfirmPasswordError(false);
+                setErrorMessage(null);
+              }}
               placeholder="••••••••"
               placeholderTextColor={theme.colors.placeholder}
               secureTextEntry={!showConfirmPassword}
@@ -313,5 +375,18 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    flex: 1,
   },
 });

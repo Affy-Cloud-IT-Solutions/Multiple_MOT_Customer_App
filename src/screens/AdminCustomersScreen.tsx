@@ -57,14 +57,14 @@ export default function AdminCustomersScreen() {
   };
 
   const handleCreateCustomer = () => {
-    if (!firstName.trim() || !lastName.trim() || !email.trim() || !mobile.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+    if (!firstName.trim() || !email.trim() || !mobile.trim()) {
+      Alert.alert('Error', 'Please fill in First Name, Email, and Mobile number');
       return;
     }
 
     addCustomer({
       firstName: firstName.trim(),
-      lastName: lastName.trim(),
+      lastName: lastName.trim() || undefined,
       email: email.trim(),
       mobile: mobile.trim(),
       address: address.trim() || undefined,
@@ -336,7 +336,7 @@ export default function AdminCustomersScreen() {
                     {addingVehicleForCustId === c.id && (
                       <View style={[styles.vehicleForm, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
                         <Text style={{ fontWeight: 'bold', fontSize: 13, color: theme.colors.text, marginBottom: 10 }}>
-                          <MaterialCommunityIcons name="car-plus" size={16} color={theme.colors.secondary} /> Add Vehicle
+                          <MaterialCommunityIcons name="car" size={16} color={theme.colors.secondary} /> Add Vehicle
                         </Text>
                         
                         <View style={styles.formRow}>
@@ -354,7 +354,7 @@ export default function AdminCustomersScreen() {
                             <TextInput
                               value={make}
                               onChangeText={setMake}
-                              placeholder="Make"
+                              placeholder="Make / Company"
                               placeholderTextColor={theme.colors.placeholder}
                               autoCapitalize="characters"
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
@@ -375,34 +375,12 @@ export default function AdminCustomersScreen() {
                           </View>
                           <View style={styles.formField}>
                             <TextInput
-                              value={year}
-                              onChangeText={setYear}
-                              placeholder="Year"
-                              placeholderTextColor={theme.colors.placeholder}
-                              keyboardType="numeric"
-                              style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
-                            />
-                          </View>
-                        </View>
-
-                        <View style={styles.formRow}>
-                          <View style={styles.formField}>
-                            <TextInput
                               value={expiry}
                               onChangeText={(text) => setExpiry(formatDateInput(text))}
-                              placeholder="Expiry (YYYY-MM-DD)"
+                              placeholder="MOT Expiry (YYYY-MM-DD)"
                               placeholderTextColor={theme.colors.placeholder}
                               keyboardType="numeric"
                               maxLength={10}
-                              style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
-                            />
-                          </View>
-                          <View style={styles.formField}>
-                            <TextInput
-                              value={serviceDate}
-                              onChangeText={setServiceDate}
-                              placeholder="Service Date"
-                              placeholderTextColor={theme.colors.placeholder}
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
                             />
                           </View>

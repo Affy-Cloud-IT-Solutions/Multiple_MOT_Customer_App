@@ -38,10 +38,10 @@ async function getCustomerById(req, res) {
 
 async function createCustomer(req, res) {
   try {
-    const { firstName, lastName, email, mobile, preferredContact, address } = req.body;
+    const { firstName, lastName, email, mobile, preferredContact = 'SMS', address } = req.body;
 
-    if (!firstName || !lastName || !email || !mobile || !preferredContact) {
-      return res.status(400).json({ error: 'First name, last name, email, mobile, and preferred contact are required.' });
+    if (!firstName || !email || !mobile) {
+      return res.status(400).json({ error: 'First name, email, and mobile are required.' });
     }
 
     if (!isValidEmail(email)) {

@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   },
   countBadge: {
     backgroundColor: '#0284C715',
-    paddingHorizontal: 10,
+    paddingHorizontal: 5,
     paddingVertical: 3,
     borderRadius: 12,
     alignItems: 'center',

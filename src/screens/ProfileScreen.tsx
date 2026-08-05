@@ -55,7 +55,7 @@ export default function ProfileScreen({ navigation }: any) {
     setCreatingStaff(true);
     try {
       await createStaffAccount(staffName.trim(), staffEmail.trim().toLowerCase(), staffPassword.trim());
-      Alert.alert('Success', `Garage Staff account for ${staffName} has been created successfully.`);
+      Alert.alert('Success', `Staff account for ${staffName} has been created successfully.`);
       setStaffName('');
       setStaffEmail('');
       setStaffPassword('');
@@ -67,165 +67,167 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Profile Header */}
       <View style={styles.header}>
-        <View style={[styles.avatar, { backgroundColor: theme.colors.secondary }]}>
-          <Text style={styles.avatarLabel}>{getInitials(user?.name || '')}</Text>
+        <View style={[styles.avatarContainer, { backgroundColor: theme.colors.secondary }]}>
+          <Text style={styles.avatarText}>{getInitials(user?.name || '')}</Text>
         </View>
-        <Text style={[styles.userName, { color: theme.colors.text }]}>
-          {user?.name || 'Guest User'}
-        </Text>
-        <Text style={{ color: theme.colors.placeholder }}>
-          {user?.email || 'guest@example.com'}
-        </Text>
-        {user?.role && (
-          <View style={[styles.roleBadge, { backgroundColor: theme.colors.secondary + '20' }]}>
-            <Text style={[styles.roleBadgeText, { color: theme.colors.secondary }]}>
-              {user.role === 'admin' ? 'Super Admin' : user.role === 'staff' ? 'Garage Administrator' : 'Customer'}
+        <View style={styles.headerInfo}>
+          <Text style={[styles.userName, { color: theme.colors.text }]}>
+            {user?.name || 'Guest User'}
+          </Text>
+          <View style={styles.userInfoRow}>
+            <MaterialCommunityIcons name="email" size={14} color={theme.colors.placeholder} />
+            <Text style={[styles.userEmail, { color: theme.colors.placeholder }]}>
+              {user?.email || 'guest@example.com'}
             </Text>
           </View>
-        )}
+          {user?.role && (
+            <View style={[styles.roleBadge, { backgroundColor: theme.colors.secondary + '20' }]}>
+              <MaterialCommunityIcons 
+                name={user.role === 'admin' ? 'shield-account' : user.role === 'staff' ? 'account-tie' : 'account'} 
+                size={12} 
+                color={theme.colors.secondary} 
+              />
+              <Text style={[styles.roleBadgeText, { color: theme.colors.secondary }]}>
+                {user.role === 'admin' ? 'Super Admin' : user.role === 'staff' ? 'Staff' : 'Customer'}
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
 
-      {/* Settings Options Card */}
-      <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-        {/* Dark Mode Switch Item */}
+      {/* Settings Options */}
+      <View style={[styles.settingsContainer, { backgroundColor: theme.colors.card }]}>
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <MaterialCommunityIcons name="theme-light-dark" size={22} color={theme.colors.secondary} style={styles.settingIcon} />
+            <View style={[styles.iconWrapper, { backgroundColor: theme.colors.secondary + '15' }]}>
+              <MaterialCommunityIcons name="theme-light-dark" size={20} color={theme.colors.secondary} />
+            </View>
             <View>
               <Text style={[styles.settingTitle, { color: theme.colors.text }]}>Dark Mode</Text>
-              <Text style={[styles.settingDesc, { color: theme.colors.placeholder }]}>Toggle app theme style</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.colors.placeholder }]}>Toggle dark/light theme</Text>
             </View>
           </View>
           <Switch
             value={isDarkMode}
             onValueChange={toggleTheme}
-            trackColor={{ false: '#767577', true: theme.colors.secondary }}
-            thumbColor={isDarkMode ? '#FFFFFF' : '#f4f3f4'}
+            trackColor={{ false: '#E0E0E0', true: theme.colors.secondary }}
+            thumbColor="#FFFFFF"
+            ios_backgroundColor="#E0E0E0"
           />
         </View>
-        
-        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
-        {/* Notifications Switch Item */}
+        <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
+
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <MaterialCommunityIcons name="bell-ring-outline" size={22} color={theme.colors.secondary} style={styles.settingIcon} />
+            <View style={[styles.iconWrapper, { backgroundColor: theme.colors.secondary + '15' }]}>
+              <MaterialCommunityIcons name="bell-ring" size={20} color={theme.colors.secondary} />
+            </View>
             <View>
-              <Text style={[styles.settingTitle, { color: theme.colors.text }]}>Push Notifications</Text>
-              <Text style={[styles.settingDesc, { color: theme.colors.placeholder }]}>Get alerts for MOT expiry dates</Text>
+              <Text style={[styles.settingTitle, { color: theme.colors.text }]}>Notifications</Text>
+              <Text style={[styles.settingSubtitle, { color: theme.colors.placeholder }]}>MOT expiry alerts</Text>
             </View>
           </View>
           <Switch
             value={notificationsEnabled}
             onValueChange={() => setNotificationsEnabled(!notificationsEnabled)}
-            trackColor={{ false: '#767577', true: theme.colors.secondary }}
-            thumbColor={notificationsEnabled ? '#FFFFFF' : '#f4f3f4'}
+            trackColor={{ false: '#E0E0E0', true: theme.colors.secondary }}
+            thumbColor="#FFFFFF"
+            ios_backgroundColor="#E0E0E0"
           />
         </View>
-
-        <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
-
-        {/* Clear Cache Item */}
-        <TouchableOpacity
-          onPress={() => {
-            Alert.alert('History Cleared', 'Your search log has been cleared successfully.');
-          }}
-          style={styles.settingItem}
-        >
-          <View style={styles.settingLeft}>
-            <MaterialCommunityIcons name="delete-outline" size={22} color={theme.colors.error} style={styles.settingIcon} />
-            <View>
-              <Text style={[styles.settingTitle, { color: theme.colors.text }]}>Clear Search History</Text>
-              <Text style={[styles.settingDesc, { color: theme.colors.placeholder }]}>Remove cached lookup details</Text>
-            </View>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.placeholder} />
-        </TouchableOpacity>
       </View>
 
-      {/* Super Admin - Garage Staff Creator Form */}
+      {/* Admin Section */}
       {user?.role === 'admin' && (
-        <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, padding: 16, marginBottom: 24 }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Create Garage Staff Account</Text>
-          <Text style={[styles.sectionDesc, { color: theme.colors.placeholder }]}>
-            Register a new Garage Staff user. They can only login to the dashboard and cannot register themselves.
+        <View style={[styles.adminContainer, { backgroundColor: theme.colors.card }]}>
+          <View style={styles.adminHeader}>
+            <View style={[styles.adminIconWrapper, { backgroundColor: theme.colors.primary + '15' }]}>
+              <MaterialCommunityIcons name="account-plus" size={20} color={theme.colors.primary} />
+            </View>
+            <Text style={[styles.adminTitle, { color: theme.colors.text }]}>Staff Management</Text>
+          </View>
+          <Text style={[styles.adminSubtitle, { color: theme.colors.placeholder }]}>
+            Create staff accounts for garage management
           </Text>
 
-          <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Full Name</Text>
-          <TextInput
-            value={staffName}
-            onChangeText={setStaffName}
-            placeholder="E.g. Fawad Staff"
-            placeholderTextColor={theme.colors.placeholder}
-            style={[styles.inputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-          />
+          <View style={styles.inputContainer}>
+            <MaterialCommunityIcons name="account" size={18} color={theme.colors.placeholder} style={styles.inputIcon} />
+            <TextInput
+              value={staffName}
+              onChangeText={setStaffName}
+              placeholder="Full Name"
+              placeholderTextColor={theme.colors.placeholder}
+              style={[styles.adminInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+            />
+          </View>
 
-          <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Email Address</Text>
-          <TextInput
-            value={staffEmail}
-            onChangeText={setStaffEmail}
-            placeholder="E.g. fawad@garage.com"
-            placeholderTextColor={theme.colors.placeholder}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            style={[styles.inputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-          />
+          <View style={styles.inputContainer}>
+            <MaterialCommunityIcons name="email" size={18} color={theme.colors.placeholder} style={styles.inputIcon} />
+            <TextInput
+              value={staffEmail}
+              onChangeText={setStaffEmail}
+              placeholder="Email Address"
+              placeholderTextColor={theme.colors.placeholder}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={[styles.adminInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+            />
+          </View>
 
-          <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Password</Text>
-          <TextInput
-            value={staffPassword}
-            onChangeText={setStaffPassword}
-            placeholder="••••••••"
-            placeholderTextColor={theme.colors.placeholder}
-            secureTextEntry
-            autoCapitalize="none"
-            style={[styles.inputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-          />
+          <View style={styles.inputContainer}>
+            <MaterialCommunityIcons name="lock" size={18} color={theme.colors.placeholder} style={styles.inputIcon} />
+            <TextInput
+              value={staffPassword}
+              onChangeText={setStaffPassword}
+              placeholder="Password"
+              placeholderTextColor={theme.colors.placeholder}
+              secureTextEntry
+              autoCapitalize="none"
+              style={[styles.adminInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+            />
+          </View>
 
           <TouchableOpacity
             onPress={handleCreateStaff}
             disabled={creatingStaff}
-            style={[styles.createBtn, { backgroundColor: theme.colors.primary, opacity: creatingStaff ? 0.7 : 1 }]}
+            style={[styles.createStaffButton, { backgroundColor: theme.colors.primary, opacity: creatingStaff ? 0.7 : 1 }]}
           >
             {creatingStaff ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.createBtnText}>Create Staff Account</Text>
+              <>
+                <MaterialCommunityIcons name="account-plus" size={18} color="#FFFFFF" />
+                <Text style={styles.createStaffText}>Create Staff Account</Text>
+              </>
             )}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Version info */}
-      <View style={styles.versionContainer}>
-        <Text style={{ color: theme.colors.placeholder, fontSize: 12 }}>
-          UK MOT Check App v1.0.0 (Production Mode)
-        </Text>
-      </View>
-
       {/* Logout Button */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          onPress={handleLogout}
-          disabled={loggingOut}
-          style={[
-            styles.logoutButton,
-            { borderColor: theme.colors.error, opacity: loggingOut ? 0.7 : 1 },
-          ]}
-        >
-          {loggingOut ? (
-            <ActivityIndicator color={theme.colors.error} size="small" />
-          ) : (
-            <View style={styles.logoutContent}>
-              <MaterialCommunityIcons name="logout" size={18} color={theme.colors.error} style={{ marginRight: 8 }} />
-              <Text style={[styles.logoutButtonText, { color: theme.colors.error }]}>Sign Out</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        onPress={handleLogout}
+        disabled={loggingOut}
+        style={[styles.logoutContainer, { borderColor: theme.colors.error, opacity: loggingOut ? 0.7 : 1 }]}
+      >
+        {loggingOut ? (
+          <ActivityIndicator color={theme.colors.error} size="small" />
+        ) : (
+          <>
+            <MaterialCommunityIcons name="logout" size={20} color={theme.colors.error} />
+            <Text style={[styles.logoutText, { color: theme.colors.error }]}>Sign Out</Text>
+          </>
+        )}
+      </TouchableOpacity>
+
+      {/* Version */}
+      <Text style={[styles.versionText, { color: theme.colors.placeholder }]}>
+        Version 1.0.0
+      </Text>
     </ScrollView>
   );
 }
@@ -234,140 +236,190 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  avatarContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.12,
     shadowRadius: 4,
   },
-  avatarLabel: {
-    fontSize: 28,
+  avatarText: {
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
+  headerInfo: {
+    flex: 1,
+    marginLeft: 16,
+    alignItems: 'flex-start',
+  },
   userName: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 19,
+    fontWeight: '700',
     marginBottom: 4,
   },
+  userInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  userEmail: {
+    fontSize: 13,
+    marginLeft: 6,
+  },
   roleBadge: {
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    marginTop: 8,
+    marginTop: 6,
+    gap: 4,
+    alignSelf: 'flex-start',
   },
   roleBadgeText: {
     fontSize: 11,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    marginLeft: 4,
   },
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 8,
+  settingsContainer: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 14,
+    paddingVertical: 4,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
-    marginBottom: 24,
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  settingIcon: {
-    marginRight: 16,
+  iconWrapper: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
   },
   settingTitle: {
     fontSize: 15,
     fontWeight: '600',
   },
-  settingDesc: {
+  settingSubtitle: {
     fontSize: 12,
-    marginTop: 2,
+    marginTop: 1,
   },
-  divider: {
+  settingDivider: {
     height: 1,
-    marginHorizontal: 12,
+    marginHorizontal: 16,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
+  adminContainer: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 14,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
   },
-  sectionDesc: {
-    fontSize: 12,
-    marginBottom: 16,
-    lineHeight: 16,
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    marginBottom: 6,
-  },
-  inputField: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    height: 40,
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  createBtn: {
-    height: 40,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  createBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  versionContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  buttonContainer: {
-    paddingHorizontal: 8,
-  },
-  logoutButton: {
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoutContent: {
+  adminHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 4,
   },
-  logoutButtonText: {
+  adminIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  adminTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
+  },
+  adminSubtitle: {
+    fontSize: 12,
+    marginBottom: 16,
+    marginLeft: 42,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 10,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  adminInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  createStaffButton: {
+    flexDirection: 'row',
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 8,
+  },
+  createStaffText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  logoutContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 16,
+    gap: 8,
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  versionText: {
+    textAlign: 'center',
+    fontSize: 12,
+    marginBottom: 24,
   },
 });

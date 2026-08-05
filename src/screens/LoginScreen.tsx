@@ -22,12 +22,30 @@ export default function LoginScreen({ navigation }: any) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+    let valid = true;
+    if (!email.trim()) {
+      setEmailError(true);
+      valid = false;
+    } else {
+      setEmailError(false);
+    }
+    if (!password.trim()) {
+      setPasswordError(true);
+      valid = false;
+    } else {
+      setPasswordError(false);
+    }
+
+    if (!valid) {
+      setErrorMessage('Please fill in all fields');
       return;
     }
+    setErrorMessage(null);
     setLoading(true);
     try {
       const response = await fetch(`${BASE_URL}/auth/login`, {
@@ -89,13 +107,24 @@ export default function LoginScreen({ navigation }: any) {
         <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View>
             <Text style={[styles.portalHeading, { color: theme.colors.text }]}>Sign In</Text>
+
+            {errorMessage && (
+              <View style={[styles.errorContainer, { borderColor: theme.colors.error + '40', backgroundColor: theme.colors.error + '10' }]}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={16} color={theme.colors.error} style={{ marginRight: 6 }} />
+                <Text style={[styles.errorText, { color: theme.colors.error }]}>{errorMessage}</Text>
+              </View>
+            )}
             
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Email Address</Text>
-            <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+            <View style={[styles.inputContainer, { borderColor: emailError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
               <MaterialCommunityIcons name="email-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
               <TextInput
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setEmailError(false);
+                  setErrorMessage(null);
+                }}
                 placeholder="E.g. user@example.com"
                 placeholderTextColor={theme.colors.placeholder}
                 keyboardType="email-address"
@@ -105,11 +134,15 @@ export default function LoginScreen({ navigation }: any) {
             </View>
 
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Password</Text>
-            <View style={[styles.inputContainer, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+            <View style={[styles.inputContainer, { borderColor: passwordError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
               <MaterialCommunityIcons name="lock-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
               <TextInput
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  setPasswordError(false);
+                  setErrorMessage(null);
+                }}
                 placeholder="••••••••"
                 placeholderTextColor={theme.colors.placeholder}
                 secureTextEntry={!showPassword}
@@ -294,5 +327,18 @@ const styles = StyleSheet.create({
   },
   signupText: {
     fontWeight: 'bold',
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    flex: 1,
   },
 });

@@ -356,19 +356,22 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
                     <View style={styles.vehicleBody}>
                       <View style={[styles.infoRow, { justifyContent: 'flex-start', alignItems: 'center' }]}>
+                        <MaterialCommunityIcons name="card-text-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
                         <Text style={{ color: theme.colors.placeholder, fontSize: 13, marginRight: 8 }}>Registration Number:</Text>
                         <View style={styles.smallPlate}>
                           <Text style={styles.smallPlateText}>{v.registrationNumber}</Text>
                         </View>
                       </View>
                       
-                      <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start' }]}>
+                      <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start', alignItems: 'center' }]}>
+                        <MaterialCommunityIcons name="calendar-check-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
                         <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>MOT: </Text>
                         <Text style={{ color: theme.colors.text, fontWeight: 'bold', fontSize: 13 }}>{formatShortDate(v.motExpiryDate)}</Text>
                       </View>
                       
                       {v.lastServiceDate && (
-                        <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start' }]}>
+                        <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start', alignItems: 'center' }]}>
+                          <MaterialCommunityIcons name="wrench-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
                           <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>Last Service: </Text>
                           <Text style={{ color: theme.colors.text, fontSize: 13 }}>{formatShortDate(v.lastServiceDate)}</Text>
                         </View>

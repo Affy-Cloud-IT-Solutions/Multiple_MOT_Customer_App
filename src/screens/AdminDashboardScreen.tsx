@@ -243,12 +243,18 @@ export default function AdminDashboardScreen({ navigation }: any) {
                   </View>
 
                   <View style={styles.actionCardDetails}>
-                    <Text style={[styles.customerName, { color: theme.colors.placeholder }]}>
-                      {customer ? `${customer.firstName} ${customer.lastName}` : 'Unknown'}
-                    </Text>
-                    <Text style={[styles.contactInfo, { color: theme.colors.placeholder }]}>
-                      {customer?.mobile} • {customer?.preferredContact}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialCommunityIcons name="account-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                      <Text style={[styles.customerName, { color: theme.colors.placeholder }]}>
+                        {customer ? `${customer.firstName} ${customer.lastName}` : 'Unknown'}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialCommunityIcons name="phone-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                      <Text style={[styles.contactInfo, { color: theme.colors.placeholder }]}>
+                        {customer?.mobile} • {customer?.preferredContact}
+                      </Text>
+                    </View>
                   </View>
 
                   <TouchableOpacity

@@ -4,6 +4,100 @@ const Reminder = require('../models/Reminder');
 const Alert = require('../models/Alert');
 const Audit = require('../models/Audit');
 const { getDaysDiff, formatCSV } = require('../utils/helpers');
+const PDFDocument = require('pdfkit');
+const XLSX = require('xlsx');
+
+// Generic function to generate PDF report
+function generatePDFReport(res, title, headers, displayHeaders, data) {
+  const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+  
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${title.toLowerCase().replace(/ /g, '_')}.pdf"`);
+  
+  doc.pipe(res);
+  
+  // Title
+  doc.fontSize(18).text(title, { align: 'center' });
+  doc.moveDown(1);
+  
+  // Date generated
+  doc.fontSize(10).text(`Generated: ${new Date().toLocaleString()}`, { align: 'right' });
+  doc.moveDown(1.5);
+  
+  // Table settings
+  const startX = 30;
+  const startY = doc.y;
+  const tableWidth = doc.page.width - 60; // Landscape A4 width is 841.89
+  const colWidth = tableWidth / displayHeaders.length;
+  
+  // Draw header background
+  doc.rect(startX, startY, tableWidth, 20).fill('#1E293B').stroke();
+  
+  // Draw headers text
+  doc.fillColor('#FFFFFF').fontSize(9).font('Helvetica-Bold');
+  displayHeaders.forEach((header, index) => {
+    doc.text(header, startX + (index * colWidth) + 5, startY + 5, { width: colWidth - 10, lineBreak: false });
+  });
+  
+  let currentY = startY + 20;
+  
+  // Draw rows
+  doc.fillColor('#000000').font('Helvetica');
+  data.forEach((row, rowIndex) => {
+    if (currentY > 500) { // page height is 595.28
+      doc.addPage({ margin: 30, size: 'A4', layout: 'landscape' });
+      currentY = 40;
+      
+      // Header on new page
+      doc.rect(startX, currentY, tableWidth, 20).fill('#1E293B').stroke();
+      doc.fillColor('#FFFFFF').font('Helvetica-Bold');
+      displayHeaders.forEach((header, index) => {
+        doc.text(header, startX + (index * colWidth) + 5, currentY + 5, { width: colWidth - 10, lineBreak: false });
+      });
+      currentY += 20;
+      doc.fillColor('#000000').font('Helvetica');
+    }
+    
+    // Alternate backgrounds
+    if (rowIndex % 2 === 1) {
+      doc.rect(startX, currentY, tableWidth, 18).fill('#F1F5F9').stroke('#E2E8F0');
+    } else {
+      doc.rect(startX, currentY, tableWidth, 18).stroke('#E2E8F0');
+    }
+    
+    doc.fillColor('#334155').fontSize(8);
+    headers.forEach((header, colIndex) => {
+      const text = String(row[header] !== undefined && row[header] !== null ? row[header] : '');
+      doc.text(text, startX + (colIndex * colWidth) + 5, currentY + 5, { width: colWidth - 10, lineBreak: false });
+    });
+    
+    currentY += 18;
+  });
+  
+  doc.end();
+}
+
+// Generic function to generate Excel report
+function generateExcelReport(res, filename, sheetName, headers, displayHeaders, data) {
+  // Map data keys to display headers
+  const formattedData = data.map(row => {
+    const newRow = {};
+    headers.forEach((header, index) => {
+      newRow[displayHeaders[index]] = row[header] !== undefined && row[header] !== null ? row[header] : '';
+    });
+    return newRow;
+  });
+  
+  const worksheet = XLSX.utils.json_to_sheet(formattedData, { header: displayHeaders });
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  
+  const buf = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename.toLowerCase().replace(/ /g, '_')}.xlsx"`);
+  res.send(buf);
+}
 
 // Helper to check if MOT is due soon
 async function getMOTDueReportData() {
@@ -47,7 +141,6 @@ async function getReminderSentReportData() {
 }
 
 async function getCustomerResponseReportData() {
-  // Returns audit records related to customer responses (booked, sold, new vehicle requests)
   const audits = await Audit.find({
     $or: [
       { activity: { $regex: 'Requested', $options: 'i' } },
@@ -65,7 +158,6 @@ async function getCustomerResponseReportData() {
 }
 
 async function getBookedMOTReportData() {
-  // Get all alerts of type 'BOOKED'
   const bookingAlerts = await Alert.find({ type: 'BOOKED' });
   return bookingAlerts.map(b => ({
     alertId: b._id.toString(),
@@ -82,11 +174,21 @@ async function getMOTDueReport(req, res) {
   try {
     const data = await getMOTDueReportData();
     const { format } = req.query;
+    const headers = ['registrationNumber', 'make', 'model', 'motExpiryDate', 'daysRemaining', 'customerName', 'customerContact'];
+    const displayHeaders = ['Registration', 'Make', 'Model', 'Expiry Date', 'Days Left', 'Customer Name', 'Contact'];
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=mot_due_report.csv');
-      return res.send(formatCSV(data, ['registrationNumber', 'make', 'model', 'motExpiryDate', 'daysRemaining', 'customerName', 'customerContact']));
+      return res.send(formatCSV(data, headers));
+    }
+    
+    if (format === 'excel') {
+      return generateExcelReport(res, 'mot_due_report', 'MOT Due', headers, displayHeaders, data);
+    }
+    
+    if (format === 'pdf') {
+      return generatePDFReport(res, 'MOT Due Report', headers, displayHeaders, data);
     }
     
     res.json(data);
@@ -99,11 +201,21 @@ async function getReminderSentReport(req, res) {
   try {
     const data = await getReminderSentReportData();
     const { format } = req.query;
+    const headers = ['reminderId', 'registrationNumber', 'makeModel', 'recipientName', 'contactMethod', 'reminderType', 'sentTimestamp', 'sentStatus'];
+    const displayHeaders = ['Reminder ID', 'Reg Number', 'Vehicle', 'Recipient', 'Method', 'Type', 'Sent Time', 'Status'];
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=reminders_sent_report.csv');
-      return res.send(formatCSV(data, ['reminderId', 'registrationNumber', 'makeModel', 'recipientName', 'contactMethod', 'reminderType', 'sentTimestamp', 'sentStatus']));
+      return res.send(formatCSV(data, headers));
+    }
+
+    if (format === 'excel') {
+      return generateExcelReport(res, 'reminders_sent_report', 'Reminders Sent', headers, displayHeaders, data);
+    }
+    
+    if (format === 'pdf') {
+      return generatePDFReport(res, 'Reminder Sent Report', headers, displayHeaders, data);
     }
 
     res.json(data);
@@ -116,11 +228,21 @@ async function getCustomerResponseReport(req, res) {
   try {
     const data = await getCustomerResponseReportData();
     const { format } = req.query;
+    const headers = ['auditId', 'timestamp', 'activity', 'details'];
+    const displayHeaders = ['Audit ID', 'Timestamp', 'Activity', 'Details'];
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=customer_response_report.csv');
-      return res.send(formatCSV(data, ['auditId', 'timestamp', 'activity', 'details']));
+      return res.send(formatCSV(data, headers));
+    }
+
+    if (format === 'excel') {
+      return generateExcelReport(res, 'customer_response_report', 'Customer Responses', headers, displayHeaders, data);
+    }
+    
+    if (format === 'pdf') {
+      return generatePDFReport(res, 'Customer Response Report', headers, displayHeaders, data);
     }
 
     res.json(data);
@@ -133,11 +255,21 @@ async function getBookedMOTReport(req, res) {
   try {
     const data = await getBookedMOTReportData();
     const { format } = req.query;
+    const headers = ['alertId', 'customerName', 'registrationNumber', 'makeModel', 'requestDate', 'status'];
+    const displayHeaders = ['Alert ID', 'Customer Name', 'Registration', 'Vehicle', 'Request Date', 'Status'];
 
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', 'attachment; filename=booked_mots_report.csv');
-      return res.send(formatCSV(data, ['alertId', 'customerName', 'registrationNumber', 'makeModel', 'requestDate', 'status']));
+      return res.send(formatCSV(data, headers));
+    }
+
+    if (format === 'excel') {
+      return generateExcelReport(res, 'booked_mots_report', 'Booked MOTs', headers, displayHeaders, data);
+    }
+    
+    if (format === 'pdf') {
+      return generatePDFReport(res, 'Booked MOT Report', headers, displayHeaders, data);
     }
 
     res.json(data);
