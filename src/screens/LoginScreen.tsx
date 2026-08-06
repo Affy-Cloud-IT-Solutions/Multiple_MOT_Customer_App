@@ -14,6 +14,7 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
+import { validateEmail, validatePassword } from '../utils/validationUtils';
 
 export default function LoginScreen({ navigation }: any) {
   const { theme } = useAppTheme();
@@ -27,24 +28,22 @@ export default function LoginScreen({ navigation }: any) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    let valid = true;
-    if (!email.trim()) {
+    const emailVal = validateEmail(email);
+    if (emailVal.error) {
       setEmailError(true);
-      valid = false;
-    } else {
-      setEmailError(false);
-    }
-    if (!password.trim()) {
-      setPasswordError(true);
-      valid = false;
-    } else {
-      setPasswordError(false);
-    }
-
-    if (!valid) {
-      setErrorMessage('Please fill in all fields');
+      setErrorMessage(emailVal.error);
       return;
     }
+    setEmailError(false);
+
+    const passwordVal = validatePassword(password);
+    if (passwordVal.error) {
+      setPasswordError(true);
+      setErrorMessage(passwordVal.error);
+      return;
+    }
+    setPasswordError(false);
+
     setErrorMessage(null);
     setLoading(true);
     try {

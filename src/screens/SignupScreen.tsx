@@ -14,6 +14,13 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { BASE_URL } from '../context/DataContext';
+import {
+  validateFirstName,
+  validateLastName,
+  validatePhoneNumber,
+  validateEmail,
+  validatePassword
+} from '../utils/validationUtils';
 
 export default function SignupScreen({ navigation }: any) {
   const { theme } = useAppTheme();
@@ -33,49 +40,61 @@ export default function SignupScreen({ navigation }: any) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSignup = async () => {
-    let valid = true;
-    if (!name.trim()) {
-      setNameError(true);
-      valid = false;
-    } else {
-      setNameError(false);
-    }
-    if (!email.trim()) {
-      setEmailError(true);
-      valid = false;
-    } else {
-      setEmailError(false);
-    }
-    if (!mobile.trim()) {
-      setMobileError(true);
-      valid = false;
-    } else {
-      setMobileError(false);
-    }
-    if (!password.trim()) {
-      setPasswordError(true);
-      valid = false;
-    } else {
-      setPasswordError(false);
-    }
-    if (!confirmPassword.trim()) {
-      setConfirmPasswordError(true);
-      valid = false;
-    } else {
-      setConfirmPasswordError(false);
-    }
+    const nameParts = name.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
 
-    if (!valid) {
-      setErrorMessage('Please fill in all fields');
+    const firstVal = validateFirstName(firstName);
+    if (firstVal.error) {
+      setNameError(true);
+      setErrorMessage(firstVal.error);
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (!lastName) {
+      setNameError(true);
+      setErrorMessage('Last name is required. Please enter a full name.');
+      return;
+    }
+    const lastVal = validateLastName(lastName);
+    if (lastVal.error) {
+      setNameError(true);
+      setErrorMessage(lastVal.error);
+      return;
+    }
+    setNameError(false);
+
+    const emailVal = validateEmail(email);
+    if (emailVal.error) {
+      setEmailError(true);
+      setErrorMessage(emailVal.error);
+      return;
+    }
+    setEmailError(false);
+
+    const mobileVal = validatePhoneNumber(mobile);
+    if (mobileVal.error) {
+      setMobileError(true);
+      setErrorMessage(mobileVal.error);
+      return;
+    }
+    setMobileError(false);
+
+    const passwordVal = validatePassword(password);
+    if (passwordVal.error) {
+      setPasswordError(true);
+      setErrorMessage(passwordVal.error);
+      return;
+    }
+    setPasswordError(false);
+
+    if (password.trim() !== confirmPassword.trim()) {
       setPasswordError(true);
       setConfirmPasswordError(true);
       setErrorMessage('Passwords do not match');
       return;
     }
+    setConfirmPasswordError(false);
     setErrorMessage(null);
 
     setLoading(true);

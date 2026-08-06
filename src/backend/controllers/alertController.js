@@ -158,11 +158,12 @@ async function acknowledgeAlert(req, res) {
     alert.status = 'Acknowledged';
     await alert.save();
 
-    // If it is a NEW_VEHICLE alert, reject/delete the pending vehicle!
+    // If it is a NEW_VEHICLE alert, mark the pending vehicle as Rejected!
     if (alert.type === 'NEW_VEHICLE') {
       const vehicle = await Vehicle.findOne({ registrationNumber: alert.registrationNumber, status: 'Pending' });
       if (vehicle) {
-        await Vehicle.deleteOne({ _id: vehicle._id });
+        vehicle.status = 'Rejected';
+        await vehicle.save();
         await Audit.create({
           activity: 'Vehicle Registration Rejected',
           details: `Rejected vehicle registration request for ${alert.makeModel} (${alert.registrationNumber})`

@@ -59,10 +59,10 @@ async function createVehicle(req, res) {
       registrationNumber: regUpper,
       make: make.toUpperCase().trim(),
       model: model.toUpperCase().trim(),
-      year: year || 2018,
+      year: year || parseInt(make) || 2018,
       motExpiryDate: new Date(motExpiryDate),
       lastServiceDate: lastServiceDate ? new Date(lastServiceDate) : undefined,
-      status: 'Active'
+      status: req.body.status || 'Active'
     });
 
     await Audit.create({
@@ -83,7 +83,7 @@ async function updateVehicle(req, res) {
   try {
     const { make, model, year, motExpiryDate, lastServiceDate, status } = req.body;
 
-    if (status && !['Active', 'Sold', 'Scrapped'].includes(status)) {
+    if (status && !['Active', 'Sold', 'Scrapped', 'Pending', 'Rejected'].includes(status)) {
       return res.status(400).json({ error: 'Invalid vehicle status.' });
     }
 
@@ -145,8 +145,8 @@ function lookupDVLA(req, res) {
   const MOCK_DVLA_PROFILES = {
     'AB18 CDE': {
       registrationNumber: 'AB18 CDE',
-      make: 'FORD',
-      model: 'FOCUS TDCI',
+      make: '2018',
+      model: 'FORD FOCUS TDCI',
       year: '2018',
       color: 'Grey',
       fuelType: 'Diesel',
@@ -157,8 +157,8 @@ function lookupDVLA(req, res) {
     },
     'LD65 XYZ': {
       registrationNumber: 'LD65 XYZ',
-      make: 'VAUXHALL',
-      model: 'CORSA ECOFLEX',
+      make: '2015',
+      model: 'VAUXHALL CORSA ECOFLEX',
       year: '2015',
       color: 'Red',
       fuelType: 'Petrol',
@@ -169,8 +169,8 @@ function lookupDVLA(req, res) {
     },
     'MH07 KKK': {
       registrationNumber: 'MH07 KKK',
-      make: 'BMW',
-      model: '320D M SPORT',
+      make: '2019',
+      model: 'BMW 320D M SPORT',
       year: '2019',
       color: 'White',
       fuelType: 'Diesel',
@@ -190,8 +190,8 @@ function lookupDVLA(req, res) {
   const isPass = vrn.charCodeAt(0) % 2 === 0;
   const genericProfile = {
     registrationNumber: vrn,
-    make: 'VOLKSWAGEN',
-    model: 'GOLF TSI',
+    make: '2017',
+    model: 'VOLKSWAGEN GOLF TSI',
     year: '2017',
     color: 'Blue',
     fuelType: 'Petrol',

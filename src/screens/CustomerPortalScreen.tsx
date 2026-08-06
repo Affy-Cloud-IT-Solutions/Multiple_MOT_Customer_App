@@ -39,8 +39,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
     );
   }
 
-  // Active customer vehicles
-  const customerVehicles = vehicles.filter((v) => v.customerId === customer.id && v.status === 'Active');
+  // Active customer vehicles (including Pending and Rejected statuses)
+  const customerVehicles = vehicles.filter((v) => v.customerId === customer.id && v.status !== 'Sold' && v.status !== 'Scrapped');
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -143,6 +143,12 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       return;
     }
 
+    // Verify make is a 4-digit year
+    if (!/^\d{4}$/.test(make.trim())) {
+      Alert.alert('Error', 'Please enter a valid 4-digit year for Make (Year)');
+      return;
+    }
+
     setLoadingAction('add_vehicle');
     try {
       // 1. Create the vehicle directly in the database
@@ -151,7 +157,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         registrationNumber: regNo.trim().toUpperCase(),
         make: make.trim().toUpperCase(),
         model: model.trim().toUpperCase(),
-        year: '2018',
+        year: make.trim(),
         motExpiryDate: expiry,
         status: 'Pending'
       });
@@ -231,13 +237,14 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={[styles.label, { color: theme.colors.text }]}>Make</Text>
+                    <Text style={[styles.label, { color: theme.colors.text }]}>Make (Year)</Text>
                     <TextInput
                       value={make}
                       onChangeText={setMake}
-                      placeholder="E.g. FORD"
+                      placeholder="E.g. 2018"
                       placeholderTextColor={theme.colors.placeholder}
-                      autoCapitalize="characters"
+                      keyboardType="numeric"
+                      maxLength={4}
                       style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
                     />
                   </View>
@@ -316,6 +323,18 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           {v.make} {v.model}
                         </Text>
                       </View>
+                      {v.status === 'Pending' && (
+                        <View style={[styles.bookedBadge, { backgroundColor: theme.colors.warning + '15', borderColor: theme.colors.warning }]}>
+                          <MaterialCommunityIcons name="clock-outline" size={12} color={theme.colors.warning} style={{ marginRight: 2 }} />
+                          <Text style={[styles.bookedBadgeText, { color: theme.colors.warning }]}>Pending Approval</Text>
+                        </View>
+                      )}
+                      {v.status === 'Rejected' && (
+                        <View style={[styles.bookedBadge, { backgroundColor: theme.colors.error + '15', borderColor: theme.colors.error }]}>
+                          <MaterialCommunityIcons name="close-circle" size={12} color={theme.colors.error} style={{ marginRight: 2 }} />
+                          <Text style={[styles.bookedBadgeText, { color: theme.colors.error }]}>Rejected</Text>
+                        </View>
+                      )}
                       {isBooked && (
                         <TouchableOpacity
                           onPress={() => {
@@ -458,6 +477,13 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         <MaterialCommunityIcons name="clock-outline" size={16} color={theme.colors.warning} style={{ marginRight: 6 }} />
                         <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: 'bold', flex: 1 }}>
                           Awaiting registration approval from garage staff. Booking will be enabled once approved.
+                        </Text>
+                      </View>
+                    ) : v.status === 'Rejected' ? (
+                      <View style={[styles.pendingApprovalBox, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error + '30' }]}>
+                        <MaterialCommunityIcons name="close-circle-outline" size={16} color={theme.colors.error} style={{ marginRight: 6 }} />
+                        <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: 'bold', flex: 1 }}>
+                          Vehicle registration rejected by garage staff. You cannot book an MOT for this vehicle.
                         </Text>
                       </View>
                     ) : (

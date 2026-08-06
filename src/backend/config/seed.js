@@ -161,8 +161,8 @@ async function seedDatabase() {
             {
                 customerId: customerDocs[0]._id,
                 registrationNumber: 'AB18 CDE',
-                make: 'FORD',
-                model: 'FOCUS TDCI',
+                make: '2018',
+                model: 'FORD FOCUS TDCI',
                 year: 2018,
                 motExpiryDate: new Date('2026-08-25'),
                 lastServiceDate: new Date('2025-08-20'),
@@ -171,8 +171,8 @@ async function seedDatabase() {
             {
                 customerId: customerDocs[1]._id,
                 registrationNumber: 'LD65 XYZ',
-                make: 'VAUXHALL',
-                model: 'CORSA ECOFLEX',
+                make: '2015',
+                model: 'VAUXHALL CORSA ECOFLEX',
                 year: 2015,
                 motExpiryDate: new Date('2026-07-29'),
                 lastServiceDate: new Date('2025-07-15'),
@@ -181,8 +181,8 @@ async function seedDatabase() {
             {
                 customerId: customerDocs[2]._id,
                 registrationNumber: 'MH07 KKK',
-                make: 'BMW',
-                model: '320D M SPORT',
+                make: '2019',
+                model: 'BMW 320D M SPORT',
                 year: 2019,
                 motExpiryDate: new Date('2026-08-10'),
                 lastServiceDate: new Date('2025-10-05'),

@@ -55,7 +55,7 @@ export default function AdminAlertsScreen() {
             let typeText = 'Alert';
 
             if (item.type === 'NEW_VEHICLE') {
-              iconName = 'car-plus';
+              iconName = 'car';
               iconColor = '#10B981'; // Green
               typeText = 'New Vehicle Added';
             } else if (item.type === 'SOLD') {

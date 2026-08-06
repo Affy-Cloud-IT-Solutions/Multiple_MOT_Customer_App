@@ -14,6 +14,12 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
+import {
+  validateFirstName,
+  validateLastName,
+  validateEmail,
+  validatePhoneNumber
+} from '../utils/validationUtils';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -50,6 +56,13 @@ export default function AdminCustomersScreen() {
     return formatted;
   };
 
+  const formatShortDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
   const toggleExpandCustomer = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedCustomerId(expandedCustomerId === id ? null : id);
@@ -57,8 +70,29 @@ export default function AdminCustomersScreen() {
   };
 
   const handleCreateCustomer = () => {
-    if (!firstName.trim() || !email.trim() || !mobile.trim()) {
-      Alert.alert('Error', 'Please fill in First Name, Email, and Mobile number');
+    const firstVal = validateFirstName(firstName);
+    if (firstVal.error) {
+      Alert.alert('Validation Error', `First Name: ${firstVal.error}`);
+      return;
+    }
+
+    if (lastName.trim()) {
+      const lastVal = validateLastName(lastName);
+      if (lastVal.error) {
+        Alert.alert('Validation Error', `Last Name: ${lastVal.error}`);
+        return;
+      }
+    }
+
+    const emailVal = validateEmail(email);
+    if (emailVal.error) {
+      Alert.alert('Validation Error', emailVal.error);
+      return;
+    }
+
+    const mobileVal = validatePhoneNumber(mobile);
+    if (mobileVal.error) {
+      Alert.alert('Validation Error', mobileVal.error);
       return;
     }
 
@@ -85,12 +119,17 @@ export default function AdminCustomersScreen() {
       return;
     }
 
+    if (!/^\d{4}$/.test(make.trim())) {
+      Alert.alert('Error', 'Please enter a valid 4-digit year for Make (Year)');
+      return;
+    }
+
     addVehicle({
       customerId,
       registrationNumber: regNo.trim().toUpperCase(),
       make: make.trim().toUpperCase(),
       model: model.trim().toUpperCase(),
-      year: year.trim() || '2018',
+      year: make.trim(),
       motExpiryDate: expiry.trim(),
       lastServiceDate: serviceDate.trim() || undefined,
       status: 'Active',
@@ -140,6 +179,7 @@ export default function AdminCustomersScreen() {
       case 'Sold': return 'cash';
       case 'Scrapped': return 'delete-circle';
       case 'Pending': return 'clock-outline';
+      case 'Rejected': return 'close-circle';
       default: return 'circle';
     }
   };
@@ -354,9 +394,10 @@ export default function AdminCustomersScreen() {
                             <TextInput
                               value={make}
                               onChangeText={setMake}
-                              placeholder="Make / Company"
+                              placeholder="Make (Year)"
                               placeholderTextColor={theme.colors.placeholder}
-                              autoCapitalize="characters"
+                              keyboardType="numeric"
+                              maxLength={4}
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
                             />
                           </View>
@@ -417,9 +458,9 @@ export default function AdminCustomersScreen() {
                                 <Text style={[styles.vehicleMakeText, { color: theme.colors.text }]}>
                                   {v.make} {v.model}
                                 </Text>
-                                <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
-                                  {v.year} • MOT: {v.motExpiryDate}
-                                </Text>
+                                 <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                                   {v.year} • MOT: {formatShortDate(v.motExpiryDate)}
+                                 </Text>
                               </View>
                             </View>
 
@@ -430,7 +471,7 @@ export default function AdminCustomersScreen() {
                                 {
                                   backgroundColor: isSold
                                     ? theme.colors.placeholder + '20'
-                                    : isScrapped
+                                    : (isScrapped || v.status === 'Rejected')
                                     ? theme.colors.error + '20'
                                     : v.status === 'Pending'
                                     ? theme.colors.warning + '20'
@@ -441,7 +482,7 @@ export default function AdminCustomersScreen() {
                               <MaterialCommunityIcons 
                                 name={getStatusIcon(v.status)} 
                                 size={12} 
-                                color={isSold ? theme.colors.placeholder : isScrapped ? theme.colors.error : v.status === 'Pending' ? theme.colors.warning : theme.colors.success} 
+                                color={isSold ? theme.colors.placeholder : (isScrapped || v.status === 'Rejected') ? theme.colors.error : v.status === 'Pending' ? theme.colors.warning : theme.colors.success} 
                               />
                               <Text
                                 style={{
@@ -450,7 +491,7 @@ export default function AdminCustomersScreen() {
                                   marginLeft: 3,
                                   color: isSold
                                     ? theme.colors.placeholder
-                                    : isScrapped
+                                    : (isScrapped || v.status === 'Rejected')
                                     ? theme.colors.error
                                     : v.status === 'Pending'
                                     ? theme.colors.warning

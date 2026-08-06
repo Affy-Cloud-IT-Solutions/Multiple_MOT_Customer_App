@@ -13,7 +13,7 @@ async function login(req, res) {
     // Find user in MongoDB
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+      return res.status(401).json({ error: 'No user found with this email, please signup first' });
     }
 
     // Check hashed password using schema method

@@ -3,6 +3,7 @@ import { View, StyleSheet, Alert, TouchableOpacity, Text, Switch, ActivityIndica
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
+import { validateFirstName, validateLastName, validateEmail, validatePassword } from '../utils/validationUtils';
 
 export default function ProfileScreen({ navigation }: any) {
   const { isDarkMode, theme, toggleTheme } = useAppTheme();
@@ -17,11 +18,7 @@ export default function ProfileScreen({ navigation }: any) {
   const [creatingStaff, setCreatingStaff] = useState(false);
 
   const getInitials = (name: string) => {
-    if (!name) return 'U';
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
+    if (!name) return 'GU';
     return name.slice(0, 2).toUpperCase();
   };
 
@@ -47,8 +44,35 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   const handleCreateStaff = async () => {
-    if (!staffName.trim() || !staffEmail.trim() || !staffPassword.trim()) {
-      Alert.alert('Error', 'Please fill in all fields to create a staff account');
+    const nameParts = staffName.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    const firstVal = validateFirstName(firstName);
+    if (firstVal.error) {
+      Alert.alert('Validation Error', `First Name: ${firstVal.error}`);
+      return;
+    }
+
+    if (!lastName) {
+      Alert.alert('Validation Error', 'Last name is required. Please enter a full name.');
+      return;
+    }
+    const lastVal = validateLastName(lastName);
+    if (lastVal.error) {
+      Alert.alert('Validation Error', `Last Name: ${lastVal.error}`);
+      return;
+    }
+
+    const emailVal = validateEmail(staffEmail);
+    if (emailVal.error) {
+      Alert.alert('Validation Error', emailVal.error);
+      return;
+    }
+
+    const passwordVal = validatePassword(staffPassword);
+    if (passwordVal.error) {
+      Alert.alert('Validation Error', passwordVal.error);
       return;
     }
 

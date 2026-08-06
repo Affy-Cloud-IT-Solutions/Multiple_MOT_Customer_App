@@ -37,7 +37,7 @@ const VehicleSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Active', 'Sold', 'Scrapped', 'Pending'],
+        enum: ['Active', 'Sold', 'Scrapped', 'Pending', 'Rejected'],
         default: 'Active'
     },
     token: {

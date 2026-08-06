@@ -21,8 +21,8 @@ export default function BookingScreen({ route, navigation }: any) {
   // Selected vehicle passed from CustomerPortalScreen
   const vehicle = route?.params?.vehicle || {
     registrationNumber: 'AB18 CDE',
-    make: 'FORD',
-    model: 'FOCUS TDCI',
+    make: '2018',
+    model: 'FORD FOCUS TDCI',
     customerId: 'c1',
   };
 
