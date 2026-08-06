@@ -155,6 +155,7 @@ export default function BookedMotsScreen({ navigation }: any) {
                   {group.alerts.map((item) => {
                     const isPending = item.status === 'Pending';
                     const isApproved = item.status === 'Approved';
+                    const isRejected = item.status === 'Rejected';
 
                     let statusText = 'Acknowledged';
                     let statusColor = theme.colors.placeholder;
@@ -168,6 +169,10 @@ export default function BookedMotsScreen({ navigation }: any) {
                       statusText = 'Booking Confirmed';
                       statusColor = theme.colors.success;
                       statusBg = theme.colors.success + '15';
+                    } else if (isRejected) {
+                      statusText = 'Booking Rejected';
+                      statusColor = theme.colors.error;
+                      statusBg = theme.colors.error + '15';
                     }
 
                     return (
@@ -195,6 +200,13 @@ export default function BookedMotsScreen({ navigation }: any) {
                               {item.makeModel}
                             </Text>
                           </View>
+
+                          {isRejected && item.rejectionReason && (
+                            <View style={{ marginTop: 8, padding: 8, borderRadius: 6, backgroundColor: theme.colors.error + '10', borderWidth: 0.5, borderColor: theme.colors.error }}>
+                              <Text style={{ fontSize: 11, fontWeight: 'bold', color: theme.colors.error }}>Rejection Reason:</Text>
+                              <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>{item.rejectionReason}</Text>
+                            </View>
+                          )}
                         </View>
 
                         {/* Action buttons inside sub-card (If Pending) */}

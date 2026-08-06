@@ -74,7 +74,7 @@ export default function MainTabNavigator() {
       <Tab.Screen 
         name="Customers" 
         component={AdminCustomersScreen} 
-        options={{ title: 'Customer Records' }} 
+        options={{ title: 'Customers' }} 
       />
       <Tab.Screen 
         name="Reminders" 

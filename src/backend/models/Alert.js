@@ -37,6 +37,10 @@ const AlertSchema = new mongoose.Schema({
     rejectionReason: {
         type: String,
         default: ''
+    },
+    rescheduled: {
+        type: Boolean,
+        default: false
     }
 }, {
     timestamps: true

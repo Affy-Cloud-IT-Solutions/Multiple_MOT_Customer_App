@@ -15,6 +15,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
 import { validateEmail, validatePassword } from '../utils/validationUtils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function LoginScreen({ navigation }: any) {
   const { theme } = useAppTheme();
@@ -26,6 +27,32 @@ export default function LoginScreen({ navigation }: any) {
   const [emailError, setEmailError] = useState(false);
   const [passwordError, setPasswordError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const checkPersistedSession = async () => {
+      setLoading(true);
+      try {
+        const storedToken = await AsyncStorage.getItem('user_token');
+        const storedUserJson = await AsyncStorage.getItem('user_profile');
+        if (storedToken && storedUserJson) {
+          const storedUser = JSON.parse(storedUserJson);
+          setToken(storedToken);
+          setUser(storedUser);
+          
+          if (storedUser.role === 'admin' || storedUser.role === 'staff') {
+            navigation.replace('Main');
+          } else if (storedUser.role === 'customer' && storedUser.customerId) {
+            navigation.replace('CustomerPortal', { customerId: storedUser.customerId });
+          }
+        }
+      } catch (err) {
+        console.error('Error reading persisted session:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkPersistedSession();
+  }, []);
 
   const handleLogin = async () => {
     const emailVal = validateEmail(email);
@@ -69,7 +96,7 @@ export default function LoginScreen({ navigation }: any) {
         navigation.replace('Main');
       } else if (data.user?.role === 'customer') {
         if (data.user.customerId) {
-          navigation.navigate('CustomerPortal', { customerId: data.user.customerId });
+          navigation.replace('CustomerPortal', { customerId: data.user.customerId });
         } else {
           Alert.alert('Error', 'No customer profile linked to this account.');
         }
@@ -168,7 +195,7 @@ export default function LoginScreen({ navigation }: any) {
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.buttonText}>Log In</Text>
+                <Text style={styles.buttonText}>Login</Text>
               )}
             </TouchableOpacity>
           </View>

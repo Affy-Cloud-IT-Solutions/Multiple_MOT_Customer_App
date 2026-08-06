@@ -62,8 +62,8 @@ const INITIAL_VEHICLES = [
     id: "v1",
     customerId: "c1",
     registrationNumber: "AB18 CDE",
-    make: "2018",
-    model: "FORD FOCUS TDCI",
+    make: "FORD",
+    model: "FOCUS TDCI",
     year: "2018",
     motExpiryDate: "2026-08-25", // ~34 days remaining
     lastServiceDate: "2025-08-20",
@@ -73,8 +73,8 @@ const INITIAL_VEHICLES = [
     id: "v2",
     customerId: "c2",
     registrationNumber: "LD65 XYZ",
-    make: "2015",
-    model: "VAUXHALL CORSA ECOFLEX",
+    make: "VAUXHALL",
+    model: "CORSA ECOFLEX",
     year: "2015",
     motExpiryDate: "2026-07-29", // ~7 days remaining
     lastServiceDate: "2025-07-15",
@@ -84,8 +84,8 @@ const INITIAL_VEHICLES = [
     id: "v3",
     customerId: "c3",
     registrationNumber: "MH07 KKK",
-    make: "2019",
-    model: "BMW 320D M SPORT",
+    make: "BMW",
+    model: "320D M SPORT",
     year: "2019",
     motExpiryDate: "2026-08-10", // ~19 days remaining
     lastServiceDate: "2025-10-05",

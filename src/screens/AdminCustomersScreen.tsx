@@ -18,14 +18,15 @@ import {
   validateFirstName,
   validateLastName,
   validateEmail,
-  validatePhoneNumber
+  validatePhoneNumber,
+  validateMotExpiryDate,
 } from '../utils/validationUtils';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export default function AdminCustomersScreen() {
+export default function AdminCustomersScreen({ navigation }: any) {
   const { theme } = useAppTheme();
   const { customers, vehicles, addCustomer, addVehicle, updateVehicleStatus } = useAppValues();
 
@@ -114,14 +115,30 @@ export default function AdminCustomersScreen() {
   };
 
   const handleCreateVehicle = (customerId: string) => {
-    if (!regNo.trim() || !make.trim() || !model.trim() || !expiry.trim()) {
+    if (!regNo.trim() || !make.trim() || !model.trim() || !year.trim() || !expiry.trim()) {
       Alert.alert('Error', 'Please fill in all vehicle details');
       return;
     }
 
-    if (!/^\d{4}$/.test(make.trim())) {
-      Alert.alert('Error', 'Please enter a valid 4-digit year for Make (Year)');
+    if (!/^\d{4}$/.test(year.trim())) {
+      Alert.alert('Error', 'Please enter a valid 4-digit year of manufacture');
       return;
+    }
+
+    // Validate MOT Expiry Date
+    const expiryVal = validateMotExpiryDate(expiry);
+    if (expiryVal.error) {
+      Alert.alert('Validation Error', expiryVal.error);
+      return;
+    }
+
+    // Validate Last Service Date (if provided)
+    if (serviceDate.trim()) {
+      const serviceVal = validateMotExpiryDate(serviceDate);
+      if (serviceVal.error) {
+        Alert.alert('Validation Error', `Last Service Date: ${serviceVal.error}`);
+        return;
+      }
     }
 
     addVehicle({
@@ -129,7 +146,7 @@ export default function AdminCustomersScreen() {
       registrationNumber: regNo.trim().toUpperCase(),
       make: make.trim().toUpperCase(),
       model: model.trim().toUpperCase(),
-      year: make.trim(),
+      year: year.trim(),
       motExpiryDate: expiry.trim(),
       lastServiceDate: serviceDate.trim() || undefined,
       status: 'Active',
@@ -292,10 +309,10 @@ export default function AdminCustomersScreen() {
         )}
 
         {/* Customer List */}
-        <Text style={[styles.directoryTitle, { color: theme.colors.text }]}>
+        {/* <Text style={[styles.directoryTitle, { color: theme.colors.text }]}>
           <MaterialCommunityIcons name="account-group" size={20} color={theme.colors.text} /> 
           {"  "}Customers ({filteredCustomers.length})
-        </Text>
+        </Text> */}
 
         {filteredCustomers.length === 0 ? (
           <View style={styles.emptyState}>
@@ -320,15 +337,19 @@ export default function AdminCustomersScreen() {
                       <Text style={[styles.customerNameText, { color: theme.colors.text }]}>
                         {c.firstName} {c.lastName}
                       </Text>
-                      <View style={styles.customerInfoRow}>
-                        <MaterialCommunityIcons name="phone" size={12} color={theme.colors.placeholder} />
-                        <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginLeft: 4 }}>
-                          {c.mobile}
-                        </Text>
-                        <MaterialCommunityIcons name="email" size={12} color={theme.colors.placeholder} style={{ marginLeft: 8 }} />
-                        <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginLeft: 4 }}>
-                          {c.email}
-                        </Text>
+                      <View style={styles.customerInfoCol}>
+                        <View style={styles.customerInfoItem}>
+                          <MaterialCommunityIcons name="phone" size={12} color={theme.colors.placeholder} />
+                          <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginLeft: 4 }}>
+                            {c.mobile}
+                          </Text>
+                        </View>
+                        <View style={styles.customerInfoItem}>
+                          <MaterialCommunityIcons name="email" size={12} color={theme.colors.placeholder} />
+                          <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginLeft: 4 }}>
+                            {c.email}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   </View>
@@ -344,6 +365,16 @@ export default function AdminCustomersScreen() {
                 {isExpanded && (
                   <View style={styles.expandedContent}>
                     <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
+
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate('CustomerDetail', { customerId: c.id })}
+                      style={[styles.viewDetailsBtn, { backgroundColor: theme.colors.secondary + '12', borderColor: theme.colors.secondary }]}
+                    >
+                      <MaterialCommunityIcons name="account-details-outline" size={18} color={theme.colors.secondary} />
+                      <Text style={{ color: theme.colors.secondary, fontWeight: 'bold', fontSize: 13, marginLeft: 6 }}>
+                        View Full Details & Booking History
+                      </Text>
+                    </TouchableOpacity>
                     
                     {c.address && (
                       <View style={styles.addressBox}>
@@ -394,10 +425,9 @@ export default function AdminCustomersScreen() {
                             <TextInput
                               value={make}
                               onChangeText={setMake}
-                              placeholder="Make (Year)"
+                              placeholder="Make / Company"
                               placeholderTextColor={theme.colors.placeholder}
-                              keyboardType="numeric"
-                              maxLength={4}
+                              autoCapitalize="characters"
                               style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
                             />
                           </View>
@@ -416,9 +446,34 @@ export default function AdminCustomersScreen() {
                           </View>
                           <View style={styles.formField}>
                             <TextInput
+                              value={year}
+                              onChangeText={setYear}
+                              placeholder="Year (YYYY)"
+                              placeholderTextColor={theme.colors.placeholder}
+                              keyboardType="numeric"
+                              maxLength={4}
+                              style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                            />
+                          </View>
+                        </View>
+
+                        <View style={styles.formRow}>
+                          <View style={styles.formField}>
+                            <TextInput
                               value={expiry}
                               onChangeText={(text) => setExpiry(formatDateInput(text))}
                               placeholder="MOT Expiry (YYYY-MM-DD)"
+                              placeholderTextColor={theme.colors.placeholder}
+                              keyboardType="numeric"
+                              maxLength={10}
+                              style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                            />
+                          </View>
+                          <View style={styles.formField}>
+                            <TextInput
+                              value={serviceDate}
+                              onChangeText={(text) => setServiceDate(formatDateInput(text))}
+                              placeholder="Last Service (YYYY-MM-DD)"
                               placeholderTextColor={theme.colors.placeholder}
                               keyboardType="numeric"
                               maxLength={10}
@@ -449,58 +504,67 @@ export default function AdminCustomersScreen() {
                         const isScrapped = v.status === 'Scrapped';
                         
                         return (
-                          <View key={v.id} style={[styles.vehicleRow, { borderColor: theme.colors.border }]}>
-                            <View style={styles.vehicleRowLeft}>
-                              <View style={styles.recentPlate}>
-                                <Text style={styles.recentPlateText}>{v.registrationNumber}</Text>
+                          <View key={v.id} style={{ borderBottomWidth: 0.8, borderColor: theme.colors.border, paddingVertical: 10 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <View style={styles.vehicleRowLeft}>
+                                <View style={styles.recentPlate}>
+                                  <Text style={styles.recentPlateText}>{v.registrationNumber}</Text>
+                                </View>
+                                <View style={{ flex: 1, marginLeft: 8 }}>
+                                  <Text style={[styles.vehicleMakeText, { color: theme.colors.text }]}>
+                                    {v.make} {v.model}
+                                  </Text>
+                                   <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                                     {v.year} • MOT: {formatShortDate(v.motExpiryDate)}
+                                   </Text>
+                                </View>
                               </View>
-                              <View style={{ flex: 1, marginLeft: 8 }}>
-                                <Text style={[styles.vehicleMakeText, { color: theme.colors.text }]}>
-                                  {v.make} {v.model}
+
+                              <TouchableOpacity
+                                onPress={() => handleChangeVehicleStatus(v.id, v.status)}
+                                style={[
+                                  styles.statusPill,
+                                  {
+                                    backgroundColor: isSold
+                                      ? theme.colors.placeholder + '20'
+                                      : (isScrapped || v.status === 'Rejected')
+                                      ? theme.colors.error + '20'
+                                      : v.status === 'Pending'
+                                      ? theme.colors.warning + '20'
+                                      : theme.colors.success + '20',
+                                  },
+                                ]}
+                              >
+                                <MaterialCommunityIcons 
+                                  name={getStatusIcon(v.status)} 
+                                  size={12} 
+                                  color={isSold ? theme.colors.placeholder : (isScrapped || v.status === 'Rejected') ? theme.colors.error : v.status === 'Pending' ? theme.colors.warning : theme.colors.success} 
+                                />
+                                <Text
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 'bold',
+                                    marginLeft: 3,
+                                    color: isSold
+                                      ? theme.colors.placeholder
+                                      : (isScrapped || v.status === 'Rejected')
+                                      ? theme.colors.error
+                                      : v.status === 'Pending'
+                                      ? theme.colors.warning
+                                      : theme.colors.success,
+                                  }}
+                                >
+                                  {v.status}
                                 </Text>
-                                 <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
-                                   {v.year} • MOT: {formatShortDate(v.motExpiryDate)}
-                                 </Text>
-                              </View>
+                              </TouchableOpacity>
                             </View>
 
-                            <TouchableOpacity
-                              onPress={() => handleChangeVehicleStatus(v.id, v.status)}
-                              style={[
-                                styles.statusPill,
-                                {
-                                  backgroundColor: isSold
-                                    ? theme.colors.placeholder + '20'
-                                    : (isScrapped || v.status === 'Rejected')
-                                    ? theme.colors.error + '20'
-                                    : v.status === 'Pending'
-                                    ? theme.colors.warning + '20'
-                                    : theme.colors.success + '20',
-                                },
-                              ]}
-                            >
-                              <MaterialCommunityIcons 
-                                name={getStatusIcon(v.status)} 
-                                size={12} 
-                                color={isSold ? theme.colors.placeholder : (isScrapped || v.status === 'Rejected') ? theme.colors.error : v.status === 'Pending' ? theme.colors.warning : theme.colors.success} 
-                              />
-                              <Text
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: 'bold',
-                                  marginLeft: 3,
-                                  color: isSold
-                                    ? theme.colors.placeholder
-                                    : (isScrapped || v.status === 'Rejected')
-                                    ? theme.colors.error
-                                    : v.status === 'Pending'
-                                    ? theme.colors.warning
-                                    : theme.colors.success,
-                                }}
-                              >
-                                {v.status}
-                              </Text>
-                            </TouchableOpacity>
+                            {v.status === 'Rejected' && v.rejectionReason && (
+                              <View style={[styles.custRejectionReasonBox, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error }]}>
+                                <Text style={{ fontSize: 11, color: theme.colors.error, fontWeight: 'bold' }}>Rejection Reason:</Text>
+                                <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>{v.rejectionReason}</Text>
+                              </View>
+                            )}
                           </View>
                         );
                       })
@@ -683,10 +747,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
-  customerInfoRow: {
+  customerInfoCol: {
+    flexDirection: 'column',
+    marginTop: 4,
+    gap: 3,
+  },
+  customerInfoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
   },
   customerNameText: {
     fontSize: 15,
@@ -771,6 +839,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 10,
     letterSpacing: 0.5,
+  },
+  cancelButtonText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  viewDetailsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginVertical: 10,
+  },
+  custRejectionReasonBox: {
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 0.5,
   },
   vehicleMakeText: {
     fontSize: 13,

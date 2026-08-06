@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -21,8 +21,8 @@ export default function BookingScreen({ route, navigation }: any) {
   // Selected vehicle passed from CustomerPortalScreen
   const vehicle = route?.params?.vehicle || {
     registrationNumber: 'AB18 CDE',
-    make: '2018',
-    model: 'FORD FOCUS TDCI',
+    make: 'FORD',
+    model: 'FOCUS TDCI',
     customerId: 'c1',
   };
 
@@ -102,19 +102,68 @@ export default function BookingScreen({ route, navigation }: any) {
     { id: 't4', label: 'Late Afternoon', time: '04:30 PM' },
   ];
 
+  const formatLocalDate = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   const getTodayISOString = () => {
     const d = new Date();
     // If today is Sunday, default to tomorrow (Monday)
     if (d.getDay() === 0) {
       d.setDate(d.getDate() + 1);
     }
-    return d.toISOString().substring(0, 10);
+    return formatLocalDate(d);
   };
 
   const [selectedDate, setSelectedDate] = useState(getTodayISOString());
   const [selectedTime, setSelectedTime] = useState(timeSlots[0]?.time || '');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const isTimeSlotPassed = (slotTimeStr: string) => {
+    const todayISO = formatLocalDate(new Date());
+    if (selectedDate !== todayISO) {
+      return false;
+    }
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMin = now.getMinutes();
+
+    const match = slotTimeStr.match(/^(\d{2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) return false;
+
+    let hour = parseInt(match[1]);
+    const min = parseInt(match[2]);
+    const period = match[3].toUpperCase();
+
+    if (period === 'PM' && hour !== 12) {
+      hour += 12;
+    } else if (period === 'AM' && hour === 12) {
+      hour = 0;
+    }
+
+    if (currentHour > hour) {
+      return true;
+    } else if (currentHour === hour) {
+      return currentMin >= min;
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    const available = timeSlots.filter(slot => !isTimeSlotPassed(slot.time));
+    if (available.length > 0) {
+      if (!available.some(s => s.time === selectedTime)) {
+        setSelectedTime(available[0].time);
+      }
+    } else {
+      setSelectedTime('');
+    }
+  }, [selectedDate]);
 
   const handleConfirmBooking = async () => {
     if (!selectedDate || !selectedTime) {
@@ -124,11 +173,11 @@ export default function BookingScreen({ route, navigation }: any) {
 
     setLoading(true);
     try {
-      const parsedDate = new Date(selectedDate);
+      const parts = selectedDate.split('-');
       const monthsList = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const displayDateStr = isNaN(parsedDate.getTime())
-        ? selectedDate
-        : `${parsedDate.getDate()} ${monthsList[parsedDate.getMonth()]}`;
+      const displayDateStr = parts.length === 3 
+        ? `${parseInt(parts[2])} ${monthsList[parseInt(parts[1]) - 1]}`
+        : selectedDate;
 
       // Add BOOKED alert notification to Admin alerts list
       await addAlert({
@@ -226,7 +275,7 @@ export default function BookingScreen({ route, navigation }: any) {
                 return <View key={`empty-${idx}`} style={styles.dayCell} />;
               }
 
-              const isoString = day.toISOString().substring(0, 10);
+              const isoString = formatLocalDate(day);
               const isSelected = selectedDate === isoString;
               const selectable = isDateSelectable(day);
               
@@ -264,35 +313,57 @@ export default function BookingScreen({ route, navigation }: any) {
 
         {/* Time Selector Section */}
         <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>2. Choose Time Slot</Text>
-        <View style={styles.timePickerContainer}>
-          {timeSlots.map((slot) => {
-            const isSelected = selectedTime === slot.time;
-            return (
-              <TouchableOpacity
-                key={slot.id}
-                onPress={() => setSelectedTime(slot.time)}
-                style={[
-                  styles.timeCard,
-                  {
-                    backgroundColor: isSelected ? theme.colors.secondary + '15' : theme.colors.card,
-                    borderColor: isSelected ? theme.colors.secondary : theme.colors.border,
-                  },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name={isSelected ? 'clock' : 'clock-outline'}
-                  size={16}
-                  color={isSelected ? theme.colors.secondary : theme.colors.placeholder}
-                  style={{ marginRight: 6 }}
-                />
-                <View>
-                  <Text style={[styles.timeLabel, { color: theme.colors.text }]}>{slot.label}</Text>
-                  <Text style={[styles.timeText, { color: theme.colors.placeholder }]}>{slot.time}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {timeSlots.filter(slot => !isTimeSlotPassed(slot.time)).length === 0 ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              padding: 16,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              backgroundColor: theme.colors.card,
+              marginTop: 8,
+            }}
+          >
+            <MaterialCommunityIcons name="clock-alert-outline" size={24} color={theme.colors.error} />
+            <Text style={{ marginLeft: 8, color: theme.colors.placeholder, fontSize: 13 }}>
+              No slots available for today. Please choose a future date.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.timePickerContainer}>
+            {timeSlots
+              .filter(slot => !isTimeSlotPassed(slot.time))
+              .map((slot) => {
+                const isSelected = selectedTime === slot.time;
+                return (
+                  <TouchableOpacity
+                    key={slot.id}
+                    onPress={() => setSelectedTime(slot.time)}
+                    style={[
+                      styles.timeCard,
+                      {
+                        backgroundColor: isSelected ? theme.colors.secondary + '15' : theme.colors.card,
+                        borderColor: isSelected ? theme.colors.secondary : theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={isSelected ? 'clock' : 'clock-outline'}
+                      size={16}
+                      color={isSelected ? theme.colors.secondary : theme.colors.placeholder}
+                      style={{ marginRight: 6 }}
+                    />
+                    <View>
+                      <Text style={[styles.timeLabel, { color: theme.colors.text }]}>{slot.label}</Text>
+                      <Text style={[styles.timeText, { color: theme.colors.placeholder }]}>{slot.time}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+          </View>
+        )}
 
         {/* Notes/Comments Section */}
         <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>3. Special Requests / Notes (Optional)</Text>

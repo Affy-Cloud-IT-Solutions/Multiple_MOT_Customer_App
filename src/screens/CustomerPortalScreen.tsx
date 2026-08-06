@@ -17,6 +17,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { validateMotExpiryDate } from '../utils/validationUtils';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -24,7 +25,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function CustomerPortalScreen({ route, navigation }: any) {
   const { isDarkMode, theme, toggleTheme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData, setToken, setUser } = useAppValues();
 
   // Find active customer
   const customerId = route?.params?.customerId || 'c1';
@@ -54,6 +55,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const [regNo, setRegNo] = useState('');
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
+  const [year, setYear] = useState('');
   const [expiry, setExpiry] = useState('');
   const [expandedBookingReg, setExpandedBookingReg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile'>('home');
@@ -138,14 +140,21 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   };
 
   const handleAddNewVehicle = async () => {
-    if (!regNo.trim() || !make.trim() || !model.trim() || !expiry.trim()) {
+    if (!regNo.trim() || !make.trim() || !model.trim() || !year.trim() || !expiry.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    // Verify make is a 4-digit year
-    if (!/^\d{4}$/.test(make.trim())) {
-      Alert.alert('Error', 'Please enter a valid 4-digit year for Make (Year)');
+    // Verify year is a 4-digit number
+    if (!/^\d{4}$/.test(year.trim())) {
+      Alert.alert('Error', 'Please enter a valid 4-digit year of manufacture');
+      return;
+    }
+
+    // Validate MOT Expiry Date
+    const expiryVal = validateMotExpiryDate(expiry);
+    if (expiryVal.error) {
+      Alert.alert('Validation Error', expiryVal.error);
       return;
     }
 
@@ -157,7 +166,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         registrationNumber: regNo.trim().toUpperCase(),
         make: make.trim().toUpperCase(),
         model: model.trim().toUpperCase(),
-        year: make.trim(),
+        year: year.trim(),
         motExpiryDate: expiry,
         status: 'Pending'
       });
@@ -182,6 +191,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       setRegNo('');
       setMake('');
       setModel('');
+      setYear('');
       setExpiry('');
       setShowAddForm(false);
 
@@ -201,7 +211,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       {/* Top Bar / Header */}
       <View style={[styles.navbar, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, justifyContent: 'flex-start' }]}>
         <Text style={[styles.navTitle, { color: theme.colors.text, textAlign: 'left' }]}>
-          {activeTab === 'home' ? 'Self-Service Portal' :
+          {activeTab === 'home' ? 'Customer Dashboard' :
            activeTab === 'history' ? 'MOT History' : 'My Profile'}
         </Text>
       </View>
@@ -237,14 +247,13 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={[styles.label, { color: theme.colors.text }]}>Make (Year)</Text>
+                    <Text style={[styles.label, { color: theme.colors.text }]}>Make</Text>
                     <TextInput
                       value={make}
                       onChangeText={setMake}
-                      placeholder="E.g. 2018"
+                      placeholder="E.g. FORD"
                       placeholderTextColor={theme.colors.placeholder}
-                      keyboardType="numeric"
-                      maxLength={4}
+                      autoCapitalize="characters"
                       style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
                     />
                   </View>
@@ -261,28 +270,61 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                   </View>
                 </View>
 
-                <Text style={[styles.label, { color: theme.colors.text }]}>MOT Expiry Date</Text>
-                <TextInput
-                  value={expiry}
-                  onChangeText={(text) => setExpiry(formatDateInput(text))}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={theme.colors.placeholder}
-                  keyboardType="numeric"
-                  maxLength={10}
-                  style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
-                />
+                <View style={styles.formRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={[styles.label, { color: theme.colors.text }]}>Year</Text>
+                    <TextInput
+                      value={year}
+                      onChangeText={setYear}
+                      placeholder="E.g. 2018"
+                      placeholderTextColor={theme.colors.placeholder}
+                      keyboardType="numeric"
+                      maxLength={4}
+                      style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.label, { color: theme.colors.text }]}>MOT Expiry Date</Text>
+                    <TextInput
+                      value={expiry}
+                      onChangeText={(text) => setExpiry(formatDateInput(text))}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={theme.colors.placeholder}
+                      keyboardType="numeric"
+                      maxLength={10}
+                      style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    />
+                  </View>
+                </View>
 
-                <TouchableOpacity
-                  onPress={handleAddNewVehicle}
-                  disabled={loadingAction === 'add_vehicle'}
-                  style={[styles.submitButton, { backgroundColor: theme.colors.secondary }]}
-                >
-                  {loadingAction === 'add_vehicle' ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.submitButtonText}>Request Registration Approval</Text>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.formActionsRow}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      setShowAddForm(false);
+                      setRegNo('');
+                      setMake('');
+                      setModel('');
+                      setYear('');
+                      setExpiry('');
+                    }}
+                    style={[styles.cancelFormBtn, { borderColor: theme.colors.border }]}
+                  >
+                    <Text style={[styles.cancelFormBtnText, { color: theme.colors.text }]}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleAddNewVehicle}
+                    disabled={loadingAction === 'add_vehicle'}
+                    style={[styles.submitFormBtn, { backgroundColor: theme.colors.secondary }]}
+                  >
+                    {loadingAction === 'add_vehicle' ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.submitButtonText}>Request Approval</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
 
@@ -480,11 +522,19 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         </Text>
                       </View>
                     ) : v.status === 'Rejected' ? (
-                      <View style={[styles.pendingApprovalBox, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error + '30' }]}>
-                        <MaterialCommunityIcons name="close-circle-outline" size={16} color={theme.colors.error} style={{ marginRight: 6 }} />
-                        <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: 'bold', flex: 1 }}>
-                          Vehicle registration rejected by garage staff. You cannot book an MOT for this vehicle.
-                        </Text>
+                      <View style={[styles.pendingApprovalBox, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error + '30', flexDirection: 'column', alignItems: 'flex-start' }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <MaterialCommunityIcons name="close-circle-outline" size={16} color={theme.colors.error} style={{ marginRight: 6 }} />
+                          <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: 'bold', flex: 1 }}>
+                            Vehicle registration rejected by garage staff. You cannot book an MOT for this vehicle.
+                          </Text>
+                        </View>
+                        {v.rejectionReason ? (
+                          <View style={{ marginTop: 6, paddingLeft: 22 }}>
+                            <Text style={{ fontSize: 11, color: theme.colors.error, fontWeight: 'bold' }}>Rejection Reason:</Text>
+                            <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>{v.rejectionReason}</Text>
+                          </View>
+                        ) : null}
                       </View>
                     ) : (
                       <View style={styles.actionRow}>
@@ -537,7 +587,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
         {activeTab === 'history' && (
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 16 }]}>MOT Booking History</Text>
+            {/* <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 16 }]}>MOT Booking History</Text> */}
             {alerts.filter((a) => a.type === 'BOOKED' && a.customerId === customer.id).length === 0 ? (
               <View style={styles.emptyContainer}>
                 <MaterialCommunityIcons name="history" size={48} color={theme.colors.placeholder} style={{ marginBottom: 12 }} />
@@ -595,6 +645,13 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             Slot: {getBookingSlot(item.makeModel)}
                           </Text>
                         </View>
+
+                        {item.rescheduled && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                            <MaterialCommunityIcons name="clock-alert-outline" size={12} color={theme.colors.primary} style={{ marginRight: 4 }} />
+                            <Text style={{ fontSize: 11, fontWeight: 'bold', color: theme.colors.primary }}>Rescheduled</Text>
+                          </View>
+                        )}
 
                         {isRejected && (
                           <View style={[styles.rejectionReasonBox, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error }]}>
@@ -748,6 +805,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                       text: 'Sign Out',
                       style: 'destructive',
                       onPress: () => {
+                        setToken(null);
+                        setUser(null);
                         navigation.replace('Login');
                       },
                     },
@@ -925,6 +984,30 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 13,
+  },
+  formActionsRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 12,
+  },
+  cancelFormBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 6,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelFormBtnText: {
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  submitFormBtn: {
+    flex: 1.5,
+    height: 40,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyContainer: {
     alignItems: 'center',

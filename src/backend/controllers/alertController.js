@@ -186,15 +186,66 @@ async function rejectAlert(req, res) {
 
     const { reason } = req.body;
     alert.status = 'Rejected';
-    alert.rejectionReason = reason || 'Booking request rejected by garage';
+    const defaultReason = alert.type === 'NEW_VEHICLE' 
+      ? 'Vehicle registration rejected by garage' 
+      : 'Booking request rejected by garage';
+    alert.rejectionReason = reason || defaultReason;
+    await alert.save();
+
+    if (alert.type === 'NEW_VEHICLE') {
+      const vehicle = await Vehicle.findOne({ registrationNumber: alert.registrationNumber, status: 'Pending' });
+      if (vehicle) {
+        vehicle.status = 'Rejected';
+        vehicle.rejectionReason = reason || defaultReason;
+        await vehicle.save();
+        await Audit.create({
+          activity: 'Vehicle Registration Rejected',
+          details: `Rejected vehicle registration request for ${alert.makeModel} (${alert.registrationNumber}). Reason: ${reason || 'None provided'}`
+        });
+      }
+    } else {
+      await Audit.create({
+        activity: 'MOT Booking Rejected',
+        details: `Rejected booking request for ${alert.makeModel} (${alert.registrationNumber}). Reason: ${reason || 'None provided'}`
+      });
+    }
+
+    res.json({ message: 'Alert rejected successfully.', alert: formatDoc(alert) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function rescheduleAlert(req, res) {
+  try {
+    const alert = await Alert.findById(req.params.id);
+    if (!alert) {
+      return res.status(404).json({ error: 'Alert not found.' });
+    }
+
+    if (alert.type !== 'BOOKED') {
+      return res.status(400).json({ error: 'Only MOT Booking requests can be rescheduled.' });
+    }
+
+    const { date, slot } = req.body;
+    if (!date || !slot) {
+      return res.status(400).json({ error: 'Date and slot are required.' });
+    }
+
+    const vehiclePart = alert.makeModel.split(' - Slot: ')[0];
+    const oldDetails = `Date: ${alert.date}, ${alert.makeModel}`;
+    
+    alert.date = new Date(date);
+    alert.makeModel = `${vehiclePart} - Slot: ${slot}`;
+    alert.rescheduled = true;
     await alert.save();
 
     await Audit.create({
-      activity: 'MOT Booking Rejected',
-      details: `Rejected booking request for ${alert.makeModel} (${alert.registrationNumber}). Reason: ${reason || 'None provided'}`
+      activity: 'MOT Booking Rescheduled',
+      details: `Rescheduled booking for ${vehiclePart} (${alert.registrationNumber}). Old: ${oldDetails}. New: Date: ${date}, Slot: ${slot}`
     });
 
-    res.json({ message: 'Alert rejected successfully.', alert: formatDoc(alert) });
+    res.json({ message: 'Booking rescheduled successfully.', alert: formatDoc(alert) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -205,5 +256,6 @@ module.exports = {
   createAlert,
   approveAlert,
   acknowledgeAlert,
-  rejectAlert
+  rejectAlert,
+  rescheduleAlert
 };

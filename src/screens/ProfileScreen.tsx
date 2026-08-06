@@ -7,7 +7,7 @@ import { validateFirstName, validateLastName, validateEmail, validatePassword } 
 
 export default function ProfileScreen({ navigation }: any) {
   const { isDarkMode, theme, toggleTheme } = useAppTheme();
-  const { user, createStaffAccount } = useAppValues();
+  const { user, createStaffAccount, setToken, setUser } = useAppValues();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -35,6 +35,8 @@ export default function ProfileScreen({ navigation }: any) {
             setLoggingOut(true);
             setTimeout(() => {
               setLoggingOut(false);
+              setToken(null);
+              setUser(null);
               navigation.replace('Login');
             }, 1200);
           },
@@ -228,6 +230,14 @@ export default function ProfileScreen({ navigation }: any) {
                 <Text style={styles.createStaffText}>Create Staff Account</Text>
               </>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('StaffList')}
+            style={[styles.viewStaffButton, { borderColor: theme.colors.primary, borderWidth: 1.5, borderRadius: 10, height: 44, justifyContent: 'center', alignItems: 'center', marginTop: 12, flexDirection: 'row', gap: 8 }]}
+          >
+            <MaterialCommunityIcons name="account-multiple" size={18} color={theme.colors.primary} />
+            <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 14 }}>View Staff List</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -445,5 +455,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     marginBottom: 24,
+  },
+  viewStaffButton: {
+    flexDirection: 'row',
+    gap: 8,
   },
 });

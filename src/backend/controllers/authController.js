@@ -159,8 +159,47 @@ async function createStaff(req, res) {
   }
 }
 
+async function getStaffList(req, res) {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Access Denied. Only Super Admin can view staff list.' });
+    }
+
+    const staffMembers = await User.find({ role: 'staff' }).select('-password').sort({ createdAt: -1 });
+    res.json(staffMembers);
+  } catch (error) {
+    console.error('Get staff list error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error during staff list retrieval.' });
+  }
+}
+
+async function deleteStaff(req, res) {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Access Denied. Only Super Admin can delete staff accounts.' });
+    }
+
+    const staff = await User.findOneAndDelete({ _id: req.params.id, role: 'staff' });
+    if (!staff) {
+      return res.status(404).json({ error: 'Staff member not found.' });
+    }
+
+    await Audit.create({
+      activity: 'Staff Account Deleted',
+      details: `Super Admin deleted staff account for ${staff.username} (${staff.email})`
+    });
+
+    res.json({ message: 'Staff member deleted successfully.' });
+  } catch (error) {
+    console.error('Delete staff error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error during staff deletion.' });
+  }
+}
+
 module.exports = {
   login,
   signup,
-  createStaff
+  createStaff,
+  getStaffList,
+  deleteStaff
 };

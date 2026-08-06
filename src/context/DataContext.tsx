@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface Customer {
   id: string;
@@ -21,7 +22,7 @@ export interface Vehicle {
   year: string;
   motExpiryDate: string;
   lastServiceDate?: string;
-  status: 'Active' | 'Sold' | 'Scrapped';
+  status: 'Active' | 'Sold' | 'Scrapped' | 'Pending';
 }
 
 export interface AlertNotification {
@@ -70,6 +71,9 @@ interface DataContextType {
   rejectAlert: (alertId: string, reason: string) => Promise<void>;
   addAudit: (activity: string, details: string) => Promise<void>;
   createStaffAccount: (name: string, email: string, password: string) => Promise<void>;
+  fetchStaffList: () => Promise<any[]>;
+  deleteStaffAccount: (staffId: string) => Promise<void>;
+  rescheduleBooking: (alertId: string, date: string, slot: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -85,7 +89,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [alerts, setAlerts] = useState<AlertNotification[]>([]);
   const [audits, setAudits] = useState<AuditLog[]>([]);
   const [token, setTokenState] = useState<string | null>(null);
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUserState] = useState<UserProfile | null>(null);
+
+  const setUser = (newUser: UserProfile | null) => {
+    setUserState(newUser);
+    if (newUser) {
+      AsyncStorage.setItem('user_profile', JSON.stringify(newUser)).catch(err => console.error(err));
+    } else {
+      AsyncStorage.removeItem('user_profile').catch(err => console.error(err));
+    }
+  };
 
   const refreshData = async (activeToken?: string | null) => {
     const currentToken = activeToken !== undefined ? activeToken : token;
@@ -129,7 +142,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const setToken = (newToken: string | null) => {
     setTokenState(newToken);
     if (newToken) {
+      AsyncStorage.setItem('user_token', newToken).catch(err => console.error(err));
       refreshData(newToken);
+    } else {
+      AsyncStorage.removeItem('user_token').catch(err => console.error(err));
+      AsyncStorage.removeItem('user_profile').catch(err => console.error(err));
     }
   };
 
@@ -306,6 +323,64 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const fetchStaffList = async (): Promise<any[]> => {
+    try {
+      const response = await fetch(`${BASE_URL}/auth/staff`, {
+        method: 'GET',
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch staff list');
+      }
+      return data;
+    } catch (error) {
+      console.error('[DATA CONTEXT] fetchStaffList error:', error);
+      throw error;
+    }
+  };
+
+  const deleteStaffAccount = async (staffId: string): Promise<void> => {
+    try {
+      const response = await fetch(`${BASE_URL}/auth/staff/${staffId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete staff account');
+      }
+    } catch (error) {
+      console.error('[DATA CONTEXT] deleteStaffAccount error:', error);
+      throw error;
+    }
+  };
+
+  const rescheduleBooking = async (alertId: string, date: string, slot: string): Promise<void> => {
+    try {
+      const response = await fetch(`${BASE_URL}/alerts/${alertId}/reschedule`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ date, slot })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to reschedule booking');
+      }
+      await refreshData();
+    } catch (error) {
+      console.error('[DATA CONTEXT] rescheduleBooking error:', error);
+      throw error;
+    }
+  };
+
   const rejectAlert = async (alertId: string, reason: string): Promise<void> => {
     try {
       const response = await fetch(`${BASE_URL}/alerts/${alertId}/reject`, {
@@ -348,6 +423,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         rejectAlert,
         addAudit,
         createStaffAccount,
+        fetchStaffList,
+        deleteStaffAccount,
+        rescheduleBooking,
       }}
     >
       {children}

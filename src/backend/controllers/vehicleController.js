@@ -54,12 +54,31 @@ async function createVehicle(req, res) {
       return res.status(400).json({ error: 'Vehicle with this registration number is already registered.' });
     }
 
+    const dateReg = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateReg.test(motExpiryDate)) {
+      return res.status(400).json({ error: 'MOT Expiry Date must be in YYYY-MM-DD format.' });
+    }
+    const parsedMotDate = new Date(motExpiryDate);
+    if (isNaN(parsedMotDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid MOT Expiry Date.' });
+    }
+
+    if (lastServiceDate) {
+      if (!dateReg.test(lastServiceDate)) {
+        return res.status(400).json({ error: 'Last Service Date must be in YYYY-MM-DD format.' });
+      }
+      const parsedServiceDate = new Date(lastServiceDate);
+      if (isNaN(parsedServiceDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid Last Service Date.' });
+      }
+    }
+
     const newVehicle = await Vehicle.create({
       customerId: customer._id,
       registrationNumber: regUpper,
       make: make.toUpperCase().trim(),
       model: model.toUpperCase().trim(),
-      year: year || parseInt(make) || 2018,
+      year: year || 2018,
       motExpiryDate: new Date(motExpiryDate),
       lastServiceDate: lastServiceDate ? new Date(lastServiceDate) : undefined,
       status: req.body.status || 'Active'
@@ -145,8 +164,8 @@ function lookupDVLA(req, res) {
   const MOCK_DVLA_PROFILES = {
     'AB18 CDE': {
       registrationNumber: 'AB18 CDE',
-      make: '2018',
-      model: 'FORD FOCUS TDCI',
+      make: 'FORD',
+      model: 'FOCUS TDCI',
       year: '2018',
       color: 'Grey',
       fuelType: 'Diesel',
@@ -157,8 +176,8 @@ function lookupDVLA(req, res) {
     },
     'LD65 XYZ': {
       registrationNumber: 'LD65 XYZ',
-      make: '2015',
-      model: 'VAUXHALL CORSA ECOFLEX',
+      make: 'VAUXHALL',
+      model: 'CORSA ECOFLEX',
       year: '2015',
       color: 'Red',
       fuelType: 'Petrol',
@@ -169,8 +188,8 @@ function lookupDVLA(req, res) {
     },
     'MH07 KKK': {
       registrationNumber: 'MH07 KKK',
-      make: '2019',
-      model: 'BMW 320D M SPORT',
+      make: 'BMW',
+      model: '320D M SPORT',
       year: '2019',
       color: 'White',
       fuelType: 'Diesel',
@@ -190,8 +209,8 @@ function lookupDVLA(req, res) {
   const isPass = vrn.charCodeAt(0) % 2 === 0;
   const genericProfile = {
     registrationNumber: vrn,
-    make: '2017',
-    model: 'VOLKSWAGEN GOLF TSI',
+    make: 'VOLKSWAGEN',
+    model: 'GOLF TSI',
     year: '2017',
     color: 'Blue',
     fuelType: 'Petrol',

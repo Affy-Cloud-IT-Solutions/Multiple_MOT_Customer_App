@@ -40,6 +40,10 @@ const VehicleSchema = new mongoose.Schema({
         enum: ['Active', 'Sold', 'Scrapped', 'Pending', 'Rejected'],
         default: 'Active'
     },
+    rejectionReason: {
+        type: String,
+        trim: true
+    },
     token: {
         type: String,
         unique: true,

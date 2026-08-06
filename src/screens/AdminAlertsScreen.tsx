@@ -1,12 +1,12 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, Text, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, ScrollView, Text, TouchableOpacity, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 
 export default function AdminAlertsScreen() {
   const { theme } = useAppTheme();
-  const { alerts, approveAlert, acknowledgeAlert } = useAppValues();
+  const { alerts, approveAlert, acknowledgeAlert, rejectAlert } = useAppValues();
 
   // Show only pending alerts
   const pendingAlerts = alerts.filter((a) => a.status === 'Pending');
@@ -24,9 +24,40 @@ export default function AdminAlertsScreen() {
     Alert.alert('Approved', message);
   };
 
-  const handleReject = (alertId: string) => {
-    acknowledgeAlert(alertId);
-    Alert.alert('Rejected', 'Request has been rejected and removed from pending actions.');
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
+  const [selectedAlertType, setSelectedAlertType] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
+  const handleReject = (alertId: string, alertType: string) => {
+    setSelectedAlertId(alertId);
+    setSelectedAlertType(alertType);
+    setRejectionReason('');
+    setRejectModalVisible(true);
+  };
+
+  const submitRejection = async () => {
+    if (!selectedAlertId) return;
+    const alertId = selectedAlertId;
+    const alertType = selectedAlertType;
+    
+    setRejectModalVisible(false);
+    setLoadingAction(alertId);
+    try {
+      if (alertType === 'BOOKED' || alertType === 'NEW_VEHICLE') {
+        await rejectAlert(alertId, rejectionReason);
+      } else {
+        await acknowledgeAlert(alertId);
+      }
+      Alert.alert('Rejected', 'Request has been rejected.');
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Could not reject request.');
+    } finally {
+      setLoadingAction(null);
+      setSelectedAlertId(null);
+      setSelectedAlertType(null);
+    }
   };
 
   const handleAcknowledge = (alertId: string) => {
@@ -101,44 +132,81 @@ export default function AdminAlertsScreen() {
 
                 <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
-                {item.type === 'NEW_VEHICLE' || item.type === 'SOLD' ? (
-                  // Approve / Reject actions
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      onPress={() => handleReject(item.id)}
-                      style={[styles.actionBtn, styles.rejectBtn, { borderColor: theme.colors.error }]}
-                    >
-                      <Text style={[styles.actionBtnText, { color: theme.colors.error }]}>Reject</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleApprove(item.id, item.type)}
-                      style={[styles.actionBtn, styles.approveBtn, { backgroundColor: theme.colors.primary }]}
-                    >
-                      <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Approve</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  // Booked / Notification - simple acknowledge action
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      onPress={() => handleAcknowledge(item.id)}
-                      style={[styles.actionBtn, styles.ackBtn, { borderColor: theme.colors.border }]}
-                    >
-                      <Text style={[styles.actionBtnText, { color: theme.colors.text }]}>Acknowledge</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleApprove(item.id, item.type)}
-                      style={[styles.actionBtn, styles.approveBtn, { backgroundColor: theme.colors.secondary }]}
-                    >
-                      <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Confirm Booking</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    onPress={() => handleReject(item.id, item.type)}
+                    disabled={loadingAction !== null}
+                    style={[styles.actionBtn, styles.rejectBtn, { borderColor: theme.colors.error }]}
+                  >
+                    <Text style={[styles.actionBtnText, { color: theme.colors.error }]}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleApprove(item.id, item.type)}
+                    disabled={loadingAction !== null}
+                    style={[
+                      styles.actionBtn, 
+                      styles.approveBtn, 
+                      { backgroundColor: item.type === 'BOOKED' ? theme.colors.secondary : theme.colors.primary }
+                    ]}
+                  >
+                    {loadingAction === item.id ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>
+                        {item.type === 'BOOKED' ? 'Confirm Booking' : 'Approve'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
             );
           })
         )}
       </View>
+
+      {/* Reject Reason Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={rejectModalVisible}
+        onRequestClose={() => setRejectModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+              {selectedAlertType === 'NEW_VEHICLE' ? 'Reject Vehicle Registration' : 'Reject Booking Request'}
+            </Text>
+            <Text style={[styles.modalSubtitle, { color: theme.colors.placeholder }]}>
+              Please enter the reason for rejecting this {selectedAlertType === 'NEW_VEHICLE' ? 'registration' : 'booking'} request. This reason will be displayed to the customer.
+            </Text>
+            
+            <TextInput
+              style={[styles.modalInput, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+              placeholder={selectedAlertType === 'NEW_VEHICLE' ? "e.g. Invalid document, vehicle scrapped" : "e.g. No slots available, garage closed"}
+              placeholderTextColor={theme.colors.placeholder}
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                onPress={() => setRejectModalVisible(false)}
+                style={[styles.modalBtn, styles.modalCancelBtn, { borderColor: theme.colors.border }]}
+              >
+                <Text style={[styles.modalBtnText, { color: theme.colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={submitRejection}
+                style={[styles.modalBtn, styles.modalConfirmBtn, { backgroundColor: theme.colors.error }]}
+              >
+                <Text style={[styles.modalBtnText, { color: '#FFFFFF' }]}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -249,11 +317,68 @@ const styles = StyleSheet.create({
   approveBtn: {
     elevation: 1,
   },
-  ackBtn: {
-    borderWidth: 1.2,
-  },
   actionBtnText: {
     fontSize: 13,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 14,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    height: 70,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  modalBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  modalCancelBtn: {
+    borderWidth: 1,
+  },
+  modalConfirmBtn: {
+    elevation: 1,
+  },
+  modalBtnText: {
+    fontSize: 12,
     fontWeight: 'bold',
   },
 });
