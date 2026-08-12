@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,11 +16,18 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-export default function BookingScreen({ route, navigation }: any) {
+export default function AdminBookMotScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, addAlert, addAudit } = useAppValues();
+  const { addAlert, addAudit, refreshData } = useAppValues();
 
-  // Selected vehicle passed from CustomerPortalScreen
+  // Selected customer and vehicle passed from AdminCustomersScreen
+  const customer = route?.params?.customer || {
+    id: 'unknown',
+    firstName: 'Unknown',
+    lastName: 'Customer',
+    email: 'N/A',
+  };
+
   const vehicle = route?.params?.vehicle || {
     registrationNumber: 'AB18 CDE',
     make: 'FORD',
@@ -28,23 +35,10 @@ export default function BookingScreen({ route, navigation }: any) {
     customerId: 'c1',
   };
 
-  const isReschedule = route?.params?.isReschedule || false;
-
-  const customer = customers.find((c) => 
-    vehicle.customerId && (
-      String(c.id).toLowerCase() === String(vehicle.customerId || '').toLowerCase() ||
-      String(c._id).toLowerCase() === String(vehicle.customerId || '').toLowerCase()
-    )
-  ) || customers[0];
-
-  if (!customer) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={{ marginTop: 10, color: theme.colors.text }}>Loading booking details...</Text>
-      </SafeAreaView>
-    );
-  }
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedTime, setSelectedTime] = useState('');
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Date and Time options for slot selection
   const [currentViewDate, setCurrentViewDate] = useState(new Date());
@@ -88,10 +82,6 @@ export default function BookingScreen({ route, navigation }: any) {
 
   const handlePrevMonth = () => {
     const prev = new Date(currentViewDate.getFullYear(), currentViewDate.getMonth() - 1, 1);
-    const now = new Date();
-    if (prev.getFullYear() < now.getFullYear() || (prev.getFullYear() === now.getFullYear() && prev.getMonth() < now.getMonth())) {
-      return;
-    }
     setCurrentViewDate(prev);
   };
 
@@ -100,85 +90,51 @@ export default function BookingScreen({ route, navigation }: any) {
     setCurrentViewDate(next);
   };
 
+  const formatLocalDate = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
   const calendarDays = getDaysInMonth(currentViewDate.getFullYear(), currentViewDate.getMonth());
 
+  // Available slots logic (Morning, Afternoon, Evening)
   const timeSlots = [
-    { id: 't1', label: 'Morning', time: '09:00 AM' },
-    { id: 't2', label: 'Late Morning', time: '11:30 AM' },
-    { id: 't3', label: 'Afternoon', time: '02:00 PM' },
-    { id: 't4', label: 'Late Afternoon', time: '04:30 PM' },
+    { id: 't1', time: '09:00 AM', label: 'Early Morning' },
+    { id: 't2', time: '11:30 AM', label: 'Late Morning' },
+    { id: 't3', time: '02:00 PM', label: 'Early Afternoon' },
+    { id: 't4', time: '04:30 PM', label: 'Late Afternoon' },
   ];
 
-  const formatLocalDate = (d: Date) => {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+  const isTimeSlotPassed = (timeStr: string) => {
+    if (!selectedDate) return false;
+    const todayStr = formatLocalDate(new Date());
+    if (selectedDate !== todayStr) return false;
+
+    const [time, modifier] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    if (modifier === 'PM' && hours < 12) hours += 12;
+    if (modifier === 'AM' && hours === 12) hours = 0;
+
+    const slotDateTime = new Date();
+    slotDateTime.setHours(hours, minutes, 0, 0);
+
+    return slotDateTime < new Date();
   };
-
-  const getTodayISOString = () => {
-    const d = new Date();
-    // If today is Sunday, default to tomorrow (Monday)
-    if (d.getDay() === 0) {
-      d.setDate(d.getDate() + 1);
-    }
-    return formatLocalDate(d);
-  };
-
-  const [selectedDate, setSelectedDate] = useState(getTodayISOString());
-  const [selectedTime, setSelectedTime] = useState(timeSlots[0]?.time || '');
-  const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const isTimeSlotPassed = (slotTimeStr: string) => {
-    const todayISO = formatLocalDate(new Date());
-    if (selectedDate !== todayISO) {
-      return false;
-    }
-
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMin = now.getMinutes();
-
-    const match = slotTimeStr.match(/^(\d{2}):(\d{2})\s*(AM|PM)$/i);
-    if (!match) return false;
-
-    let hour = parseInt(match[1]);
-    const min = parseInt(match[2]);
-    const period = match[3].toUpperCase();
-
-    if (period === 'PM' && hour !== 12) {
-      hour += 12;
-    } else if (period === 'AM' && hour === 12) {
-      hour = 0;
-    }
-
-    if (currentHour > hour) {
-      return true;
-    } else if (currentHour === hour) {
-      return currentMin >= min;
-    }
-    return false;
-  };
-
-  useEffect(() => {
-    const available = timeSlots.filter(slot => !isTimeSlotPassed(slot.time));
-    if (available.length > 0) {
-      if (!available.some(s => s.time === selectedTime)) {
-        setSelectedTime(available[0].time);
-      }
-    } else {
-      setSelectedTime('');
-    }
-  }, [selectedDate]);
 
   const handleConfirmBooking = async () => {
-    if (!selectedDate || !selectedTime) {
-      Alert.alert('Error', 'Please select a date and time slot.');
+    if (!selectedDate) {
+      Alert.alert('Selection Missing', 'Please select an appointment date.');
+      return;
+    }
+    if (!selectedTime) {
+      Alert.alert('Selection Missing', 'Please select a time slot.');
       return;
     }
 
     setLoading(true);
+
     try {
       const parts = selectedDate.split('-');
       const monthsList = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -186,57 +142,36 @@ export default function BookingScreen({ route, navigation }: any) {
         ? `${parseInt(parts[2])} ${monthsList[parseInt(parts[1]) - 1]}`
         : selectedDate;
 
-      const isAdmin = route?.params?.isAdmin || false;
-
-      // Add BOOKED alert notification to Admin alerts list
+      // Add BOOKED alert notification directly with Approved status
       await addAlert({
         type: 'BOOKED',
         customerName: `${customer.firstName} ${customer.lastName}`,
         customerId: customer.id,
         registrationNumber: vehicle.registrationNumber,
         makeModel: `${vehicle.make} ${vehicle.model} - Slot: ${displayDateStr} at ${selectedTime}`,
-        status: isAdmin ? 'Approved' : 'Pending',
+        status: 'Approved',
         date: selectedDate,
       });
 
       // Log to audit history
       await addAudit(
-        isReschedule ? 'MOT Booking Rescheduled' : (isAdmin ? 'MOT Booking Booked' : 'MOT Booking Requested'),
-        isAdmin
-          ? `Garage staff booked MOT booking slot for ${customer.firstName} ${customer.lastName}'s ${vehicle.make} ${vehicle.model} (${vehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
-          : `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} MOT booking slot for ${vehicle.make} ${vehicle.model} (${vehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
+        'MOT Booking Booked',
+        `Garage staff booked MOT booking slot for ${customer.firstName} ${customer.lastName}'s ${vehicle.make} ${vehicle.model} (${vehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
       );
 
+      await refreshData();
       setLoading(false);
 
       // Show Toast Notification
-      const successMessage = isReschedule
-        ? `MOT Booking rescheduled successfully for ${displayDateStr}!`
-        : (isAdmin 
-            ? `MOT Booking confirmed and approved for ${customer.firstName} ${customer.lastName}!`
-            : `MOT Booking request submitted successfully for ${displayDateStr}!`);
-
+      const successMessage = `MOT Booking confirmed and approved for ${customer.firstName} ${customer.lastName}!`;
       Toast.show({
         type: 'success',
         text1: 'Success',
         text2: successMessage,
       });
 
-      // Navigate back
-      try {
-        if (route?.params?.sourceScreen) {
-          navigation.navigate(route.params.sourceScreen, route.params.sourceScreenParams || {});
-        } else {
-          navigation.navigate('CustomerPortal', { customerId: customer.id });
-        }
-      } catch (navErr) {
-        console.warn('Navigation redirect failed, falling back to goBack:', navErr);
-        if (navigation.canGoBack()) {
-          navigation.goBack();
-        } else {
-          navigation.navigate('Main', { screen: 'Customers' });
-        }
-      }
+      // Navigate directly to BookedMots screen
+      navigation.navigate('BookedMots');
     } catch (err: any) {
       setLoading(false);
       Alert.alert('Error', err.message || 'Failed to confirm booking slot.');
@@ -249,38 +184,43 @@ export default function BookingScreen({ route, navigation }: any) {
       <View style={[styles.navbar, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={22} color={theme.colors.text} />
-          {/* <Text style={[styles.backBtnText, { color: theme.colors.text }]}>Back</Text> */}
         </TouchableOpacity>
         <Text style={[styles.navTitle, { color: theme.colors.text }]}>
-          {isReschedule ? 'Reschedule MOT Slot' : 'Book MOT Slot'}
+          Book MOT (Admin Flow)
         </Text>
         <View style={{ width: 60 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Vehicle Summary Header Card */}
-        <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <View style={styles.plate}>
-            <Text style={styles.plateText}>{vehicle.registrationNumber}</Text>
+        {/* Customer & Vehicle Summary Header Card */}
+        <View style={[styles.summaryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={styles.summaryRow}>
+            <MaterialCommunityIcons name="account" size={18} color={theme.colors.secondary} />
+            <Text style={[styles.summaryLabel, { color: theme.colors.text }]}>
+              Customer: <Text style={{ fontWeight: 'bold' }}>{customer.firstName} {customer.lastName}</Text>
+            </Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.vehicleMakeModel, { color: theme.colors.text }]}>
-              {vehicle.make} {vehicle.model}
+          <View style={[styles.summaryRow, { marginTop: 4 }]}>
+            <MaterialCommunityIcons name="email" size={16} color={theme.colors.placeholder} />
+            <Text style={[styles.summarySubLabel, { color: theme.colors.placeholder }]}>
+              {customer.email}
             </Text>
-            <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder }]}>
-              {isReschedule ? 'Rescheduling appointment for this vehicle' : 'Booking an appointment for this vehicle'}
-            </Text>
+          </View>
+          <View style={[styles.divider, { borderColor: theme.colors.border }]} />
+          <View style={styles.summaryRow}>
+            <View style={styles.plate}>
+              <Text style={styles.plateText}>{vehicle.registrationNumber}</Text>
+            </View>
+            <View style={{ marginLeft: 12 }}>
+              <Text style={[styles.vehicleMakeModel, { color: theme.colors.text }]}>
+                {vehicle.make} {vehicle.model}
+              </Text>
+              <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                Booking appointment directly to Confirmed status
+              </Text>
+            </View>
           </View>
         </View>
-
-        {isReschedule && (
-          <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.warning + '15', borderColor: theme.colors.warning }]}>
-            <MaterialCommunityIcons name="alert-circle-outline" size={20} color={theme.colors.warning} style={{ marginRight: 8 }} />
-            <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text }]}>
-              You are rescheduling your existing MOT booking. The new date and slot will replace your current reservation upon confirmation.
-            </Text>
-          </View>
-        )}
 
         {/* Date Selector Section */}
         <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>1. Select Appointment Date</Text>
@@ -363,6 +303,7 @@ export default function BookingScreen({ route, navigation }: any) {
               borderColor: theme.colors.border,
               backgroundColor: theme.colors.card,
               marginTop: 8,
+              marginBottom: 20
             }}
           >
             <MaterialCommunityIcons name="clock-alert-outline" size={24} color={theme.colors.error} />
@@ -383,18 +324,17 @@ export default function BookingScreen({ route, navigation }: any) {
                     style={[
                       styles.timeCard,
                       {
-                        backgroundColor: isSelected ? theme.colors.secondary + '15' : theme.colors.card,
+                        backgroundColor: isSelected ? theme.colors.secondary + '12' : theme.colors.card,
                         borderColor: isSelected ? theme.colors.secondary : theme.colors.border,
-                      },
+                      }
                     ]}
                   >
                     <MaterialCommunityIcons
-                      name={isSelected ? 'clock' : 'clock-outline'}
-                      size={16}
+                      name={isSelected ? 'clock-check' : 'clock-outline'}
+                      size={20}
                       color={isSelected ? theme.colors.secondary : theme.colors.placeholder}
-                      style={{ marginRight: 6 }}
                     />
-                    <View>
+                    <View style={{ marginLeft: 10 }}>
                       <Text style={[styles.timeLabel, { color: theme.colors.text }]}>{slot.label}</Text>
                       <Text style={[styles.timeText, { color: theme.colors.placeholder }]}>{slot.time}</Text>
                     </View>
@@ -404,44 +344,32 @@ export default function BookingScreen({ route, navigation }: any) {
           </View>
         )}
 
-        {/* Notes/Comments Section */}
-        <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>3. Special Requests / Notes (Optional)</Text>
+        {/* Notes Input */}
+        <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>3. Staff Booking Notes (Optional)</Text>
         <TextInput
+          style={[styles.notesInput, { borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: theme.colors.card }]}
+          placeholder="Enter any customer requests, parts updates or booking comments here..."
+          placeholderTextColor={theme.colors.placeholder}
           value={notes}
           onChangeText={setNotes}
-          placeholder="E.g., Rear brakes squealing, please check them during test."
-          placeholderTextColor={theme.colors.placeholder}
           multiline
-          numberOfLines={4}
-          style={[
-            styles.notesInput,
-            {
-              color: theme.colors.text,
-              borderColor: theme.colors.border,
-              backgroundColor: theme.colors.card,
-            },
-          ]}
+          numberOfLines={3}
         />
 
-        {/* Action Buttons */}
+        {/* Submit Action */}
         <View style={styles.actionContainer}>
           <TouchableOpacity
             onPress={handleConfirmBooking}
             disabled={loading}
-            style={[styles.submitBtn, { backgroundColor: isReschedule ? theme.colors.warning : theme.colors.secondary }]}
+            style={[styles.submitBtn, { backgroundColor: theme.colors.secondary }]}
           >
             {loading ? (
-              <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
+              <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} />
             ) : (
               <View style={styles.btnContent}>
-                <MaterialCommunityIcons 
-                  name="calendar-check" 
-                  size={20} 
-                  color={theme.dark ? theme.colors.background : '#FFFFFF'} 
-                  style={{ marginRight: 8 }} 
-                />
+                <MaterialCommunityIcons name="calendar-check" size={20} color={theme.dark ? theme.colors.background : '#FFFFFF'} style={{ marginRight: 6 }} />
                 <Text style={[styles.submitBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
-                  {isReschedule ? 'Confirm Rescheduling' : 'Confirm Appointment Booking'}
+                  Confirm & Approve Booking
                 </Text>
               </View>
             )}
@@ -469,11 +397,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 60,
   },
-  backBtnText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginLeft: 4,
-  },
   navTitle: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -482,44 +405,54 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
-  vehicleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
+  summaryCard: {
+    padding: 14,
     borderRadius: 14,
     borderWidth: 1,
     marginBottom: 24,
-    gap: 16,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
   },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    fontSize: 13.5,
+    marginLeft: 6,
+  },
+  summarySubLabel: {
+    fontSize: 12,
+    marginLeft: 24,
+  },
+  divider: {
+    borderBottomWidth: 0.5,
+    marginVertical: 12,
+  },
   plate: {
     backgroundColor: '#FFD300',
     borderWidth: 1.5,
     borderColor: '#000',
     borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   plateText: {
     color: '#000',
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 13,
     letterSpacing: 0.5,
   },
   vehicleMakeModel: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     marginBottom: 2,
   },
-  vehicleSubText: {
-    fontSize: 12,
-  },
   sectionHeading: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -604,7 +537,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     fontSize: 13,
-    height: 90,
+    height: 80,
     textAlignVertical: 'top',
     marginBottom: 28,
   },
@@ -627,21 +560,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitBtnText: {
-    color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 14,
-  },
-  rescheduleNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 20,
-  },
-  rescheduleNoticeText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 16,
   },
 });

@@ -223,11 +223,11 @@ export default function ProfileScreen({ navigation }: any) {
             style={[styles.createStaffButton, { backgroundColor: theme.colors.primary, opacity: creatingStaff ? 0.7 : 1 }]}
           >
             {creatingStaff ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
             ) : (
               <>
-                <MaterialCommunityIcons name="account-plus" size={18} color="#FFFFFF" />
-                <Text style={styles.createStaffText}>Create Staff Account</Text>
+                <MaterialCommunityIcons name="account-plus" size={18} color={theme.dark ? theme.colors.background : '#FFFFFF'} />
+                <Text style={[styles.createStaffText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Create Staff Account</Text>
               </>
             )}
           </TouchableOpacity>

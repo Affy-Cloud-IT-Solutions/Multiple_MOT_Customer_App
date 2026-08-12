@@ -22,6 +22,13 @@ export default function BookedMotsScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshData();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   // Rejection modal states
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
@@ -107,11 +114,11 @@ export default function BookedMotsScreen({ navigation }: any) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Navbar Header */}
       <View style={[styles.navbar, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.navigate('Main', { screen: 'Dashboard' })} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={22} color={theme.colors.text} />
           {/* <Text style={[styles.backBtnText, { color: theme.colors.text }]}>Back</Text> */}
         </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: theme.colors.text }]}>Booked MOTs</Text>
+        <Text style={[styles.navTitle, { color: theme.colors.text }]}>Booked MOT's</Text>
         <View style={styles.countBadge}>
           <Text style={[styles.countText, { color: theme.colors.secondary }]}>{bookedMots.length}</Text>
         </View>
@@ -225,9 +232,9 @@ export default function BookedMotsScreen({ navigation }: any) {
                               style={[styles.subActionBtn, styles.subConfirmBtn, { backgroundColor: theme.colors.secondary }]}
                             >
                               {loadingAction === item.id ? (
-                                <ActivityIndicator color="#FFFFFF" size="small" />
+                                <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
                               ) : (
-                                <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#FFFFFF' }}>Confirm Booking</Text>
+                                <Text style={{ fontSize: 11, fontWeight: 'bold', color: theme.dark ? theme.colors.background : '#FFFFFF' }}>Confirm Booking</Text>
                               )}
                             </TouchableOpacity>
                           </View>
@@ -277,7 +284,7 @@ export default function BookedMotsScreen({ navigation }: any) {
                 onPress={submitRejection}
                 style={[styles.modalBtn, styles.modalConfirmBtn, { backgroundColor: theme.colors.error }]}
               >
-                <Text style={[styles.modalBtnText, { color: '#FFFFFF' }]}>Confirm Reject</Text>
+                <Text style={[styles.modalBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Confirm Reject</Text>
               </TouchableOpacity>
             </View>
           </View>

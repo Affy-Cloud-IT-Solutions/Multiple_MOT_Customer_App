@@ -439,11 +439,11 @@ export default function AdminRemindersScreen() {
                 style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]}
               >
                 {savingTemplate === 45 ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ActivityIndicator size="small" color={theme.dark ? theme.colors.background : '#FFFFFF'} />
                 ) : (
                   <View style={styles.saveBtnContent}>
-                    <MaterialCommunityIcons name="content-save-outline" size={15} color="#FFFFFF" style={{ marginRight: 5 }} />
-                    <Text style={styles.saveBtnText}>Save Template</Text>
+                    <MaterialCommunityIcons name="content-save-outline" size={15} color={theme.dark ? theme.colors.background : '#FFFFFF'} style={{ marginRight: 5 }} />
+                    <Text style={[styles.saveBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Save Template</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -481,11 +481,11 @@ export default function AdminRemindersScreen() {
                 style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]}
               >
                 {savingTemplate === 30 ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ActivityIndicator size="small" color={theme.dark ? theme.colors.background : '#FFFFFF'} />
                 ) : (
                   <View style={styles.saveBtnContent}>
-                    <MaterialCommunityIcons name="content-save-outline" size={15} color="#FFFFFF" style={{ marginRight: 5 }} />
-                    <Text style={styles.saveBtnText}>Save Template</Text>
+                    <MaterialCommunityIcons name="content-save-outline" size={15} color={theme.dark ? theme.colors.background : '#FFFFFF'} style={{ marginRight: 5 }} />
+                    <Text style={[styles.saveBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Save Template</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -523,11 +523,11 @@ export default function AdminRemindersScreen() {
                 style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]}
               >
                 {savingTemplate === 7 ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ActivityIndicator size="small" color={theme.dark ? theme.colors.background : '#FFFFFF'} />
                 ) : (
                   <View style={styles.saveBtnContent}>
-                    <MaterialCommunityIcons name="content-save-outline" size={15} color="#FFFFFF" style={{ marginRight: 5 }} />
-                    <Text style={styles.saveBtnText}>Save Template</Text>
+                    <MaterialCommunityIcons name="content-save-outline" size={15} color={theme.dark ? theme.colors.background : '#FFFFFF'} style={{ marginRight: 5 }} />
+                    <Text style={[styles.saveBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Save Template</Text>
                   </View>
                 )}
               </TouchableOpacity>

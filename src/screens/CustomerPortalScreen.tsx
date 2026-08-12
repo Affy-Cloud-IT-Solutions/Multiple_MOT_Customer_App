@@ -41,7 +41,12 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   }
 
   // Active customer vehicles (including Pending and Rejected statuses)
-  const customerVehicles = vehicles.filter((v) => v.customerId === customer.id && v.status !== 'Sold' && v.status !== 'Scrapped');
+  const customerVehicles = vehicles.filter((v) => 
+    v.customerId && (
+      String(v.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
+      String(v.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
+    ) && v.status !== 'Sold' && v.status !== 'Scrapped'
+  );
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -319,9 +324,9 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                     style={[styles.submitFormBtn, { backgroundColor: theme.colors.secondary }]}
                   >
                     {loadingAction === 'add_vehicle' ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
+                      <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
                     ) : (
-                      <Text style={styles.submitButtonText}>Request Approval</Text>
+                      <Text style={[styles.submitButtonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Request Approval</Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -560,8 +565,13 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.warning }]}
                           >
                             <View style={styles.actionBtnContent}>
-                              <MaterialCommunityIcons name="calendar-edit" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                              <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Reschedule</Text>
+                              <MaterialCommunityIcons 
+                                name="calendar-edit" 
+                                size={16} 
+                                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+                                style={{ marginRight: 4 }} 
+                              />
+                              <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Reschedule</Text>
                             </View>
                           </TouchableOpacity>
                         ) : (
@@ -571,8 +581,13 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.secondary }]}
                           >
                             <View style={styles.actionBtnContent}>
-                              <MaterialCommunityIcons name="calendar-plus" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                              <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Book MOT</Text>
+                              <MaterialCommunityIcons 
+                                name="calendar-plus" 
+                                size={16} 
+                                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+                                style={{ marginRight: 4 }} 
+                              />
+                              <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Book MOT</Text>
                             </View>
                           </TouchableOpacity>
                         )}
@@ -588,7 +603,10 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         {activeTab === 'history' && (
           <ScrollView contentContainerStyle={styles.scrollContent}>
             {/* <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 16 }]}>MOT Booking History</Text> */}
-            {alerts.filter((a) => a.type === 'BOOKED' && a.customerId === customer.id).length === 0 ? (
+            {alerts.filter((a) => a.type === 'BOOKED' && a.customerId && (
+              String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
+              String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
+            )).length === 0 ? (
               <View style={styles.emptyContainer}>
                 <MaterialCommunityIcons name="history" size={48} color={theme.colors.placeholder} style={{ marginBottom: 12 }} />
                 <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>
@@ -597,7 +615,10 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
               </View>
             ) : (
               alerts
-                .filter((a) => a.type === 'BOOKED' && a.customerId === customer.id)
+                .filter((a) => a.type === 'BOOKED' && a.customerId && (
+                  String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
+                  String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
+                ))
                 .map((item) => {
                   const isPending = item.status === 'Pending';
                   const isApproved = item.status === 'Approved';
@@ -690,7 +711,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                   <MaterialCommunityIcons name="check-decagram" size={16} color={theme.colors.success} style={{ marginLeft: 4 }} />
                 </View>
                 <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 2 }}>
-                  Member since {new Date(customer.createdAt || Date.now()).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                  Member since {new Date(customer.createdDate || Date.now()).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
                 </Text>
               </View>
             </View>

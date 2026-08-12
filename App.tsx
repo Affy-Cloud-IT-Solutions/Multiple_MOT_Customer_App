@@ -7,6 +7,7 @@ import { DataProvider } from './src/context/DataContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import './src/utils/AlertManager'; // Register global Alert override
 import CustomAlertModal from './src/components/CustomAlertModal';
+import Toast from 'react-native-toast-message';
 
 function AppContent() {
   const { theme, isDarkMode } = useAppTheme();
@@ -19,6 +20,7 @@ function AppContent() {
       />
       <RootNavigator />
       <CustomAlertModal />
+      <Toast />
     </NavigationContainer>
   );
 }

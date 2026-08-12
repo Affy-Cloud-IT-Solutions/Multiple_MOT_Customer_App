@@ -49,8 +49,12 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
   }
 
   // Filter lists
-  const customerVehicles = vehicles.filter((v) => v.customerId === customerId);
-  const customerBookings = alerts.filter((a) => a.type === 'BOOKED' && a.customerId === customerId);
+  const customerVehicles = vehicles.filter((v) => 
+    v.customerId && String(v.customerId).toLowerCase() === String(customerId || '').toLowerCase()
+  );
+  const customerBookings = alerts.filter((a) => 
+    a.type === 'BOOKED' && a.customerId && String(a.customerId).toLowerCase() === String(customerId || '').toLowerCase()
+  );
   
   // Audits filtering
   const customerAudits = audits.filter((a) => {
@@ -119,7 +123,7 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
               <View style={styles.contactItem}>
                 <MaterialCommunityIcons name="calendar-account" size={13} color={theme.colors.placeholder} />
                 <Text style={[styles.contactText, { color: theme.colors.placeholder }]}>
-                  Since: {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : customer.createdDate ? new Date(customer.createdDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                  Since: {customer.createdDate ? new Date(customer.createdDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
                 </Text>
               </View>
               {customer.address && (
@@ -140,7 +144,7 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
           let label = 'Vehicles';
           let icon = 'car-multiple';
           if (tab === 'bookings') {
-            label = 'Booked MOTs';
+            label = "Booked MOT's";
             icon = 'calendar-clock';
           } else if (tab === 'history') {
             label = 'History Log';

@@ -65,7 +65,7 @@ interface DataContextType {
   addCustomer: (customer: Omit<Customer, 'id' | 'createdDate'>) => Promise<string>;
   addVehicle: (vehicle: Omit<Vehicle, 'id'>) => Promise<void>;
   updateVehicleStatus: (vehicleId: string, status: 'Active' | 'Sold' | 'Scrapped' | 'Pending') => Promise<void>;
-  addAlert: (alert: Omit<AlertNotification, 'id' | 'status' | 'date'>) => Promise<void>;
+  addAlert: (alert: Omit<AlertNotification, 'id' | 'status' | 'date'> & { status?: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected', date?: string }) => Promise<void>;
   approveAlert: (alertId: string) => Promise<void>;
   acknowledgeAlert: (alertId: string) => Promise<void>;
   rejectAlert: (alertId: string, reason: string) => Promise<void>;
@@ -74,6 +74,7 @@ interface DataContextType {
   fetchStaffList: () => Promise<any[]>;
   deleteStaffAccount: (staffId: string) => Promise<void>;
   rescheduleBooking: (alertId: string, date: string, slot: string) => Promise<void>;
+  lookupVehicle: (vrn: string) => Promise<any>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -171,7 +172,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(data.error || 'Failed to create customer');
       }
       await refreshData();
-      return data.customer?.id || `c_${Date.now()}`;
+      return data.customer?.id || data.customer?._id || data.id || data._id || `c_${Date.now()}`;
     } catch (error) {
       console.error('[DATA CONTEXT] addCustomer error:', error);
       throw error;
@@ -220,7 +221,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addAlert = async (alertData: Omit<AlertNotification, 'id' | 'status' | 'date'>): Promise<void> => {
+  const addAlert = async (alertData: Omit<AlertNotification, 'id' | 'status' | 'date'> & { status?: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected', date?: string }): Promise<void> => {
     try {
       const response = await fetch(`${BASE_URL}/alerts`, {
         method: 'POST',
@@ -402,6 +403,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const lookupVehicle = async (vrn: string): Promise<any> => {
+    try {
+      const response = await fetch(`${BASE_URL}/vehicles/dvla/${encodeURIComponent(vrn)}`, {
+        method: 'GET',
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to lookup vehicle');
+      }
+      return data;
+    } catch (error) {
+      console.error('[DATA CONTEXT] lookupVehicle error:', error);
+      throw error;
+    }
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -426,6 +446,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         fetchStaffList,
         deleteStaffAccount,
         rescheduleBooking,
+        lookupVehicle,
       }}
     >
       {children}

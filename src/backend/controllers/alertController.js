@@ -19,7 +19,7 @@ async function getAllAlerts(req, res) {
 
 async function createAlert(req, res) {
   try {
-    const { type, customerName, customerId, registrationNumber, makeModel } = req.body;
+    const { type, customerName, customerId, registrationNumber, makeModel, status, date } = req.body;
 
     if (type === 'BOOKED') {
       const existingAlert = await Alert.findOne({
@@ -28,14 +28,25 @@ async function createAlert(req, res) {
         status: { $in: ['Pending', 'Approved'] }
       });
       if (existingAlert) {
+        existingAlert.customerId = customerId;
+        existingAlert.customerName = customerName;
         existingAlert.makeModel = makeModel;
-        existingAlert.status = 'Pending';
-        existingAlert.date = Date.now();
+        existingAlert.status = status || 'Pending';
+        if (date) {
+          existingAlert.date = new Date(date);
+        } else {
+          existingAlert.date = Date.now();
+        }
         await existingAlert.save();
+
+        let detailsStr = `${customerName} rescheduled MOT booking slot for ${makeModel} (${registrationNumber}) via portal.`;
+        if (status === 'Approved') {
+          detailsStr = `Garage staff rescheduled MOT booking slot for ${customerName}'s ${makeModel} (${registrationNumber}).`;
+        }
 
         await Audit.create({
           activity: 'MOT Booking Rescheduled',
-          details: `${customerName} rescheduled MOT booking slot for ${makeModel} (${registrationNumber}) via portal.`
+          details: detailsStr
         });
 
         return res.status(200).json({ message: 'Alert rescheduled successfully.', alert: formatDoc(existingAlert) });
@@ -48,15 +59,21 @@ async function createAlert(req, res) {
       customerId,
       registrationNumber,
       makeModel,
-      status: 'Pending'
+      status: status || 'Pending',
+      date: date ? new Date(date) : Date.now()
     });
 
     let auditActivity = 'Notification Received';
     let auditDetails = `Received alert of type ${type} for customer ${customerName}`;
     
     if (type === 'BOOKED') {
-      auditActivity = 'MOT Booking Requested';
-      auditDetails = `${customerName} requested MOT booking for ${makeModel} (${registrationNumber}) via portal.`;
+      if (status === 'Approved') {
+        auditActivity = 'MOT Booked';
+        auditDetails = `Confirmed MOT booking approval for ${makeModel} (${registrationNumber})`;
+      } else {
+        auditActivity = 'MOT Booking Requested';
+        auditDetails = `${customerName} requested MOT booking for ${makeModel} (${registrationNumber}) via portal.`;
+      }
     } else if (type === 'SOLD') {
       auditActivity = 'Vehicle Marked Sold';
       auditDetails = `${customerName} reported vehicle sold: ${makeModel} (${registrationNumber})`;

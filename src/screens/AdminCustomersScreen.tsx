@@ -10,6 +10,8 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
@@ -28,7 +30,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function AdminCustomersScreen({ navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, addCustomer, addVehicle, updateVehicleStatus } = useAppValues();
+  const { customers, vehicles, addCustomer, addVehicle, updateVehicleStatus, lookupVehicle } = useAppValues();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
@@ -38,7 +40,19 @@ export default function AdminCustomersScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
+  
+  // States for new customer's vehicle form
+  const [addVehicleNow, setAddVehicleNow] = useState(true);
+  const [newCustRegNo, setNewCustRegNo] = useState('');
+  const [newCustMake, setNewCustMake] = useState('');
+  const [newCustModel, setNewCustModel] = useState('');
+  const [newCustYear, setNewCustYear] = useState('');
+  const [newCustExpiry, setNewCustExpiry] = useState('');
+  const [newCustServiceDate, setNewCustServiceDate] = useState('');
+  const [isSearchingPlate, setIsSearchingPlate] = useState(false);
+
   const [addingVehicleForCustId, setAddingVehicleForCustId] = useState<string | null>(null);
+  const [isBookingMotForCustId, setIsBookingMotForCustId] = useState<string | null>(null);
   const [regNo, setRegNo] = useState('');
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
@@ -68,9 +82,38 @@ export default function AdminCustomersScreen({ navigation }: any) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedCustomerId(expandedCustomerId === id ? null : id);
     setAddingVehicleForCustId(null);
+    setIsBookingMotForCustId(null);
   };
 
-  const handleCreateCustomer = () => {
+  const handleLookupPlate = async () => {
+    const vrnClean = newCustRegNo.trim().toUpperCase();
+    if (!vrnClean) {
+      Alert.alert('Error', 'Please enter a vehicle registration number first');
+      return;
+    }
+    
+    setIsSearchingPlate(true);
+    try {
+      const res = await lookupVehicle(vrnClean);
+      if (res && res.found && res.vehicle) {
+        const v = res.vehicle;
+        setNewCustMake(v.make || '');
+        setNewCustModel(v.model || '');
+        setNewCustYear(v.year ? String(v.year) : '');
+        setNewCustExpiry(v.motExpiryDate || '');
+        Alert.alert('Plate Found', `Autofilled details for ${v.make} ${v.model}`);
+      } else {
+        Alert.alert('Not Found', 'Vehicle details not found. Please enter them manually.');
+      }
+    } catch (err: any) {
+      console.error('[AdminCustomersScreen] lookup error:', err);
+      Alert.alert('Lookup Failed', err.message || 'Failed to fetch details from DVLA registry');
+    } finally {
+      setIsSearchingPlate(false);
+    }
+  };
+
+  const handleCreateCustomer = async () => {
     const firstVal = validateFirstName(firstName);
     if (firstVal.error) {
       Alert.alert('Validation Error', `First Name: ${firstVal.error}`);
@@ -97,21 +140,86 @@ export default function AdminCustomersScreen({ navigation }: any) {
       return;
     }
 
-    addCustomer({
-      firstName: firstName.trim(),
-      lastName: lastName.trim() || undefined,
-      email: email.trim(),
-      mobile: mobile.trim(),
-      address: address.trim() || undefined,
-    });
+    // If adding vehicle details now, validate vehicle inputs first
+    if (addVehicleNow) {
+      if (!newCustRegNo.trim() || !newCustMake.trim() || !newCustModel.trim() || !newCustYear.trim() || !newCustExpiry.trim()) {
+        Alert.alert('Validation Error', 'Please fill in all vehicle details or toggle off "Include Vehicle Details"');
+        return;
+      }
 
-    setFirstName('');
-    setLastName('');
-    setEmail('');
-    setMobile('');
-    setAddress('');
-    setShowAddCustomer(false);
-    Alert.alert('Success', 'Customer profile created successfully!');
+      if (!/^\d{4}$/.test(newCustYear.trim())) {
+        Alert.alert('Validation Error', 'Please enter a valid 4-digit year of manufacture');
+        return;
+      }
+
+      // Validate MOT Expiry Date
+      const expiryVal = validateMotExpiryDate(newCustExpiry);
+      if (expiryVal.error) {
+        Alert.alert('Validation Error', `MOT Expiry: ${expiryVal.error}`);
+        return;
+      }
+
+      // Validate Last Service Date (if provided)
+      if (newCustServiceDate.trim()) {
+        const serviceVal = validateMotExpiryDate(newCustServiceDate);
+        if (serviceVal.error) {
+          Alert.alert('Validation Error', `Last Service Date: ${serviceVal.error}`);
+          return;
+        }
+      }
+    }
+
+    try {
+      // 1. Create Customer
+      const customerId = await addCustomer({
+        firstName: firstName.trim(),
+        lastName: lastName.trim() || '',
+        email: email.trim(),
+        mobile: mobile.trim(),
+        address: address.trim() || undefined,
+        preferredContact: 'SMS',
+      });
+
+      // 2. Create Vehicle if needed
+      if (addVehicleNow && customerId) {
+        await addVehicle({
+          customerId,
+          registrationNumber: newCustRegNo.trim().toUpperCase(),
+          make: newCustMake.trim().toUpperCase(),
+          model: newCustModel.trim().toUpperCase(),
+          year: newCustYear.trim(),
+          motExpiryDate: newCustExpiry.trim(),
+          lastServiceDate: newCustServiceDate.trim() || undefined,
+          status: 'Active',
+        });
+      }
+
+      // 3. Clear inputs
+      setFirstName('');
+      setLastName('');
+      setEmail('');
+      setMobile('');
+      setAddress('');
+      
+      setNewCustRegNo('');
+      setNewCustMake('');
+      setNewCustModel('');
+      setNewCustYear('');
+      setNewCustExpiry('');
+      setNewCustServiceDate('');
+      setAddVehicleNow(true);
+      
+      setShowAddCustomer(false);
+      
+      if (addVehicleNow) {
+        Alert.alert('Success', 'Customer profile and vehicle created successfully!');
+      } else {
+        Alert.alert('Success', 'Customer profile created successfully!');
+      }
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert('Error', error.message || 'Failed to create customer profile.');
+    }
   };
 
   const handleCreateVehicle = (customerId: string) => {
@@ -182,7 +290,12 @@ export default function AdminCustomersScreen({ navigation }: any) {
     const nameMatch = `${c.firstName} ${c.lastName}`.toLowerCase().includes(query);
     const emailMatch = c.email.toLowerCase().includes(query);
     const mobileMatch = c.mobile.toLowerCase().includes(query);
-    const customerVehicles = vehicles.filter((v) => v.customerId === c.id);
+    const customerVehicles = vehicles.filter((v) => 
+      v.customerId && (
+        String(v.customerId).toLowerCase() === String(c.id || '').toLowerCase() ||
+        String(v.customerId).toLowerCase() === String(c._id || '').toLowerCase()
+      )
+    );
     const regMatch = customerVehicles.some((v) =>
       v.registrationNumber.toLowerCase().includes(query)
     );
@@ -229,7 +342,11 @@ export default function AdminCustomersScreen({ navigation }: any) {
             }}
             style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
           >
-            <MaterialCommunityIcons name={showAddCustomer ? 'close' : 'account-plus'} size={24} color="#FFFFFF" />
+            <MaterialCommunityIcons 
+              name={showAddCustomer ? 'close' : 'account-plus'} 
+              size={24} 
+              color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -302,8 +419,132 @@ export default function AdminCustomersScreen({ navigation }: any) {
               />
             </View>
 
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 10, paddingHorizontal: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons name="car" size={20} color={theme.colors.placeholder} style={{ marginRight: 8 }} />
+                <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>Include Vehicle Details?</Text>
+              </View>
+              <Switch
+                value={addVehicleNow}
+                onValueChange={(val) => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setAddVehicleNow(val);
+                }}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor={addVehicleNow ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder}
+              />
+            </View>
+
+            {addVehicleNow && (
+              <View style={{ marginTop: 4, padding: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, backgroundColor: theme.dark ? '#1C1C1E' : '#F2F2F7', marginBottom: 12 }}>
+                <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme.colors.text, marginBottom: 10 }}>Vehicle Details</Text>
+                
+                {/* Plate input & lookup row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', flex: 1, height: 40, backgroundColor: '#FFD300', borderWidth: 1.5, borderColor: '#000000', borderRadius: 6, overflow: 'hidden', alignItems: 'center' }}>
+                    <View style={{ width: 28, height: '100%', backgroundColor: '#0A4E9B', justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 8 }}>UK</Text>
+                    </View>
+                    <TextInput
+                      value={newCustRegNo}
+                      onChangeText={(txt) => setNewCustRegNo(txt.toUpperCase())}
+                      placeholder="REG PLATE"
+                      placeholderTextColor="#808080"
+                      autoCapitalize="characters"
+                      maxLength={8}
+                      style={{ flex: 1, fontSize: 15, fontWeight: 'bold', color: '#000000', textAlign: 'center', height: '100%', padding: 0 }}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleLookupPlate}
+                    disabled={isSearchingPlate}
+                    style={{ marginLeft: 8, height: 40, paddingHorizontal: 12, backgroundColor: theme.colors.secondary, borderRadius: 6, justifyContent: 'center', alignItems: 'center', flexDirection: 'row' }}
+                  >
+                    {isSearchingPlate ? (
+                      <ActivityIndicator size="small" color={theme.dark ? theme.colors.background : '#FFFFFF'} />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="magnify" size={16} color={theme.dark ? theme.colors.background : '#FFFFFF'} style={{ marginRight: 4 }} />
+                        <Text style={{ color: theme.dark ? theme.colors.background : '#FFFFFF', fontWeight: 'bold', fontSize: 12 }}>LOOKUP</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {/* Make and Model fields */}
+                <View style={styles.formRow}>
+                  <View style={styles.formField}>
+                    <Text style={[styles.label, { color: theme.colors.text, fontSize: 11 }]}>Make / Brand</Text>
+                    <TextInput
+                      value={newCustMake}
+                      onChangeText={setNewCustMake}
+                      placeholder="e.g. FORD"
+                      placeholderTextColor={theme.colors.placeholder}
+                      autoCapitalize="characters"
+                      style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    />
+                  </View>
+                  <View style={styles.formField}>
+                    <Text style={[styles.label, { color: theme.colors.text, fontSize: 11 }]}>Model</Text>
+                    <TextInput
+                      value={newCustModel}
+                      onChangeText={setNewCustModel}
+                      placeholder="e.g. FOCUS"
+                      placeholderTextColor={theme.colors.placeholder}
+                      autoCapitalize="characters"
+                      style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    />
+                  </View>
+                </View>
+
+                {/* Year and MOT Expiry */}
+                <View style={styles.formRow}>
+                  <View style={styles.formField}>
+                    <Text style={[styles.label, { color: theme.colors.text, fontSize: 11 }]}>Year (YYYY)</Text>
+                    <TextInput
+                      value={newCustYear}
+                      onChangeText={setNewCustYear}
+                      placeholder="e.g. 2018"
+                      placeholderTextColor={theme.colors.placeholder}
+                      keyboardType="numeric"
+                      maxLength={4}
+                      style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    />
+                  </View>
+                  <View style={styles.formField}>
+                    <Text style={[styles.label, { color: theme.colors.text, fontSize: 11 }]}>MOT Expiry (YYYY-MM-DD)</Text>
+                    <TextInput
+                      value={newCustExpiry}
+                      onChangeText={(text) => setNewCustExpiry(formatDateInput(text))}
+                      placeholder="e.g. 2027-07-12"
+                      placeholderTextColor={theme.colors.placeholder}
+                      keyboardType="numeric"
+                      maxLength={10}
+                      style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    />
+                  </View>
+                </View>
+
+                {/* Last Service Date */}
+                <View style={[styles.formRow, { marginBottom: 0 }]}>
+                  <View style={styles.formField}>
+                    <Text style={[styles.label, { color: theme.colors.text, fontSize: 11 }]}>Last Service (Optional, YYYY-MM-DD)</Text>
+                    <TextInput
+                      value={newCustServiceDate}
+                      onChangeText={(text) => setNewCustServiceDate(formatDateInput(text))}
+                      placeholder="e.g. 2026-07-13"
+                      placeholderTextColor={theme.colors.placeholder}
+                      keyboardType="numeric"
+                      maxLength={10}
+                      style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    />
+                  </View>
+                </View>
+              </View>
+            )}
+
             <TouchableOpacity onPress={handleCreateCustomer} style={[styles.submitButton, { backgroundColor: theme.colors.primary }]}>
-              <Text style={styles.submitButtonText}>Create Customer</Text>
+              <Text style={[styles.submitButtonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Create Customer</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -321,7 +562,12 @@ export default function AdminCustomersScreen({ navigation }: any) {
           </View>
         ) : (
           filteredCustomers.map((c) => {
-            const customerVehicles = vehicles.filter((v) => v.customerId === c.id);
+            const customerVehicles = vehicles.filter((v) => 
+              v.customerId && (
+                String(v.customerId).toLowerCase() === String(c.id || '').toLowerCase() ||
+                String(v.customerId).toLowerCase() === String(c._id || '').toLowerCase()
+              )
+            );
             const isExpanded = expandedCustomerId === c.id;
 
             return (
@@ -366,15 +612,91 @@ export default function AdminCustomersScreen({ navigation }: any) {
                   <View style={styles.expandedContent}>
                     <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
 
-                    <TouchableOpacity
-                      onPress={() => navigation.navigate('CustomerDetail', { customerId: c.id })}
-                      style={[styles.viewDetailsBtn, { backgroundColor: theme.colors.secondary + '12', borderColor: theme.colors.secondary }]}
-                    >
-                      <MaterialCommunityIcons name="account-details-outline" size={18} color={theme.colors.secondary} />
-                      <Text style={{ color: theme.colors.secondary, fontWeight: 'bold', fontSize: 13, marginLeft: 6 }}>
-                        View Full Details & Booking History
-                      </Text>
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', gap: 8, marginVertical: 10 }}>
+                      <TouchableOpacity
+                        onPress={() => navigation.navigate('CustomerDetail', { customerId: c.id })}
+                        style={[styles.viewDetailsBtn, { flex: 1, backgroundColor: theme.colors.secondary + '12', borderColor: theme.colors.secondary, marginVertical: 0 }]}
+                      >
+                        <MaterialCommunityIcons name="account-details-outline" size={18} color={theme.colors.secondary} />
+                        <Text style={{ color: theme.colors.secondary, fontWeight: 'bold', fontSize: 12, marginLeft: 6 }} numberOfLines={1}>
+                          Details & History
+                        </Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        onPress={() => {
+                          const bookableVehicles = customerVehicles.filter(v => v.status === 'Active');
+                          if (bookableVehicles.length === 0) {
+                            Alert.alert('No Approved Vehicles', 'This customer has no active/approved vehicles. Please add or approve a vehicle first.');
+                            return;
+                          }
+                          
+                          // If they only have 1 active vehicle, directly navigate to booking
+                          if (bookableVehicles.length === 1) {
+                            navigation.navigate('AdminBookMot', {
+                              customer: c,
+                              vehicle: bookableVehicles[0]
+                            });
+                            return;
+                          }
+
+                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                          setIsBookingMotForCustId(c.id);
+                        }}
+                        style={[styles.viewDetailsBtn, { flex: 1, backgroundColor: theme.colors.primary + '12', borderColor: theme.colors.primary, marginVertical: 0 }]}
+                      >
+                        <MaterialCommunityIcons name="calendar-plus" size={18} color={theme.colors.primary} />
+                        <Text style={{ color: theme.colors.primary, fontWeight: 'bold', fontSize: 12, marginLeft: 6 }} numberOfLines={1}>
+                          Book MOT
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {isBookingMotForCustId === c.id && (
+                      <View style={[styles.vehicleForm, { backgroundColor: theme.colors.background, borderColor: theme.colors.border, marginBottom: 12 }]}>
+                        <Text style={{ fontWeight: 'bold', fontSize: 13, color: theme.colors.text, marginBottom: 10 }}>
+                          Select Vehicle for MOT Booking:
+                        </Text>
+                        {customerVehicles.filter(v => v.status === 'Active').map(v => (
+                          <TouchableOpacity
+                            key={v.id}
+                            onPress={() => {
+                              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                              setIsBookingMotForCustId(null);
+                              navigation.navigate('AdminBookMot', {
+                                customer: c,
+                                vehicle: v
+                              });
+                            }}
+                            style={{
+                              flexDirection: 'row',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              paddingVertical: 10,
+                              borderBottomWidth: 0.5,
+                              borderColor: theme.colors.border
+                            }}
+                          >
+                            <View style={styles.recentPlate}>
+                              <Text style={styles.recentPlateText}>{v.registrationNumber}</Text>
+                            </View>
+                            <Text style={{ color: theme.colors.text, fontWeight: '500', fontSize: 12, flex: 1, marginLeft: 10 }}>
+                              {v.make} {v.model}
+                            </Text>
+                            <MaterialCommunityIcons name="chevron-right" size={18} color={theme.colors.placeholder} />
+                          </TouchableOpacity>
+                        ))}
+                        <TouchableOpacity
+                          onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setIsBookingMotForCustId(null);
+                          }}
+                          style={{ marginTop: 10, alignItems: 'center', paddingVertical: 4 }}
+                        >
+                          <Text style={{ color: theme.colors.error, fontWeight: 'bold', fontSize: 13 }}>Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                     
                     {c.address && (
                       <View style={styles.addressBox}>
@@ -486,7 +808,7 @@ export default function AdminCustomersScreen({ navigation }: any) {
                           onPress={() => handleCreateVehicle(c.id)}
                           style={[styles.vehicleSubmitBtn, { backgroundColor: theme.colors.secondary }]}
                         >
-                          <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>Save Vehicle</Text>
+                          <Text style={{ color: theme.dark ? theme.colors.background : '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>Save Vehicle</Text>
                         </TouchableOpacity>
                       </View>
                     )}

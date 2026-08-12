@@ -11,6 +11,13 @@ export default function AdminDashboardScreen({ navigation }: any) {
   const { customers, vehicles, alerts, audits, refreshData } = useAppValues();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  React.useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshData();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   const getDaysDiff = (dateStr: string) => {
     const today = new Date('2026-07-22');
     const expiry = new Date(dateStr);
@@ -41,7 +48,10 @@ export default function AdminDashboardScreen({ navigation }: any) {
   const bookedMotsCount = alerts.filter(a => a.type === 'BOOKED').length;
 
   const sendManualReminder = (reg: string, customerId: string, days: number) => {
-    const customer = customers.find(c => c.id === customerId);
+    const customer = customers.find(c => 
+      String(c.id).toLowerCase() === String(customerId || '').toLowerCase() ||
+      String(c._id).toLowerCase() === String(customerId || '').toLowerCase()
+    );
     if (!customer) return;
 
     Alert.alert(
@@ -172,7 +182,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
           <StatCard 
             icon="calendar-check-outline" 
             value={bookedMotsCount} 
-            label="Booked MOTs" 
+            label="Booked MOT's" 
             color="#3B82F6"
             onPress={() => navigation.navigate('BookedMots')}
           />
@@ -211,7 +221,10 @@ export default function AdminDashboardScreen({ navigation }: any) {
           </View>
         ) : (
           [...dueIn7Days, ...dueIn30Days].map((v) => {
-            const customer = customers.find(c => c.id === v.customerId);
+            const customer = customers.find(c => 
+              String(c.id).toLowerCase() === String(v.customerId || '').toLowerCase() ||
+              String(c._id).toLowerCase() === String(v.customerId || '').toLowerCase()
+            );
             const daysLeft = getDaysDiff(v.motExpiryDate);
             const isCritical = daysLeft <= 7;
             

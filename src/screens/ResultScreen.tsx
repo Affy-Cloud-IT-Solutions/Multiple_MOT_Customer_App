@@ -168,11 +168,16 @@ export default function ResultScreen({ route, navigation }: any) {
           ]}
         >
           {saving ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
           ) : (
             <View style={styles.saveButtonContent}>
-              <MaterialCommunityIcons name="bookmark-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text style={styles.saveButtonText}>Save to History</Text>
+              <MaterialCommunityIcons 
+                name="bookmark-outline" 
+                size={20} 
+                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+                style={{ marginRight: 8 }} 
+              />
+              <Text style={[styles.saveButtonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Save to History</Text>
             </View>
           )}
         </TouchableOpacity>

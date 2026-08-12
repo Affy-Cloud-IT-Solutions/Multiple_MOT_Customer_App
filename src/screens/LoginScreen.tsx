@@ -193,9 +193,9 @@ export default function LoginScreen({ navigation }: any) {
               ]}
             >
               {loading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
               ) : (
-                <Text style={styles.buttonText}>Login</Text>
+                <Text style={[styles.buttonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Login</Text>
               )}
             </TouchableOpacity>
           </View>

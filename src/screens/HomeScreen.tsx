@@ -173,9 +173,9 @@ export default function HomeScreen({ navigation }: any) {
             ]}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
             ) : (
-              <Text style={styles.searchButtonText}>Check MOT Status</Text>
+              <Text style={[styles.searchButtonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Check MOT Status</Text>
             )}
           </TouchableOpacity>
         </View>

@@ -7,6 +7,7 @@ import BookingScreen from '../screens/BookingScreen';
 import BookedMotsScreen from '../screens/BookedMotsScreen';
 import StaffListScreen from '../screens/StaffListScreen';
 import CustomerDetailScreen from '../screens/CustomerDetailScreen';
+import AdminBookMotScreen from '../screens/AdminBookMotScreen';
 import MainTabNavigator from './MainTabNavigator';
 import { useAppTheme } from '../context/ThemeContext';
 
@@ -57,6 +58,11 @@ export default function RootNavigator() {
       <Stack.Screen
         name="BookedMots"
         component={BookedMotsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="AdminBookMot"
+        component={AdminBookMotScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
