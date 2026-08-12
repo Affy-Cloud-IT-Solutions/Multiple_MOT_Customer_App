@@ -223,11 +223,105 @@ function lookupDVLA(req, res) {
   res.json({ source: 'DVLA API (GENERATED MOCK)', found: true, vehicle: genericProfile });
 }
 
+// Curated list of popular makes in the UK
+const POPULAR_MAKES = [
+  'ALFA ROMEO', 'ASTON MARTIN', 'AUDI', 'BENTLEY', 'BMW', 'CADILLAC', 'CHEVROLET',
+  'CHRYSLER', 'CITROEN', 'DACIA', 'DODGE', 'FERRARI', 'FIAT', 'FORD', 'GMC',
+  'HONDA', 'HYUNDAI', 'INFINITI', 'JAGUAR', 'JEEP', 'KIA', 'LAMBORGHINI', 'LAND ROVER',
+  'LEXUS', 'LOTUS', 'MASERATI', 'MAZDA', 'MCLAREN', 'MERCEDES-BENZ', 'MG', 'MINI',
+  'MITSUBISHI', 'NISSAN', 'PEUGEOT', 'PORSCHE', 'RAM', 'RENAULT', 'ROLLS-ROYCE',
+  'SEAT', 'SKODA', 'SUBARU', 'SUZUKI', 'TESLA', 'TOYOTA', 'VAUXHALL', 'VOLKSWAGEN', 'VOLVO'
+];
+
+async function getMakes(req, res) {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const search = (req.query.search || '').trim().toUpperCase();
+
+    let filtered = POPULAR_MAKES;
+    if (search) {
+      filtered = POPULAR_MAKES.filter(m => m.includes(search));
+    }
+
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / limit);
+    const start = (page - 1) * limit;
+    const paginated = filtered.slice(start, start + limit);
+
+    res.json({
+      makes: paginated,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function getModels(req, res) {
+  try {
+    const make = (req.query.make || '').trim();
+    if (!make) {
+      return res.status(400).json({ error: 'Make query parameter is required.' });
+    }
+
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const search = (req.query.search || '').trim().toLowerCase();
+
+    // Call external NHTSA API
+    const url = `https://vpic.nhtsa.dot.gov/api/vehicles/getmodelsformake/${encodeURIComponent(make)}?format=json`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch models from NHTSA API: ${response.statusText}`);
+    }
+    const data = await response.json();
+    
+    let models = [];
+    if (data && data.Results) {
+      // Map and extract unique model names, and clean them up
+      models = data.Results.map(r => r.Model_Name ? r.Model_Name.trim().toUpperCase() : '');
+      models = models.filter(m => m !== '');
+      // Remove duplicates
+      models = [...new Set(models)].sort();
+    }
+
+    if (search) {
+      models = models.filter(m => m.toLowerCase().includes(search));
+    }
+
+    const total = models.length;
+    const totalPages = Math.ceil(total / limit);
+    const start = (page - 1) * limit;
+    const paginated = models.slice(start, start + limit);
+
+    res.json({
+      models: paginated,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
   getAllVehicles,
   getVehicleById,
   createVehicle,
   updateVehicle,
   deleteVehicle,
-  lookupDVLA
+  lookupDVLA,
+  getMakes,
+  getModels
 };

@@ -80,9 +80,45 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 // Automatically set base API URL based on Platform
-export const BASE_URL = Platform.OS === 'android' 
-  ? 'http://localhost:5000/api'  // ✅ Changed to localhost to use adb reverse tunnel
-  : 'http://localhost:5000/api';
+// export const BASE_URL = Platform.OS === 'android' 
+//   ? 'http://localhost:5000/api'  // ✅ Changed to localhost to use adb reverse tunnel
+//   : 'http://localhost:5000/api';
+
+export const BASE_URL = 'http://192.168.1.57:5000/api';
+
+const decodeToken = (tokenStr: string | null) => {
+  if (!tokenStr) return null;
+  try {
+    const payload = tokenStr.split('.')[1];
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    let decoded = '';
+    if (typeof atob === 'function') {
+      decoded = atob(base64);
+    } else {
+      const raw = base64.replace(/[^A-Za-z0-9+/]/g, '');
+      let output = '';
+      let i = 0;
+      while (i < raw.length) {
+        const enc1 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(raw.charAt(i++));
+        const enc2 = enc1 !== -1 ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(raw.charAt(i++)) : -1;
+        const enc3 = enc2 !== -1 ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(raw.charAt(i++)) : -1;
+        const enc4 = enc3 !== -1 ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(raw.charAt(i++)) : -1;
+        if (enc1 === -1 || enc2 === -1) break;
+        const chr1 = (enc1 << 2) | (enc2 >> 4);
+        const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+        const chr3 = ((enc3 & 3) << 6) | enc4;
+        output += String.fromCharCode(chr1);
+        if (enc3 !== 64 && enc3 !== -1) output += String.fromCharCode(chr2);
+        if (enc4 !== 64 && enc4 !== -1) output += String.fromCharCode(chr3);
+      }
+      decoded = output;
+    }
+    return JSON.parse(decoded);
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return null;
+  }
+};
  
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -112,28 +148,58 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const headers = {
         'Authorization': `Bearer ${currentToken}`
       };
-      const [customersRes, vehiclesRes, auditsRes, alertsRes] = await Promise.all([
-        fetch(`${BASE_URL}/customers`, { headers }),
-        fetch(`${BASE_URL}/vehicles`, { headers }),
-        fetch(`${BASE_URL}/audit`, { headers }),
-        fetch(`${BASE_URL}/alerts`, { headers }),
-      ]);
 
-      if (customersRes.ok) {
-        const customersData = await customersRes.json();
-        setCustomers(customersData);
-      }
-      if (vehiclesRes.ok) {
-        const vehiclesData = await vehiclesRes.json();
-        setVehicles(vehiclesData);
-      }
-      if (auditsRes.ok) {
-        const auditsData = await auditsRes.json();
-        setAudits(auditsData);
-      }
-      if (alertsRes.ok) {
-        const alertsData = await alertsRes.json();
-        setAlerts(alertsData);
+      const decoded = decodeToken(currentToken);
+      const role = decoded?.role || 'customer';
+      const customerId = decoded?.customerId;
+
+      console.log(`[DATA CONTEXT] Fetching data for role: ${role}`);
+
+      if (role === 'admin' || role === 'staff') {
+        const [customersRes, vehiclesRes, auditsRes, alertsRes] = await Promise.all([
+          fetch(`${BASE_URL}/customers`, { headers }),
+          fetch(`${BASE_URL}/vehicles`, { headers }),
+          fetch(`${BASE_URL}/audit`, { headers }),
+          fetch(`${BASE_URL}/alerts`, { headers }),
+        ]);
+
+        if (customersRes.ok) {
+          const customersData = await customersRes.json();
+          setCustomers(customersData);
+        }
+        if (vehiclesRes.ok) {
+          const vehiclesData = await vehiclesRes.json();
+          setVehicles(vehiclesData);
+        }
+        if (auditsRes.ok) {
+          const auditsData = await auditsRes.json();
+          setAudits(auditsData);
+        }
+        if (alertsRes.ok) {
+          const alertsData = await alertsRes.json();
+          setAlerts(alertsData);
+        }
+      } else {
+        // Customer: only fetch their own customer profile (which includes vehicles) and their alerts
+        const promises = [
+          fetch(`${BASE_URL}/alerts`, { headers })
+        ];
+        if (customerId) {
+          promises.push(fetch(`${BASE_URL}/customers/${customerId}`, { headers }));
+        }
+
+        const [alertsRes, customerRes] = await Promise.all(promises);
+
+        if (alertsRes && alertsRes.ok) {
+          const alertsData = await alertsRes.json();
+          setAlerts(alertsData);
+        }
+        if (customerRes && customerRes.ok) {
+          const customerData = await customerRes.json();
+          setCustomers([customerData]);
+          setVehicles(customerData.vehicles || []);
+        }
+        setAudits([]); // Clear audits for customer
       }
     } catch (error) {
       console.error('[DATA CONTEXT] Error fetching backend data:', error);
@@ -144,10 +210,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setTokenState(newToken);
     if (newToken) {
       AsyncStorage.setItem('user_token', newToken).catch(err => console.error(err));
-      refreshData(newToken);
     } else {
       AsyncStorage.removeItem('user_token').catch(err => console.error(err));
       AsyncStorage.removeItem('user_profile').catch(err => console.error(err));
+      setCustomers([]);
+      setVehicles([]);
+      setAudits([]);
+      setAlerts([]);
     }
   };
 
@@ -325,6 +394,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const fetchStaffList = async (): Promise<any[]> => {
+    const decoded = decodeToken(token);
+    const role = decoded?.role || user?.role || 'customer';
+    if (role !== 'admin') {
+      console.log('[DATA CONTEXT] Skipping staff list fetch: Insufficient permissions (role is not admin).');
+      return [];
+    }
+
     try {
       const response = await fetch(`${BASE_URL}/auth/staff`, {
         method: 'GET',

@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
-import { useAppValues } from '../context/DataContext';
+import { useAppValues, BASE_URL } from '../context/DataContext';
+import SearchableDropdown from '../components/SearchableDropdown';
 import {
   validateFirstName,
   validateLastName,
@@ -30,7 +31,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function AdminCustomersScreen({ navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, addCustomer, addVehicle, updateVehicleStatus, lookupVehicle } = useAppValues();
+  const { customers, vehicles, addCustomer, addVehicle, updateVehicleStatus, lookupVehicle, token } = useAppValues();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
@@ -59,6 +60,45 @@ export default function AdminCustomersScreen({ navigation }: any) {
   const [year, setYear] = useState('');
   const [expiry, setExpiry] = useState('');
   const [serviceDate, setServiceDate] = useState('');
+
+  const fetchMakesList = async (search: string, pageNum: number) => {
+    try {
+      const response = await fetch(`${BASE_URL}/vehicles/makes?page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      return {
+        items: data.makes || [],
+        hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
+      };
+    } catch (e) {
+      console.error(e);
+      return { items: [], hasMore: false };
+    }
+  };
+
+  const fetchModelsListForMake = (makeVal: string) => async (search: string, pageNum: number) => {
+    if (!makeVal) return { items: [], hasMore: false };
+    try {
+      const response = await fetch(`${BASE_URL}/vehicles/models?make=${encodeURIComponent(makeVal)}&page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      return {
+        items: data.models || [],
+        hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
+      };
+    } catch (e) {
+      console.error(e);
+      return { items: [], hasMore: false };
+    }
+  };
 
   const formatDateInput = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '');
@@ -475,24 +515,24 @@ export default function AdminCustomersScreen({ navigation }: any) {
                 <View style={styles.formRow}>
                   <View style={styles.formField}>
                     <Text style={[styles.label, { color: theme.colors.text, fontSize: 11 }]}>Make / Brand</Text>
-                    <TextInput
-                      value={newCustMake}
-                      onChangeText={setNewCustMake}
-                      placeholder="e.g. FORD"
-                      placeholderTextColor={theme.colors.placeholder}
-                      autoCapitalize="characters"
-                      style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    <SearchableDropdown
+                      placeholder="Make"
+                      selectedValue={newCustMake}
+                      onValueChange={(val) => {
+                        setNewCustMake(val);
+                        setNewCustModel('');
+                      }}
+                      fetchItems={fetchMakesList}
                     />
                   </View>
                   <View style={styles.formField}>
                     <Text style={[styles.label, { color: theme.colors.text, fontSize: 11 }]}>Model</Text>
-                    <TextInput
-                      value={newCustModel}
-                      onChangeText={setNewCustModel}
-                      placeholder="e.g. FOCUS"
-                      placeholderTextColor={theme.colors.placeholder}
-                      autoCapitalize="characters"
-                      style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    <SearchableDropdown
+                      placeholder="Model"
+                      selectedValue={newCustModel}
+                      onValueChange={setNewCustModel}
+                      fetchItems={fetchModelsListForMake(newCustMake)}
+                      disabled={!newCustMake}
                     />
                   </View>
                 </View>
@@ -744,26 +784,26 @@ export default function AdminCustomersScreen({ navigation }: any) {
                             />
                           </View>
                           <View style={styles.formField}>
-                            <TextInput
-                              value={make}
-                              onChangeText={setMake}
-                              placeholder="Make / Company"
-                              placeholderTextColor={theme.colors.placeholder}
-                              autoCapitalize="characters"
-                              style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                            <SearchableDropdown
+                              placeholder="Make"
+                              selectedValue={make}
+                              onValueChange={(val) => {
+                                setMake(val);
+                                setModel('');
+                              }}
+                              fetchItems={fetchMakesList}
                             />
                           </View>
                         </View>
 
                         <View style={styles.formRow}>
                           <View style={styles.formField}>
-                            <TextInput
-                              value={model}
-                              onChangeText={setModel}
+                            <SearchableDropdown
                               placeholder="Model"
-                              placeholderTextColor={theme.colors.placeholder}
-                              autoCapitalize="characters"
-                              style={[styles.subFormInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                              selectedValue={model}
+                              onValueChange={setModel}
+                              fetchItems={fetchModelsListForMake(make)}
+                              disabled={!make}
                             />
                           </View>
                           <View style={styles.formField}>

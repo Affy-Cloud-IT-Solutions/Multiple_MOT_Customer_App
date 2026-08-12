@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
-import { useAppValues } from '../context/DataContext';
+import { useAppValues, BASE_URL } from '../context/DataContext';
+import SearchableDropdown from '../components/SearchableDropdown';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { validateMotExpiryDate } from '../utils/validationUtils';
 
@@ -25,7 +26,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function CustomerPortalScreen({ route, navigation }: any) {
   const { isDarkMode, theme, toggleTheme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData, setToken, setUser } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData, setToken, setUser, token } = useAppValues();
 
   // Find active customer
   const customerId = route?.params?.customerId || 'c1';
@@ -63,6 +64,45 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const [year, setYear] = useState('');
   const [expiry, setExpiry] = useState('');
   const [expandedBookingReg, setExpandedBookingReg] = useState<string | null>(null);
+
+  const fetchMakesList = async (search: string, pageNum: number) => {
+    try {
+      const response = await fetch(`${BASE_URL}/vehicles/makes?page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      return {
+        items: data.makes || [],
+        hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
+      };
+    } catch (e) {
+      console.error(e);
+      return { items: [], hasMore: false };
+    }
+  };
+
+  const fetchModelsListForMake = (makeVal: string) => async (search: string, pageNum: number) => {
+    if (!makeVal) return { items: [], hasMore: false };
+    try {
+      const response = await fetch(`${BASE_URL}/vehicles/models?make=${encodeURIComponent(makeVal)}&page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      return {
+        items: data.models || [],
+        hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
+      };
+    } catch (e) {
+      console.error(e);
+      return { items: [], hasMore: false };
+    }
+  };
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile'>('home');
 
   const getBookingSlot = (makeModel: string) => {
@@ -253,24 +293,24 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={[styles.label, { color: theme.colors.text }]}>Make</Text>
-                    <TextInput
-                      value={make}
-                      onChangeText={setMake}
-                      placeholder="E.g. FORD"
-                      placeholderTextColor={theme.colors.placeholder}
-                      autoCapitalize="characters"
-                      style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    <SearchableDropdown
+                      placeholder="Make"
+                      selectedValue={make}
+                      onValueChange={(val) => {
+                        setMake(val);
+                        setModel('');
+                      }}
+                      fetchItems={fetchMakesList}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.label, { color: theme.colors.text }]}>Model</Text>
-                    <TextInput
-                      value={model}
-                      onChangeText={setModel}
-                      placeholder="E.g. FOCUS"
-                      placeholderTextColor={theme.colors.placeholder}
-                      autoCapitalize="characters"
-                      style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
+                    <SearchableDropdown
+                      placeholder="Model"
+                      selectedValue={model}
+                      onValueChange={setModel}
+                      fetchItems={fetchModelsListForMake(make)}
+                      disabled={!make}
                     />
                   </View>
                 </View>

@@ -196,10 +196,31 @@ async function deleteStaff(req, res) {
   }
 }
 
+async function getProfile(req, res) {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User profile not found.' });
+    }
+    
+    res.json({
+      id: user._id.toString(),
+      name: user.username,
+      email: user.email,
+      role: user.role,
+      ...(user.customerId && { customerId: user.customerId.toString() })
+    });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: error.message || 'Internal server error retrieving profile.' });
+  }
+}
+
 module.exports = {
   login,
   signup,
   createStaff,
   getStaffList,
-  deleteStaff
+  deleteStaff,
+  getProfile
 };

@@ -6,6 +6,9 @@ const authMiddleware = require('../middleware/auth');
 // DVLA lookup (accessible by authenticated users, e.g. when checking on main dashboard)
 router.get('/dvla/:vrn', authMiddleware, vehicleController.lookupDVLA);
 
+router.get('/makes', authMiddleware, vehicleController.getMakes);
+router.get('/models', authMiddleware, vehicleController.getModels);
+
 router.get('/', authMiddleware, vehicleController.getAllVehicles);
 router.get('/:id', authMiddleware, vehicleController.getVehicleById);
 router.post('/', authMiddleware, vehicleController.createVehicle);
