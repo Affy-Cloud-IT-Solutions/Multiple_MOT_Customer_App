@@ -62,7 +62,7 @@ async function verifyPortalToken(req, res) {
 // Execute self-service responses from token link actions
 async function executeAction(req, res) {
   try {
-    const { token, actionType, vehicleId, registrationNumber, make, model, motExpiryDate } = req.body;
+    const { token, actionType, vehicleId, registrationNumber, make, model, year, motExpiryDate } = req.body;
 
     if (!token || !actionType) {
       return res.status(400).json({ error: 'Token and actionType are required.' });
@@ -149,6 +149,8 @@ async function executeAction(req, res) {
         customerId: customer._id,
         registrationNumber: regUpper,
         makeModel,
+        year: year ? parseInt(year, 10) : undefined,
+        motExpiryDate: motExpiryDate ? new Date(motExpiryDate) : undefined,
         status: 'Pending'
       });
 

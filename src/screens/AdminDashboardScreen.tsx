@@ -247,7 +247,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
                         <Text style={styles.plateText}>{v.registrationNumber}</Text>
                       </View>
                       <Text style={[styles.vehicleName, { color: theme.colors.text }]}>
-                        {v.make} {v.model}
+                        {v.make} {v.model} {v.year ? `(${v.year})` : ''}
                       </Text>
                     </View>
                     <View style={[styles.daysBadge, { backgroundColor: isCritical ? '#EF4444' : '#F59E0B' }]}>

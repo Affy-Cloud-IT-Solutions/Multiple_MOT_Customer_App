@@ -213,7 +213,7 @@ export default function AdminBookMotScreen({ route, navigation }: any) {
             </View>
             <View style={{ marginLeft: 12 }}>
               <Text style={[styles.vehicleMakeModel, { color: theme.colors.text }]}>
-                {vehicle.make} {vehicle.model}
+                {vehicle.make} {vehicle.model} {vehicle.year ? `(${vehicle.year})` : ''}
               </Text>
               <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
                 Booking appointment directly to Confirmed status

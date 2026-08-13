@@ -29,6 +29,12 @@ const AlertSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
+    year: {
+        type: Number
+    },
+    motExpiryDate: {
+        type: Date
+    },
     status: {
         type: String,
         enum: ['Pending', 'Approved', 'Acknowledged', 'Rejected'],

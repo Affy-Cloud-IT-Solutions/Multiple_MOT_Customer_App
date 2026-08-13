@@ -721,7 +721,7 @@ export default function AdminCustomersScreen({ navigation }: any) {
                               <Text style={styles.recentPlateText}>{v.registrationNumber}</Text>
                             </View>
                             <Text style={{ color: theme.colors.text, fontWeight: '500', fontSize: 12, flex: 1, marginLeft: 10 }}>
-                              {v.make} {v.model}
+                              {v.make} {v.model} {v.year ? `(${v.year})` : ''}
                             </Text>
                             <MaterialCommunityIcons name="chevron-right" size={18} color={theme.colors.placeholder} />
                           </TouchableOpacity>

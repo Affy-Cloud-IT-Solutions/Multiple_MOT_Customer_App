@@ -117,6 +117,8 @@ async function approveAlert(req, res) {
         existingVehicle.customerId = alert.customerId;
         existingVehicle.make = make.toUpperCase();
         existingVehicle.model = model.toUpperCase();
+        if (alert.year) existingVehicle.year = alert.year;
+        if (alert.motExpiryDate) existingVehicle.motExpiryDate = alert.motExpiryDate;
         existingVehicle.status = 'Active';
         await existingVehicle.save();
 
@@ -131,8 +133,8 @@ async function approveAlert(req, res) {
           registrationNumber: alert.registrationNumber,
           make: make.toUpperCase(),
           model: model.toUpperCase(),
-          year: 2018,
-          motExpiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // Default 1 year expiry
+          year: alert.year || 2018,
+          motExpiryDate: alert.motExpiryDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // Default 1 year expiry
           status: 'Active'
         });
 

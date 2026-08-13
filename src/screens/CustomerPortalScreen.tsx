@@ -407,7 +407,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                         <MaterialCommunityIcons name="car-sports" size={20} color={theme.colors.secondary} style={{ marginRight: 8 }} />
                         <Text style={[styles.makeModelText, { color: theme.colors.text, flex: 1 }]} numberOfLines={1}>
-                          {v.make} {v.model}
+                          {v.make} {v.model} {v.year ? `(${v.year})` : ''}
                         </Text>
                       </View>
                       {v.status === 'Pending' && (
