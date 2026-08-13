@@ -117,7 +117,7 @@ export default function BookedMotsScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.navigate('Main', { screen: 'Dashboard' })} style={styles.backBtn}>
           <MaterialCommunityIcons name="arrow-left" size={22} color={theme.colors.text} />
           {/* <Text style={[styles.backBtnText, { color: theme.colors.text }]}>Back</Text> */}
-        </TouchableOpacity>
+        </TouchableOpacity> 
         <Text style={[styles.navTitle, { color: theme.colors.text }]}>Booked MOT's</Text>
         <View style={styles.countBadge}>
           <Text style={[styles.countText, { color: theme.colors.secondary }]}>{bookedMots.length}</Text>
