@@ -93,7 +93,7 @@ export default function CustomerPortal() {
     v.customerId && (
       String(v.customerId).toLowerCase() === String(customer?.id || '').toLowerCase() ||
       String(v.customerId).toLowerCase() === String(customer?._id || '').toLowerCase()
-    ) && v.status !== 'Sold' && v.status !== 'Scrapped'
+    ) && v.status !== 'Scrapped'
   );
 
   const customerAlerts = alerts.filter((a) => 
@@ -455,53 +455,97 @@ export default function CustomerPortal() {
                 {customerVehicles.map((v) => {
                   const isPending = v.status === 'Pending';
                   const isRejected = v.status === 'Rejected';
+                  const isSold = v.status === 'Sold';
+                  const showBlurOverlay = isSold || isRejected;
 
                   return (
-                    <div key={v.id} className="card card-hover" style={styles.vehicleCard}>
-                      <div style={styles.vehicleHeader}>
-                        <div className="uk-plate">{v.registrationNumber}</div>
-                        <span className={`badge badge-${v.status.toLowerCase()}`}>{v.status}</span>
-                      </div>
-
-                      <h4 style={styles.vehicleTitle}>{v.make} {v.model} ({v.year})</h4>
-                      
-                      <div style={styles.vehicleDetails}>
-                        <div style={styles.detailsRow}>
-                          <span style={styles.detailsLabel}>MOT Expiry Date:</span>
-                          <span style={styles.detailsValue}>{formatShortDate(v.motExpiryDate)}</span>
+                    <div key={v.id} className="card card-hover" style={{ ...styles.vehicleCard, position: 'relative', overflow: 'hidden' }}>
+                      {/* Blurred card content */}
+                      <div style={showBlurOverlay ? { filter: 'blur(3px)', opacity: 0.5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', height: '100%' } : { display: 'flex', flexDirection: 'column', height: '100%' }}>
+                        <div style={styles.vehicleHeader}>
+                          <div className="uk-plate">{v.registrationNumber}</div>
+                          <span className={`badge badge-${v.status.toLowerCase()}`}>{v.status}</span>
                         </div>
-                        {v.lastServiceDate && (
+
+                        <h4 style={styles.vehicleTitle}>{v.make} {v.model} ({v.year})</h4>
+                        
+                        <div style={styles.vehicleDetails}>
                           <div style={styles.detailsRow}>
-                            <span style={styles.detailsLabel}>Last Serviced:</span>
-                            <span style={styles.detailsValue}>{formatShortDate(v.lastServiceDate)}</span>
+                            <span style={styles.detailsLabel}>MOT Expiry Date:</span>
+                            <span style={styles.detailsValue}>{formatShortDate(v.motExpiryDate)}</span>
                           </div>
-                        )}
-                        {isRejected && v.rejectionReason && (
-                          <div style={styles.rejectionNotice}>
-                            <strong>Rejection Reason:</strong> {v.rejectionReason}
-                          </div>
-                        )}
+                          {v.lastServiceDate && (
+                            <div style={styles.detailsRow}>
+                              <span style={styles.detailsLabel}>Last Serviced:</span>
+                              <span style={styles.detailsValue}>{formatShortDate(v.lastServiceDate)}</span>
+                            </div>
+                          )}
+                          {isRejected && v.rejectionReason && (
+                            <div style={styles.rejectionNotice}>
+                              <strong>Rejection Reason:</strong> {v.rejectionReason}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={styles.vehicleActions}>
+                          <button
+                            disabled={true}
+                            onClick={() => handleMarkAsSold(v.id, v.registrationNumber, `${v.make} ${v.model}`)}
+                            className="btn btn-outline btn-disabled"
+                            style={{ padding: '0.45rem', flex: 1, borderColor: 'var(--error)', color: 'var(--error)' }}
+                            title="Report Sold"
+                          >
+                            <Trash2 size={16} /> Mark Sold
+                          </button>
+
+                          <button
+                            disabled={true}
+                            onClick={() => navigate('/customer/book', { state: { vehicle: v } })}
+                            className="btn btn-secondary btn-disabled"
+                            style={{ padding: '0.45rem 1rem', flex: 2 }}
+                          >
+                            <Calendar size={16} /> Book MOT
+                          </button>
+                        </div>
                       </div>
 
-                      <div style={styles.vehicleActions}>
-                        <button
-                          onClick={() => handleMarkAsSold(v.id, v.registrationNumber, `${v.make} ${v.model}`)}
-                          className="btn btn-outline"
-                          style={{ padding: '0.45rem', flex: 1, borderColor: 'var(--error)', color: 'var(--error)' }}
-                          title="Report Sold"
-                        >
-                          <Trash2 size={16} /> Mark Sold
-                        </button>
+                      {/* Overlays for Sold/Rejected */}
+                      {showBlurOverlay && (
+                        <>
+                          {/* Top Right Status Badge */}
+                          <div style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', zIndex: 10 }}>
+                            <span className={`badge badge-${v.status.toLowerCase()}`} style={{ fontWeight: 'bold' }}>{v.status}</span>
+                          </div>
 
-                        <button
-                          disabled={isPending || isRejected}
-                          onClick={() => navigate('/customer/book', { state: { vehicle: v } })}
-                          className={`btn btn-secondary ${isPending || isRejected ? 'btn-disabled' : ''}`}
-                          style={{ padding: '0.45rem 1rem', flex: 2 }}
-                        >
-                          <Calendar size={16} /> Book MOT
-                        </button>
-                      </div>
+                          {/* Center highlighted text */}
+                          <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 9,
+                          }}>
+                            <span style={{
+                              fontSize: '1.6rem',
+                              fontWeight: '900',
+                              letterSpacing: '3px',
+                              color: isSold ? '#EF4444' : '#DC2626',
+                              backgroundColor: isSold ? 'rgba(239, 68, 68, 0.12)' : 'rgba(220, 38, 38, 0.12)',
+                              border: `2px solid ${isSold ? '#EF4444' : '#DC2626'}`,
+                              padding: '0.5rem 1.75rem',
+                              borderRadius: '8px',
+                              textTransform: 'uppercase',
+                              boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+                            }}>
+                              {v.status}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}

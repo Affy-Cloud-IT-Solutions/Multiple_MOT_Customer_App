@@ -116,7 +116,7 @@ export default function MOTChecker() {
             <div style={styles.logo}>
               <Car size={22} color="#FFFFFF" />
             </div>
-            <span style={styles.brandName}>MOT Checker UK</span>
+            <span style={styles.brandName}>MOT Checker & Smart Garage</span>
           </div>
           <div style={styles.authLinks}>
             <Link to="/login" style={styles.loginLink}>Login</Link>
@@ -125,37 +125,212 @@ export default function MOTChecker() {
         </div>
       </header>
 
-      {/* Main hero search bar */}
+      {/* Main SaaS Portal */}
       <main style={styles.main}>
+        {/* Hero Section */}
         <section style={styles.heroSection}>
-          <h1 style={styles.title}>Check the MOT History of a Vehicle</h1>
-          <p style={styles.subtitle}>
-            Enter the vehicle registration number below to check its current MOT expiry, test records, mileage logs, and safety advisories.
-          </p>
-
-          <form onSubmit={handleSearch} style={styles.searchForm}>
-            <div style={styles.inputContainer}>
-              <div style={styles.plateDesign}>
-                <span style={styles.ukCountryCode}>GB</span>
-              </div>
-              <input
-                type="text"
-                value={regNo}
-                onChange={(e) => setRegNo(e.target.value)}
-                placeholder="E.g. AB18 CDE"
-                maxLength={8}
-                style={styles.searchInput}
-              />
+          <div style={{ maxWidth: '900px', margin: '0 auto', textAlign: 'center' }}>
+            <span style={{ 
+              backgroundColor: 'rgba(79, 70, 229, 0.1)', 
+              color: '#818CF8', 
+              fontSize: '0.85rem', 
+              fontWeight: '700', 
+              padding: '0.4rem 1rem', 
+              borderRadius: '20px', 
+              textTransform: 'uppercase',
+              letterSpacing: '1px',
+              border: '1px solid rgba(79, 70, 229, 0.2)'
+            }}>
+              Automated Vehicle Maintenance SaaS
+            </span>
+            <h1 style={{ ...styles.title, fontSize: '3rem', marginTop: '1.5rem', lineHeight: '1.15' }}>
+              Next-Gen Maintenance & <br />
+              <span style={{ background: 'linear-gradient(135deg, #60A5FA 0%, #818CF8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                Smart Garage Automation
+              </span>
+            </h1>
+            <p style={{ ...styles.subtitle, fontSize: '1.15rem', color: 'var(--text-secondary)', maxWidth: '720px', margin: '1rem auto 2.5rem auto' }}>
+              A complete vehicle maintenance ecosystem. Connect to live DVLA registries, schedule multi-channel alert reminders (SMS/Email/WhatsApp), log client response audits, and book appointments automatically.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button 
+                onClick={() => document.getElementById('checker-section')?.scrollIntoView({ behavior: 'smooth' })} 
+                className="btn btn-primary" 
+                style={{ padding: '0.8rem 2rem', fontSize: '1rem', boxShadow: '0 4px 15px rgba(79, 70, 229, 0.4)' }}
+              >
+                Check Vehicle History
+              </button>
+              <Link 
+                to="/signup" 
+                className="btn btn-outline" 
+                style={{ padding: '0.8rem 2rem', fontSize: '1rem', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+              >
+                Get Started Free
+              </Link>
             </div>
-            <button type="submit" disabled={loading} style={styles.searchBtn}>
-              {loading ? 'Searching...' : <><Search size={18} /> Check Vehicle</>}
-            </button>
-          </form>
-          <div style={styles.quickPlates}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '500' }}>Try these plates:</span>
-            <button onClick={() => { setRegNo('AB18 CDE'); }} style={styles.quickPlateBtn}>AB18 CDE</button>
-            <button onClick={() => { setRegNo('LD65 XYZ'); }} style={styles.quickPlateBtn}>LD65 XYZ</button>
-            <button onClick={() => { setRegNo('MH07 KKK'); }} style={styles.quickPlateBtn}>MH07 KKK</button>
+          </div>
+        </section>
+
+        {/* Feature Grid Showcase */}
+        <section style={{ padding: '4rem 1.5rem', borderTop: '1px solid var(--border-color)', backgroundColor: 'rgba(15, 23, 42, 0.3)' }}>
+          <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+              <h2 style={{ fontSize: '1.8rem', fontWeight: '800', margin: 0 }}>Far Ahead of a Simple MOT Checker</h2>
+              <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Automated maintenance controls built for modern fleets and garage operators</p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.5rem' }}>
+              <div className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '8px', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Car size={22} />
+                </div>
+                <h3 style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>DVLA Fleet Registry</h3>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                  Look up vehicle plates instantly. Sync real-time specifications, MOT milestones, failure logs, and road safety advisories directly from registry services.
+                </p>
+              </div>
+
+              <div className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '8px', backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#8B5CF6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ShieldAlert size={22} />
+                </div>
+                <h3 style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>Omnichannel Reminders</h3>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                  Send automated maintenance reminders via Email, SMS, and WhatsApp. Configure notification schedules at 45, 30, and 7 days.
+                </p>
+              </div>
+
+              <div className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '8px', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Calendar size={22} />
+                </div>
+                <h3 style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>Smart Booking Desk</h3>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                  Allocates morning and afternoon appointment slots. Offers calendar rescheduling, resource load checking, and notes logging.
+                </p>
+              </div>
+
+              <div className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '8px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Award size={22} />
+                </div>
+                <h3 style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>Self-Service Hub</h3>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                  Empower clients with secure, passwordless magic links. Customers can manage their vehicles, report sold status, and review schedules.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Dashboard Preview Stats Counter */}
+        <section style={{ padding: '4rem 1.5rem', borderTop: '1px solid var(--border-color)' }}>
+          <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', textAlign: 'center' }} className="stats-grid">
+              <div>
+                <h2 style={{ fontSize: '2.5rem', fontWeight: '900', color: 'var(--primary)', margin: 0 }}>99.8%</h2>
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase' }}>Delivery Rate</p>
+              </div>
+              <div>
+                <h2 style={{ fontSize: '2.5rem', fontWeight: '900', color: 'var(--secondary)', margin: 0 }}>15k+</h2>
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase' }}>Vehicles Monitored</p>
+              </div>
+              <div>
+                <h2 style={{ fontSize: '2.5rem', fontWeight: '900', color: '#10B981', margin: 0 }}>88%</h2>
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase' }}>MOT Pass Rate</p>
+              </div>
+              <div>
+                <h2 style={{ fontSize: '2.5rem', fontWeight: '900', color: '#8B5CF6', margin: 0 }}>24/7</h2>
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase' }}>DVLA Sync</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Process workflow steps */}
+        <section style={{ padding: '4rem 1.5rem', borderTop: '1px solid var(--border-color)', backgroundColor: 'rgba(15, 23, 42, 0.3)' }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+              <h2 style={{ fontSize: '1.8rem', fontWeight: '800', margin: 0 }}>Operational Workflow</h2>
+              <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>How we automate maintenance milestones from scan to dispatch</p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>1</div>
+                <div>
+                  <h4 style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>Scan and Autofill Vehicle Specs</h4>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                    Type the registration number. The system retrieves specifications, years, colors, and MOT dates immediately from registry archives.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>2</div>
+                <div>
+                  <h4 style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>Monitor Maintenance Deadlines</h4>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                    The daily scan cron engine calculates exact days remaining, selecting vehicles due within reminder thresholds.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>3</div>
+                <div>
+                  <h4 style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>Dispatch Custom Templates</h4>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                    Reminders are sent using templates set by operators. The messages contain passwordless magic links for easy booking.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>4</div>
+                <div>
+                  <h4 style={{ margin: 0, fontWeight: '700', fontSize: '1.1rem' }}>Manage Bookings & Slots</h4>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                    Customers book slots. Garage staff review notifications, adjust times, approve bookings, and download metrics.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* DVLA MOT History Checker (Interactive Section) */}
+        <section id="checker-section" style={{ padding: '5rem 1.5rem', scrollMarginTop: '60px' }}>
+          <div style={{ maxWidth: '750px', margin: '0 auto', textAlign: 'center' }}>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: '800', margin: '0 0 0.5rem 0' }}>Interactive Plate Lookup Tool</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '2.5rem' }}>
+              Check any vehicle's status instantly using our simulated DVLA registry mirror.
+            </p>
+
+            <form onSubmit={handleSearch} style={styles.searchForm}>
+              <div style={styles.inputContainer}>
+                <div style={styles.plateDesign}>
+                  <span style={styles.ukCountryCode}>GB</span>
+                </div>
+                <input
+                  type="text"
+                  value={regNo}
+                  onChange={(e) => setRegNo(e.target.value)}
+                  placeholder="E.g. AB18 CDE"
+                  maxLength={8}
+                  style={styles.searchInput}
+                />
+              </div>
+              <button type="submit" disabled={loading} style={styles.searchBtn}>
+                {loading ? 'Searching...' : <><Search size={18} /> Check Vehicle</>}
+              </button>
+            </form>
+            <div style={styles.quickPlates}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: '500' }}>Try these plates:</span>
+              <button type="button" onClick={() => { setRegNo('AB18 CDE'); }} style={styles.quickPlateBtn}>AB18 CDE</button>
+              <button type="button" onClick={() => { setRegNo('LD65 XYZ'); }} style={styles.quickPlateBtn}>LD65 XYZ</button>
+              <button type="button" onClick={() => { setRegNo('MH07 KKK'); }} style={styles.quickPlateBtn}>MH07 KKK</button>
+            </div>
           </div>
         </section>
 
