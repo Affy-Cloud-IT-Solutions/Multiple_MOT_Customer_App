@@ -242,18 +242,30 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
       )}
 
-      {/* Logout Button */}
+      {/* Logout Button or Login Button */}
       <TouchableOpacity
-        onPress={handleLogout}
+        onPress={user ? handleLogout : () => navigation.navigate('Login')}
         disabled={loggingOut}
-        style={[styles.logoutContainer, { borderColor: theme.colors.error, opacity: loggingOut ? 0.7 : 1 }]}
+        style={[
+          styles.logoutContainer,
+          { 
+            borderColor: user ? theme.colors.error : theme.colors.primary, 
+            opacity: loggingOut ? 0.7 : 1 
+          }
+        ]}
       >
         {loggingOut ? (
-          <ActivityIndicator color={theme.colors.error} size="small" />
+          <ActivityIndicator color={user ? theme.colors.error : theme.colors.primary} size="small" />
         ) : (
           <>
-            <MaterialCommunityIcons name="logout" size={20} color={theme.colors.error} />
-            <Text style={[styles.logoutText, { color: theme.colors.error }]}>Sign Out</Text>
+            <MaterialCommunityIcons 
+              name={user ? "logout" : "login"} 
+              size={20} 
+              color={user ? theme.colors.error : theme.colors.primary} 
+            />
+            <Text style={[styles.logoutText, { color: user ? theme.colors.error : theme.colors.primary }]}>
+              {user ? 'Sign Out' : 'Sign In / Sign Up'}
+            </Text>
           </>
         )}
       </TouchableOpacity>

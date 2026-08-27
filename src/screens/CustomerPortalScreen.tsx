@@ -26,17 +26,46 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function CustomerPortalScreen({ route, navigation }: any) {
   const { isDarkMode, theme, toggleTheme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData, setToken, setUser, token } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData, setToken, setUser, token, user } = useAppValues();
 
   // Find active customer
-  const customerId = route?.params?.customerId || 'c1';
-  const customer = customers.find((c) => c.id === customerId) || customers[0];
+  const customerId = route?.params?.customerId || user?.customerId || 'c1';
+  const customer = customers.find((c) => c.id === customerId) || customers[0] || {
+    id: customerId,
+    firstName: user?.name?.split(' ')[0] || 'Customer',
+    lastName: user?.name?.split(' ').slice(1).join(' ') || '',
+    email: user?.email || '',
+    mobile: '',
+  };
 
-  if (!customer) {
+  if (!token) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={{ marginTop: 10, color: theme.colors.text }}>Loading portal...</Text>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+        <MaterialCommunityIcons name="account-lock-outline" size={72} color={theme.colors.placeholder} style={{ marginBottom: 16 }} />
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.text, marginBottom: 8, textAlign: 'center' }}>
+          Access Customer Portal
+        </Text>
+        <Text style={{ fontSize: 13, color: theme.colors.placeholder, textAlign: 'center', marginBottom: 24, paddingHorizontal: 20, lineHeight: 18 }}>
+          Please sign in to view and manage your registered vehicles, check MOT histories, and book new appointments.
+        </Text>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Login')}
+          style={{
+            backgroundColor: theme.colors.primary,
+            paddingHorizontal: 28,
+            paddingVertical: 12,
+            borderRadius: 8,
+            elevation: 2,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.1,
+            shadowRadius: 2,
+          }}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 }}>
+            Sign In / Sign Up
+          </Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -213,16 +242,17 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         model: model.trim().toUpperCase(),
         year: year.trim(),
         motExpiryDate: expiry,
-        status: 'Pending'
+        status: 'Active'
       });
 
-      // 2. Send alert notification to Admin for log/info
+      // 2. Send alert notification to Admin for log/info (pre-approved)
       await addAlert({
         type: 'NEW_VEHICLE',
         customerName: `${customer.firstName} ${customer.lastName}`,
         customerId: customer.id,
         registrationNumber: regNo.trim().toUpperCase(),
         makeModel: `${make.trim().toUpperCase()} ${model.trim().toUpperCase()}`,
+        status: 'Approved'
       });
 
       await addAudit(
@@ -241,8 +271,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       setShowAddForm(false);
 
       Alert.alert(
-        'Vehicle Registration Pending',
-        'Your new vehicle has been registered successfully and is awaiting approval from the garage staff. You will be able to book an MOT once approved!'
+        'Vehicle Registered',
+        'Your new vehicle has been registered successfully and is ready! You can now book an MOT slot.'
       );
     } catch (error: any) {
       setLoadingAction(null);
@@ -252,13 +282,27 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Top Bar / Header */}
-      <View style={[styles.navbar, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, justifyContent: 'flex-start' }]}>
-        <Text style={[styles.navTitle, { color: theme.colors.text, textAlign: 'left' }]}>
-          {activeTab === 'home' ? 'Customer Dashboard' :
-           activeTab === 'history' ? 'MOT History' : 'My Profile'}
-        </Text>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+
+
+      {/* Top Segmented Tab Switcher */}
+      <View style={[styles.segmentContainer, { borderBottomColor: theme.colors.border, backgroundColor: theme.colors.card }]}>
+        <TouchableOpacity
+          onPress={() => setActiveTab('home')}
+          style={[styles.segmentButton, activeTab === 'home' && { borderBottomColor: theme.colors.primary }]}
+        >
+          <Text style={[styles.segmentText, { color: activeTab === 'home' ? theme.colors.primary : theme.colors.placeholder }]}>
+            My Vehicles
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab('history')}
+          style={[styles.segmentButton, activeTab === 'history' && { borderBottomColor: theme.colors.primary }]}
+        >
+          <Text style={[styles.segmentText, { color: activeTab === 'history' ? theme.colors.primary : theme.colors.placeholder }]}>
+            Bookings History
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Tabs Content */}
@@ -281,14 +325,17 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 <Text style={[styles.formTitle, { color: theme.colors.text }]}>Register New Vehicle</Text>
                 
                 <Text style={[styles.label, { color: theme.colors.text }]}>Registration Number</Text>
-                <TextInput
-                  value={regNo}
-                  onChangeText={setRegNo}
-                  placeholder="E.g. AB12 XYZ"
-                  placeholderTextColor={theme.colors.placeholder}
-                  autoCapitalize="characters"
-                  style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
-                />
+                <View style={[styles.inputWrapper, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+                  <MaterialCommunityIcons name="card-text-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+                  <TextInput
+                    value={regNo}
+                    onChangeText={setRegNo}
+                    placeholder="E.g. AB12 XYZ"
+                    placeholderTextColor={theme.colors.placeholder}
+                    autoCapitalize="characters"
+                    style={[styles.inputField, { color: theme.colors.text }]}
+                  />
+                </View>
 
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
@@ -318,27 +365,33 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={[styles.label, { color: theme.colors.text }]}>Year</Text>
-                    <TextInput
-                      value={year}
-                      onChangeText={setYear}
-                      placeholder="E.g. 2018"
-                      placeholderTextColor={theme.colors.placeholder}
-                      keyboardType="numeric"
-                      maxLength={4}
-                      style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
-                    />
+                    <View style={[styles.inputWrapper, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+                      <MaterialCommunityIcons name="calendar-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+                      <TextInput
+                        value={year}
+                        onChangeText={setYear}
+                        placeholder="E.g. 2018"
+                        placeholderTextColor={theme.colors.placeholder}
+                        keyboardType="numeric"
+                        maxLength={4}
+                        style={[styles.inputField, { color: theme.colors.text }]}
+                      />
+                    </View>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.label, { color: theme.colors.text }]}>MOT Expiry Date</Text>
-                    <TextInput
-                      value={expiry}
-                      onChangeText={(text) => setExpiry(formatDateInput(text))}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.placeholder}
-                      keyboardType="numeric"
-                      maxLength={10}
-                      style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
-                    />
+                    <View style={[styles.inputWrapper, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+                      <MaterialCommunityIcons name="calendar-clock" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+                      <TextInput
+                        value={expiry}
+                        onChangeText={(text) => setExpiry(formatDateInput(text))}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={theme.colors.placeholder}
+                        keyboardType="numeric"
+                        maxLength={10}
+                        style={[styles.inputField, { color: theme.colors.text }]}
+                      />
+                    </View>
                   </View>
                 </View>
 
@@ -399,16 +452,26 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 const bookingAlert = alerts.find((a) => a.type === 'BOOKED' && a.registrationNumber === v.registrationNumber);
                 const isBooked = bookingAlert && (bookingAlert.status === 'Pending' || bookingAlert.status === 'Approved');
                 const isRejected = bookingAlert && bookingAlert.status === 'Rejected';
-                
+                const expiryDateObj = v.motExpiryDate ? new Date(v.motExpiryDate) : null;
+                const isExpired = expiryDateObj && !isNaN(expiryDateObj.getTime()) ? expiryDateObj < new Date() : false;
+                const motIconColor = isExpired ? theme.colors.error : theme.colors.success;
+
                 return (
                   <View key={v.id} style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                     {/* Header Info */}
                     <View style={styles.vehicleHeader}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                        <MaterialCommunityIcons name="car-sports" size={20} color={theme.colors.secondary} style={{ marginRight: 8 }} />
-                        <Text style={[styles.makeModelText, { color: theme.colors.text, flex: 1 }]} numberOfLines={1}>
-                          {v.make} {v.model} {v.year ? `(${v.year})` : ''}
+                      <View style={[styles.vehicleIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
+                        <MaterialCommunityIcons name="car-sports" size={20} color={theme.colors.secondary} />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.makeModelText, { color: theme.colors.text }]} numberOfLines={1}>
+                          {v.make} {v.model}
                         </Text>
+                        {v.year ? (
+                          <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>
+                            Year of Manufacture: {v.year}
+                          </Text>
+                        ) : null}
                       </View>
                       {v.status === 'Pending' && (
                         <View style={[styles.bookedBadge, { backgroundColor: theme.colors.warning + '15', borderColor: theme.colors.warning }]}>
@@ -422,7 +485,25 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           <Text style={[styles.bookedBadgeText, { color: theme.colors.error }]}>Rejected</Text>
                         </View>
                       )}
-                      {isBooked && (
+                      {bookingAlert && bookingAlert.status === 'Pending' && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setExpandedBookingReg(expandedBookingReg === v.registrationNumber ? null : v.registrationNumber);
+                          }}
+                          style={[styles.bookedBadge, { backgroundColor: theme.colors.warning + '15', borderColor: theme.colors.warning }]}
+                        >
+                          <MaterialCommunityIcons name="clock-outline" size={12} color={theme.colors.warning} style={{ marginRight: 2 }} />
+                          <Text style={[styles.bookedBadgeText, { color: theme.colors.warning }]}>Pending Approval</Text>
+                          <MaterialCommunityIcons 
+                            name={expandedBookingReg === v.registrationNumber ? "chevron-up" : "chevron-down"} 
+                            size={14} 
+                            color={theme.colors.warning} 
+                            style={{ marginLeft: 2 }} 
+                          />
+                        </TouchableOpacity>
+                      )}
+                      {bookingAlert && bookingAlert.status === 'Approved' && (
                         <TouchableOpacity
                           onPress={() => {
                             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -469,17 +550,29 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         </View>
                       </View>
                       
-                      <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start', alignItems: 'center' }]}>
-                        <MaterialCommunityIcons name="calendar-check-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
-                        <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>MOT: </Text>
-                        <Text style={{ color: theme.colors.text, fontWeight: 'bold', fontSize: 13 }}>{formatShortDate(v.motExpiryDate)}</Text>
+                      <View style={[styles.infoRow, { marginTop: 8, justifyContent: 'flex-start', alignItems: 'center' }]}>
+                        <MaterialCommunityIcons 
+                          name={isExpired ? "calendar-remove" : "calendar-check"} 
+                          size={16} 
+                          color={motIconColor} 
+                          style={{ marginRight: 6 }} 
+                        />
+                        <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>MOT Expiry: </Text>
+                        <Text style={{ color: isExpired ? theme.colors.error : theme.colors.text, fontWeight: 'bold', fontSize: 13 }}>
+                          {formatShortDate(v.motExpiryDate)}
+                        </Text>
+                        {isExpired && (
+                          <View style={[styles.miniStatusBadge, { backgroundColor: theme.colors.error + '15', marginLeft: 8 }]}>
+                            <Text style={{ color: theme.colors.error, fontSize: 9, fontWeight: 'bold' }}>EXPIRED</Text>
+                          </View>
+                        )}
                       </View>
                       
                       {v.lastServiceDate && (
-                        <View style={[styles.infoRow, { marginTop: 6, justifyContent: 'flex-start', alignItems: 'center' }]}>
-                          <MaterialCommunityIcons name="wrench-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+                        <View style={[styles.infoRow, { marginTop: 8, justifyContent: 'flex-start', alignItems: 'center' }]}>
+                          <MaterialCommunityIcons name="wrench-clock" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
                           <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>Last Service: </Text>
-                          <Text style={{ color: theme.colors.text, fontSize: 13 }}>{formatShortDate(v.lastServiceDate)}</Text>
+                          <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '500' }}>{formatShortDate(v.lastServiceDate)}</Text>
                         </View>
                       )}
 
@@ -493,13 +586,19 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                               <Text style={[styles.bookingDetailsTitle, { color: theme.colors.text }]}>Booking Details</Text>
                             </View>
                             <View style={styles.bookingInfoRow}>
-                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Slot/Date:</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="clock-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                                <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Slot/Date:</Text>
+                              </View>
                               <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
                                 {getBookingSlot(bookingAlert.makeModel)}
                               </Text>
                             </View>
                             <View style={styles.bookingInfoRow}>
-                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Status:</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="information-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                                <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Status:</Text>
+                              </View>
                               <Text style={[
                                 styles.bookingInfoValue, 
                                 { 
@@ -515,7 +614,10 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                               </Text>
                             </View>
                             <View style={styles.bookingInfoRow}>
-                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Requested On:</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="calendar-month-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                                <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Requested On:</Text>
+                              </View>
                               <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
                                 {new Date(bookingAlert.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </Text>
@@ -534,19 +636,28 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                               <Text style={[styles.bookingDetailsTitle, { color: theme.colors.error, fontWeight: 'bold' }]}>Booking Rejected</Text>
                             </View>
                             <View style={styles.bookingInfoRow}>
-                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Slot/Date:</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="clock-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                                <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Slot/Date:</Text>
+                              </View>
                               <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
                                 {getBookingSlot(bookingAlert.makeModel)}
                               </Text>
                             </View>
                             <View style={styles.bookingInfoRow}>
-                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Reason:</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="comment-remove-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                                <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Reason:</Text>
+                              </View>
                               <Text style={[styles.bookingInfoValue, { color: theme.colors.error, fontWeight: 'bold', flex: 1, textAlign: 'right' }]}>
                                 {bookingAlert.rejectionReason || 'No reason provided.'}
                               </Text>
                             </View>
                             <View style={styles.bookingInfoRow}>
-                              <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Requested On:</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="calendar-month-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                                <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Requested On:</Text>
+                              </View>
                               <Text style={[styles.bookingInfoValue, { color: theme.colors.text }]}>
                                 {new Date(bookingAlert.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </Text>
@@ -580,6 +691,13 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>{v.rejectionReason}</Text>
                           </View>
                         ) : null}
+                      </View>
+                    ) : bookingAlert && bookingAlert.status === 'Pending' ? (
+                      <View style={[styles.pendingApprovalBox, { backgroundColor: theme.colors.warning + '10', borderColor: theme.colors.warning + '30' }]}>
+                        <MaterialCommunityIcons name="clock-outline" size={16} color={theme.colors.warning} style={{ marginRight: 6 }} />
+                        <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: 'bold', flex: 1 }}>
+                          Awaiting MOT booking approval from garage staff. Rescheduling/Cancellation will be enabled once confirmed.
+                        </Text>
                       </View>
                     ) : (
                       <View style={styles.actionRow}>
@@ -646,7 +764,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
             {alerts.filter((a) => a.type === 'BOOKED' && a.customerId && (
               String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
               String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
-            )).length === 0 ? (
+            ) && customerVehicles.some(v => v.registrationNumber.toUpperCase() === a.registrationNumber.toUpperCase())).length === 0 ? (
               <View style={styles.emptyContainer}>
                 <MaterialCommunityIcons name="history" size={48} color={theme.colors.placeholder} style={{ marginBottom: 12 }} />
                 <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>
@@ -658,7 +776,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 .filter((a) => a.type === 'BOOKED' && a.customerId && (
                   String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
                   String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
-                ))
+                ) && customerVehicles.some(v => v.registrationNumber.toUpperCase() === a.registrationNumber.toUpperCase()))
                 .map((item) => {
                   const isPending = item.status === 'Pending';
                   const isApproved = item.status === 'Approved';
@@ -691,16 +809,25 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         <View style={styles.smallPlate}>
                           <Text style={styles.smallPlateText}>{item.registrationNumber}</Text>
                         </View>
-                        <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor + '40' }]}>
+                        <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor + '40', flexDirection: 'row', alignItems: 'center', borderWidth: 0.5 }]}>
+                          <MaterialCommunityIcons 
+                            name={isPending ? 'clock-outline' : isApproved ? 'check-circle' : isRejected ? 'close-circle' : 'checkbox-marked-circle'} 
+                            size={12} 
+                            color={statusColor} 
+                            style={{ marginRight: 4 }} 
+                          />
                           <Text style={[styles.statusText, { color: statusColor, fontSize: 10 }]}>{statusText}</Text>
                         </View>
                       </View>
 
                       <View style={styles.historyCardBody}>
-                        <Text style={[styles.historyVehicleText, { color: theme.colors.text }]}>
-                          {item.makeModel.split(' - Slot: ')[0]}
-                        </Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                          <MaterialCommunityIcons name="car-sports" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                          <Text style={[styles.historyVehicleText, { color: theme.colors.text }]}>
+                            {item.makeModel.split(' - Slot: ')[0]}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                           <MaterialCommunityIcons name="calendar-clock" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
                           <Text style={{ fontSize: 13, color: theme.colors.text }}>
                             Slot: {getBookingSlot(item.makeModel)}
@@ -724,9 +851,12 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         )}
                       </View>
 
-                      <Text style={[styles.historyDate, { color: theme.colors.placeholder }]}>
-                        Requested: {new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
+                        <MaterialCommunityIcons name="clock-outline" size={12} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                        <Text style={[styles.historyDate, { color: theme.colors.placeholder }]}>
+                          Requested: {new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Text>
+                      </View>
                     </View>
                   );
                 })
@@ -734,200 +864,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
           </ScrollView>
         )}
 
-        {activeTab === 'profile' && (
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            {/* Avatar & Verification Header Card */}
-            <View style={[styles.profileHeaderCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <View style={[styles.profileAvatar, { backgroundColor: theme.colors.secondary }]}>
-                <Text style={styles.avatarText}>
-                  {((customer.firstName[0] || '') + (customer.lastName[0] || '')).toUpperCase()}
-                </Text>
-              </View>
-              <View style={{ marginLeft: 16, flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.profileName, { color: theme.colors.text }]} numberOfLines={1}>
-                    {customer.firstName} {customer.lastName}
-                  </Text>
-                  <MaterialCommunityIcons name="check-decagram" size={16} color={theme.colors.success} style={{ marginLeft: 4 }} />
-                </View>
-                <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 2 }}>
-                  Member since {new Date(customer.createdDate || Date.now()).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-                </Text>
-              </View>
-            </View>
-
-            {/* Section: Personal Info */}
-            <Text style={[styles.profileSectionTitle, { color: theme.colors.text }]}>Personal Details</Text>
-            <View style={[styles.profileInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <View style={[styles.profileRow, { borderBottomColor: theme.colors.border }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialCommunityIcons name="email-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 10 }} />
-                  <Text style={{ color: theme.colors.text, fontSize: 13 }}>Email</Text>
-                </View>
-                <Text style={{ color: theme.colors.placeholder, fontSize: 13, fontWeight: '500' }}>{customer.email}</Text>
-              </View>
-
-              <View style={[styles.profileRow, { borderBottomColor: 'transparent' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialCommunityIcons name="phone-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 10 }} />
-                  <Text style={{ color: theme.colors.text, fontSize: 13 }}>Mobile</Text>
-                </View>
-                <Text style={{ color: theme.colors.placeholder, fontSize: 13, fontWeight: '500' }}>{customer.mobile}</Text>
-              </View>
-            </View>
-
-            {/* Section: Address */}
-            {customer.address && (
-              <>
-                <Text style={[styles.profileSectionTitle, { color: theme.colors.text }]}>Address</Text>
-                <View style={[styles.profileInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, paddingVertical: 14 }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                    <MaterialCommunityIcons name="map-marker-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 10, marginTop: 2 }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.text, fontSize: 13, lineHeight: 18 }}>{customer.address}</Text>
-                    </View>
-                  </View>
-                </View>
-              </>
-            )}
-
-            {/* Section: Preferences */}
-            <Text style={[styles.profileSectionTitle, { color: theme.colors.text }]}>Preferences</Text>
-            <View style={[styles.profileInfoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              {/* Preferred Contact method */}
-              {/* <View style={[styles.profileRow, { borderBottomColor: theme.colors.border, paddingVertical: 12 }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialCommunityIcons name="bell-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 10 }} />
-                  <Text style={{ color: theme.colors.text, fontSize: 13 }}>Preferred Contact</Text>
-                </View>
-                <View style={styles.contactPillRow}>
-                  {['SMS', 'Email', 'WhatsApp'].map((method) => {
-                    const isActive = customer.preferredContact === method;
-                    const iconName = method === 'SMS' ? 'message-text-outline' :
-                                     method === 'Email' ? 'email-outline' : 'whatsapp';
-                    return (
-                      <View 
-                        key={method} 
-                        style={[
-                          styles.contactPill, 
-                          isActive ? { backgroundColor: theme.colors.secondary + '20', borderColor: theme.colors.secondary } :
-                                     { backgroundColor: theme.colors.background, borderColor: theme.colors.border }
-                        ]}
-                      >
-                        <MaterialCommunityIcons 
-                          name={iconName} 
-                          size={11} 
-                          color={isActive ? theme.colors.secondary : theme.colors.placeholder} 
-                          style={{ marginRight: 2 }} 
-                        />
-                        <Text 
-                          style={[
-                            styles.contactPillText, 
-                            { color: isActive ? theme.colors.secondary : theme.colors.placeholder }
-                          ]}
-                        >
-                          {method}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View> */}
-
-              {/* Theme Selector */}
-              <View style={[styles.profileRow, { borderBottomColor: 'transparent', paddingVertical: 12 }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialCommunityIcons 
-                    name={isDarkMode ? "weather-night" : "weather-sunny"} 
-                    size={18} 
-                    color={theme.colors.placeholder} 
-                    style={{ marginRight: 10 }} 
-                  />
-                  <Text style={{ color: theme.colors.text, fontSize: 13 }}>Dark Theme</Text>
-                </View>
-                <Switch
-                  value={isDarkMode}
-                  onValueChange={toggleTheme}
-                  trackColor={{ false: theme.colors.border, true: theme.colors.secondary }}
-                  thumbColor={Platform.OS === 'android' ? '#FFFFFF' : undefined}
-                />
-              </View>
-            </View>
-
-            {/* Logout button */}
-            <TouchableOpacity
-              onPress={() => {
-                Alert.alert(
-                  'Sign Out',
-                  'Are you sure you want to sign out?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Sign Out',
-                      style: 'destructive',
-                      onPress: () => {
-                        setToken(null);
-                        setUser(null);
-                        navigation.replace('Login');
-                      },
-                    },
-                  ]
-                );
-              }}
-              style={[styles.profileLogoutBtn, { backgroundColor: theme.colors.error, borderWidth: 1, borderColor: theme.colors.error }]}
-            >
-              <MaterialCommunityIcons name="logout" size={18} color={"#fff"} style={{ marginRight: 6 }} />
-              <Text style={{ color: "#fff", fontWeight: 'bold', fontSize: 14 }}>Sign Out</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )}
       </View>
-
-      {/* Bottom Sticky Tab Footer */}
-      <View style={[styles.footer, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border , borderTopWidth: 1} ]}>
-        <TouchableOpacity
-          onPress={() => setActiveTab('home')}
-          style={styles.tabBtn}
-        >
-          <MaterialCommunityIcons 
-            name={activeTab === 'home' ? "home" : "home-outline"} 
-            size={22} 
-            color={activeTab === 'home' ? theme.colors.secondary : theme.colors.placeholder} 
-          />
-          <Text style={[styles.tabLabel, { color: activeTab === 'home' ? theme.colors.secondary : theme.colors.placeholder }]}>
-            Home
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setActiveTab('history')}
-          style={styles.tabBtn}
-        >
-          <MaterialCommunityIcons 
-            name={activeTab === 'history' ? "calendar-clock" : "calendar-clock-outline"} 
-            size={22} 
-            color={activeTab === 'history' ? theme.colors.secondary : theme.colors.placeholder} 
-          />
-          <Text style={[styles.tabLabel, { color: activeTab === 'history' ? theme.colors.secondary : theme.colors.placeholder }]}>
-            History
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setActiveTab('profile')}
-          style={styles.tabBtn}
-        >
-          <MaterialCommunityIcons 
-            name={activeTab === 'profile' ? "account" : "account-outline"} 
-            size={22} 
-            color={activeTab === 'profile' ? theme.colors.secondary : theme.colors.placeholder} 
-          />
-          <Text style={[styles.tabLabel, { color: activeTab === 'profile' ? theme.colors.secondary : theme.colors.placeholder }]}>
-            Profile
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -981,79 +919,94 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: 12,
+    paddingBottom: 24,
   },
   welcomeBlock: {
-    marginBottom: 24,
+    marginBottom: 12,
   },
   welcomeTitle: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '900',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   welcomeSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
   },
   sectionHeading: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   formCard: {
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 24,
-    elevation: 3,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    elevation: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
   },
   formTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   formRow: {
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   label: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   input: {
-    height: 38,
+    height: 34,
     borderWidth: 1,
     borderRadius: 6,
-    paddingHorizontal: 10,
-    fontSize: 13,
-    marginBottom: 12,
+    paddingHorizontal: 8,
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 6,
+    height: 34,
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  inputField: {
+    flex: 1,
+    height: '100%',
+    fontSize: 12,
+    paddingVertical: 0,
   },
   submitButton: {
-    height: 40,
+    height: 36,
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 2,
   },
   submitButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
-    fontSize: 13,
+    fontSize: 12,
   },
   formActionsRow: {
     flexDirection: 'row',
-    marginTop: 8,
-    gap: 12,
+    marginTop: 6,
+    gap: 10,
   },
   cancelFormBtn: {
     flex: 1,
-    height: 40,
+    height: 36,
     borderRadius: 6,
     borderWidth: 1,
     justifyContent: 'center',
@@ -1061,11 +1014,11 @@ const styles = StyleSheet.create({
   },
   cancelFormBtnText: {
     fontWeight: 'bold',
-    fontSize: 13,
+    fontSize: 12,
   },
   submitFormBtn: {
     flex: 1.5,
-    height: 40,
+    height: 36,
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1073,53 +1026,67 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
+    paddingVertical: 32,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 12,
     fontStyle: 'italic',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   vehicleCard: {
     borderWidth: 1,
-    borderRadius: 14,
-    marginBottom: 16,
+    borderRadius: 10,
+    marginBottom: 12,
     overflow: 'hidden',
-    elevation: 2,
+    elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
   },
   vehicleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    paddingBottom: 8,
+    padding: 10,
+    paddingBottom: 6,
+  },
+  vehicleIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniStatusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   plate: {
     backgroundColor: '#FFD300',
     borderWidth: 1,
     borderColor: '#000',
     borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginRight: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 8,
   },
   plateText: {
     color: '#000',
     fontWeight: 'bold',
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 0.5,
   },
   makeModelText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: 'bold',
   },
   vehicleBody: {
-    paddingHorizontal: 14,
-    paddingBottom: 14,
+    paddingHorizontal: 10,
+    paddingBottom: 10,
   },
   infoRow: {
     flexDirection: 'row',
@@ -1130,15 +1097,15 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    padding: 10,
+    padding: 8,
   },
   actionBtn: {
     flex: 1,
-    height: 36,
+    height: 30,
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 4,
+    marginHorizontal: 3,
   },
   soldBtn: {
     borderWidth: 1.2,
@@ -1151,7 +1118,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtnText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: 'bold',
   },
   bookedBadge: {
@@ -1160,7 +1127,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 6,
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 1.5,
     alignSelf: 'center',
   },
   bookedBadgeText: {
@@ -1363,5 +1330,21 @@ const styles = StyleSheet.create({
     padding: 10,
     marginHorizontal: 12,
     marginVertical: 8,
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    height: 40,
+  },
+  segmentButton: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomWidth: 2.5,
+    borderBottomColor: 'transparent',
+  },
+  segmentText: {
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 });

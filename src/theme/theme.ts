@@ -5,20 +5,20 @@ export const CustomLightTheme = {
   dark: false,
   colors: {
     ...DefaultTheme.colors,
-    primary: '#0F172A', // Slate 900
-    primaryContainer: '#E2E8F0', // Slate 200
-    secondary: '#0284C7', // Sky 600
-    secondaryContainer: '#E0F2FE', // Sky 100
-    background: '#F8FAFC', // Slate 50
-    card: '#FFFFFF', // White
-    text: '#0F172A', // Slate 900
-    border: '#E2E8F0', // Slate 200
+    primary: '#0B1F33', // Navy
+    primaryContainer: '#E6F0FA', // Soft navy
+    secondary: '#1677FF', // Electric Blue
+    secondaryContainer: '#E6F4FF', // Soft electric blue
+    background: '#F7F9FC', // White/Off-white background (with ice blue tint)
+    card: '#FFFFFF', // Pure White
+    text: '#0B1F33', // Navy text
+    border: '#E1E6EB', // Soft border
     notification: '#EF4444',
     error: '#EF4444',
     success: '#10B981',
     warning: '#F59E0B',
-    placeholder: '#64748B',
-    accent: '#F59E0B', // Yellow gold plate accent
+    placeholder: '#647890', // Muted blue-gray placeholder
+    accent: '#1677FF', // Electric Blue accent
   },
 };
 
@@ -27,20 +27,20 @@ export const CustomDarkTheme = {
   dark: true,
   colors: {
     ...DarkTheme.colors,
-    primary: '#F8FAFC', // Slate 50
-    primaryContainer: '#334155', // Slate 700
-    secondary: '#38BDF8', // Sky 400
-    secondaryContainer: '#0C4A6E', // Sky 900
-    background: '#0F172A', // Slate 900
-    card: '#1E293B', // Slate 800
-    text: '#F8FAFC', // Slate 50
-    border: '#334155', // Slate 700
+    primary: '#0B1F33', // Navy (Navy bg for buttons in dark mode)
+    primaryContainer: '#002A66', // Deep electric blue
+    secondary: '#1677FF', // Electric Blue
+    secondaryContainer: '#1E354A', // Deep navy secondary container
+    background: '#0B1F33', // Navy background
+    card: '#122A40', // Lighter navy card
+    text: '#F7F9FC', // Off-white text
+    border: '#1A3750', // Navy dark border
     notification: '#F87171',
     error: '#F87171',
     success: '#34D399',
     warning: '#FBBF24',
-    placeholder: '#94A3B8',
-    accent: '#FBBF24', // Yellow gold plate accent
+    placeholder: '#7D90A6',
+    accent: '#1677FF', // Electric Blue accent
   },
 };
 

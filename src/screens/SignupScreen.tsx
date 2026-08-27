@@ -39,6 +39,13 @@ export default function SignupScreen({ navigation }: any) {
   const [confirmPasswordError, setConfirmPasswordError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Focus states
+  const [nameFocused, setNameFocused] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [mobileFocused, setMobileFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
+
   const handleSignup = async () => {
     const nameParts = name.trim().split(/\s+/);
     const firstName = nameParts[0] || '';
@@ -157,8 +164,18 @@ export default function SignupScreen({ navigation }: any) {
 
           {/* Full Name */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Full Name</Text>
-          <View style={[styles.inputContainer, { borderColor: nameError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
-            <MaterialCommunityIcons name="account-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
+          <View style={[
+            styles.inputContainer, 
+            { 
+              borderColor: nameError 
+                ? theme.colors.error 
+                : nameFocused 
+                ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
+                : theme.colors.border, 
+              backgroundColor: theme.colors.background 
+            }
+          ]}>
+            <MaterialCommunityIcons name="account-outline" size={20} color={nameFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={name}
               onChangeText={(text) => {
@@ -166,6 +183,8 @@ export default function SignupScreen({ navigation }: any) {
                 setNameError(false);
                 setErrorMessage(null);
               }}
+              onFocus={() => setNameFocused(true)}
+              onBlur={() => setNameFocused(false)}
               placeholder="E.g. Alex Mercer"
               placeholderTextColor={theme.colors.placeholder}
               autoCapitalize="words"
@@ -175,8 +194,18 @@ export default function SignupScreen({ navigation }: any) {
 
           {/* Email */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Email Address</Text>
-          <View style={[styles.inputContainer, { borderColor: emailError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
-            <MaterialCommunityIcons name="email-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
+          <View style={[
+            styles.inputContainer, 
+            { 
+              borderColor: emailError 
+                ? theme.colors.error 
+                : emailFocused 
+                ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
+                : theme.colors.border, 
+              backgroundColor: theme.colors.background 
+            }
+          ]}>
+            <MaterialCommunityIcons name="email-outline" size={20} color={emailFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={email}
               onChangeText={(text) => {
@@ -184,6 +213,8 @@ export default function SignupScreen({ navigation }: any) {
                 setEmailError(false);
                 setErrorMessage(null);
               }}
+              onFocus={() => setEmailFocused(true)}
+              onBlur={() => setEmailFocused(false)}
               placeholder="E.g. alex@example.com"
               placeholderTextColor={theme.colors.placeholder}
               keyboardType="email-address"
@@ -192,10 +223,20 @@ export default function SignupScreen({ navigation }: any) {
             />
           </View>
 
-          {/* Mobile Number (Customer only) */}
+          {/* Mobile Number */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Mobile Number</Text>
-          <View style={[styles.inputContainer, { borderColor: mobileError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
-            <MaterialCommunityIcons name="phone-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
+          <View style={[
+            styles.inputContainer, 
+            { 
+              borderColor: mobileError 
+                ? theme.colors.error 
+                : mobileFocused 
+                ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
+                : theme.colors.border, 
+              backgroundColor: theme.colors.background 
+            }
+          ]}>
+            <MaterialCommunityIcons name="phone-outline" size={20} color={mobileFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={mobile}
               onChangeText={(text) => {
@@ -203,6 +244,8 @@ export default function SignupScreen({ navigation }: any) {
                 setMobileError(false);
                 setErrorMessage(null);
               }}
+              onFocus={() => setMobileFocused(true)}
+              onBlur={() => setMobileFocused(false)}
               placeholder="E.g. 07700 900077"
               placeholderTextColor={theme.colors.placeholder}
               keyboardType="phone-pad"
@@ -212,8 +255,18 @@ export default function SignupScreen({ navigation }: any) {
 
           {/* Password */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Password</Text>
-          <View style={[styles.inputContainer, { borderColor: passwordError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
-            <MaterialCommunityIcons name="lock-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
+          <View style={[
+            styles.inputContainer, 
+            { 
+              borderColor: passwordError 
+                ? theme.colors.error 
+                : passwordFocused 
+                ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
+                : theme.colors.border, 
+              backgroundColor: theme.colors.background 
+            }
+          ]}>
+            <MaterialCommunityIcons name="lock-outline" size={20} color={passwordFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={password}
               onChangeText={(text) => {
@@ -221,6 +274,8 @@ export default function SignupScreen({ navigation }: any) {
                 setPasswordError(false);
                 setErrorMessage(null);
               }}
+              onFocus={() => setPasswordFocused(true)}
+              onBlur={() => setPasswordFocused(false)}
               placeholder="••••••••"
               placeholderTextColor={theme.colors.placeholder}
               secureTextEntry={!showPassword}
@@ -231,15 +286,25 @@ export default function SignupScreen({ navigation }: any) {
               <MaterialCommunityIcons
                 name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                 size={20}
-                color={theme.colors.placeholder}
+                color={passwordFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder}
               />
             </TouchableOpacity>
           </View>
 
           {/* Confirm Password */}
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Confirm Password</Text>
-          <View style={[styles.inputContainer, { borderColor: confirmPasswordError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
-            <MaterialCommunityIcons name="lock-check-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
+          <View style={[
+            styles.inputContainer, 
+            { 
+              borderColor: confirmPasswordError 
+                ? theme.colors.error 
+                : confirmPasswordFocused 
+                ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
+                : theme.colors.border, 
+              backgroundColor: theme.colors.background 
+            }
+          ]}>
+            <MaterialCommunityIcons name="lock-check-outline" size={20} color={confirmPasswordFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder} style={styles.inputIcon} />
             <TextInput
               value={confirmPassword}
               onChangeText={(text) => {
@@ -247,6 +312,8 @@ export default function SignupScreen({ navigation }: any) {
                 setConfirmPasswordError(false);
                 setErrorMessage(null);
               }}
+              onFocus={() => setConfirmPasswordFocused(true)}
+              onBlur={() => setConfirmPasswordFocused(false)}
               placeholder="••••••••"
               placeholderTextColor={theme.colors.placeholder}
               secureTextEntry={!showConfirmPassword}
@@ -257,7 +324,7 @@ export default function SignupScreen({ navigation }: any) {
               <MaterialCommunityIcons
                 name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
                 size={20}
-                color={theme.colors.placeholder}
+                color={confirmPasswordFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder}
               />
             </TouchableOpacity>
           </View>
@@ -272,9 +339,9 @@ export default function SignupScreen({ navigation }: any) {
             ]}
           >
             {loading ? (
-              <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
+              <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={[styles.buttonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Sign Up</Text>
+              <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Sign Up</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -283,7 +350,7 @@ export default function SignupScreen({ navigation }: any) {
         <View style={styles.footerContainer}>
           <Text style={{ color: theme.colors.placeholder }}>Already have an account? </Text>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={[styles.loginText, { color: theme.colors.secondary }]}>Sign In</Text>
+            <Text style={[styles.loginText, { color: theme.colors.primary }]}>Sign In</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -306,23 +373,24 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: 0.5,
     marginBottom: 6,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
+    lineHeight: 18,
   },
   card: {
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
     borderWidth: 1,
-    elevation: 4,
+    elevation: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
   },
   inputLabel: {
     fontSize: 14,
@@ -333,14 +401,14 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    height: 48,
-    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    height: 52,
+    paddingHorizontal: 16,
     marginBottom: 18,
   },
   inputIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   input: {
     flex: 1,
@@ -352,47 +420,27 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   button: {
-    height: 48,
-    borderRadius: 8,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
-    elevation: 2,
+    marginTop: 12,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   buttonText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
   footerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 24,
+    marginTop: 32,
   },
   loginText: {
-    fontWeight: 'bold',
-  },
-  segmentContainer: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: 20,
-    padding: 3,
-  },
-  segmentButton: {
-    flex: 1,
-    height: 36,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  segmentText: {
-    fontSize: 13,
     fontWeight: 'bold',
   },
   errorContainer: {

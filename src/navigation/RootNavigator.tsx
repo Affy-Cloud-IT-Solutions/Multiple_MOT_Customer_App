@@ -9,6 +9,9 @@ import StaffListScreen from '../screens/StaffListScreen';
 import CustomerDetailScreen from '../screens/CustomerDetailScreen';
 import AdminBookMotScreen from '../screens/AdminBookMotScreen';
 import MainTabNavigator from './MainTabNavigator';
+import GarageListScreen from '../screens/GarageListScreen';
+import GarageDetailScreen from '../screens/GarageDetailScreen';
+import ResultScreen from '../screens/ResultScreen';
 import { useAppTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator();
@@ -18,7 +21,7 @@ export default function RootNavigator() {
 
   return (
     <Stack.Navigator
-      initialRouteName="Login"
+      initialRouteName="Main"
       screenOptions={{
         headerStyle: {
           backgroundColor: theme.colors.card,
@@ -74,6 +77,21 @@ export default function RootNavigator() {
         name="CustomerDetail"
         component={CustomerDetailScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="GarageList"
+        component={GarageListScreen}
+        options={{ headerShown: true, title: 'Garages' }}
+      />
+      <Stack.Screen
+        name="GarageDetail"
+        component={GarageDetailScreen}
+        options={{ headerShown: true, title: 'Garage Profile' }}
+      />
+      <Stack.Screen
+        name="Result"
+        component={ResultScreen}
+        options={{ title: 'MOT Check Results' }}
       />
     </Stack.Navigator>
   );

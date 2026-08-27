@@ -10,9 +10,12 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
+import { useAppValues } from '../context/DataContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ResultScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
+  const { user } = useAppValues();
   const [saving, setSaving] = useState(false);
 
   const defaultVehicle = {
@@ -31,6 +34,7 @@ export default function ResultScreen({ route, navigation }: any) {
     advisories: [
       'Front brake pads wearing thin (minor)',
       'Nearside rear tyre worn close to legal limit (advisory)',
+      'Front suspension arm pin or bush worn but not resulting in excessive movement (advisory)',
     ],
     failures: [],
   };
@@ -38,15 +42,40 @@ export default function ResultScreen({ route, navigation }: any) {
   const vehicle = route?.params?.vehicleData || defaultVehicle;
   const isPass = vehicle.status === 'PASS';
 
-  const handleSaveToHistory = () => {
+  const handleSaveToHistory = async () => {
+    if (!user?.id) {
+      Alert.alert('Notice', 'Please sign in to save vehicle search history.');
+      return;
+    }
+
     setSaving(true);
-    setTimeout(() => {
+    try {
+      const historyKey = `@search_history_${user.id}`;
+      const historyStr = await AsyncStorage.getItem(historyKey);
+      let history = historyStr ? JSON.parse(historyStr) : [];
+      
+      // Remove duplicates
+      history = history.filter((h: any) => h.registration.toUpperCase() !== vehicle.registration.toUpperCase());
+      
+      // Prepend
+      history.unshift(vehicle);
+      
+      // Limit to 20 items
+      if (history.length > 20) {
+        history = history.slice(0, 20);
+      }
+      
+      await AsyncStorage.setItem(historyKey, JSON.stringify(history));
       setSaving(false);
       Alert.alert(
         'Success',
         `Vehicle ${vehicle.registration} has been saved to your local search history!`
       );
-    }, 1500);
+    } catch (e) {
+      setSaving(false);
+      console.error('Failed to save to history:', e);
+      Alert.alert('Error', 'Failed to save vehicle details to local history.');
+    }
   };
 
   return (
@@ -68,7 +97,14 @@ export default function ResultScreen({ route, navigation }: any) {
       </View>
 
       {/* MOT Status Card */}
-      <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+      <View style={[
+        styles.card, 
+        { 
+          backgroundColor: isPass ? theme.colors.success + '08' : theme.colors.error + '08', 
+          borderColor: isPass ? theme.colors.success + '30' : theme.colors.error + '30',
+          borderWidth: 1.5,
+        }
+      ]}>
         <View style={styles.statusContent}>
           <View
             style={[
@@ -101,22 +137,34 @@ export default function ResultScreen({ route, navigation }: any) {
 
       {/* Vehicle Specification Details Card */}
       <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Test Details</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <MaterialCommunityIcons name="file-document-check-outline" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+          <Text style={[styles.cardTitle, { color: theme.colors.text, marginBottom: 0 }]}>Test Details</Text>
+        </View>
         
         <View style={styles.detailRow}>
-          <Text style={{ color: theme.colors.placeholder }}>Test Date</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <MaterialCommunityIcons name="calendar" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+            <Text style={{ color: theme.colors.placeholder }}>Test Date</Text>
+          </View>
           <Text style={[styles.detailValue, { color: theme.colors.text }]}>{vehicle.testDate}</Text>
         </View>
         <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
         
         <View style={styles.detailRow}>
-          <Text style={{ color: theme.colors.placeholder }}>Test Number</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <MaterialCommunityIcons name="barcode-scan" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+            <Text style={{ color: theme.colors.placeholder }}>Test Number</Text>
+          </View>
           <Text style={[styles.detailValue, { color: theme.colors.text }]}>{vehicle.testNumber}</Text>
         </View>
         <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
         
         <View style={styles.detailRow}>
-          <Text style={{ color: theme.colors.placeholder }}>Mileage</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <MaterialCommunityIcons name="speedometer" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+            <Text style={{ color: theme.colors.placeholder }}>Mileage</Text>
+          </View>
           <Text style={[styles.detailValue, { color: theme.colors.text }]}>{vehicle.mileage}</Text>
         </View>
       </View>
@@ -131,7 +179,7 @@ export default function ResultScreen({ route, navigation }: any) {
           <View style={styles.listContainer}>
             {vehicle.failures.map((fail: string, idx: number) => (
               <View key={idx} style={styles.itemRow}>
-                <MaterialCommunityIcons name="circle-slice-8" size={14} color={theme.colors.error} style={styles.bulletIcon} />
+                <MaterialCommunityIcons name="close-circle-outline" size={16} color={theme.colors.error} style={styles.bulletIcon} />
                 <Text style={[styles.itemText, { color: theme.colors.text }]}>{fail}</Text>
               </View>
             ))}
@@ -149,7 +197,7 @@ export default function ResultScreen({ route, navigation }: any) {
           <View style={styles.listContainer}>
             {vehicle.advisories.map((adv: string, idx: number) => (
               <View key={idx} style={styles.itemRow}>
-                <MaterialCommunityIcons name="circle-slice-8" size={14} color={theme.colors.warning} style={styles.bulletIcon} />
+                <MaterialCommunityIcons name="alert-circle-outline" size={16} color={theme.colors.warning} style={styles.bulletIcon} />
                 <Text style={[styles.itemText, { color: theme.colors.text }]}>{adv}</Text>
               </View>
             ))}
@@ -168,16 +216,16 @@ export default function ResultScreen({ route, navigation }: any) {
           ]}
         >
           {saving ? (
-            <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
+            <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
             <View style={styles.saveButtonContent}>
               <MaterialCommunityIcons 
                 name="bookmark-outline" 
                 size={20} 
-                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+                color="#FFFFFF" 
                 style={{ marginRight: 8 }} 
               />
-              <Text style={[styles.saveButtonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Save to History</Text>
+              <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>Save to History</Text>
             </View>
           )}
         </TouchableOpacity>

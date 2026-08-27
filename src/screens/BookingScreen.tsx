@@ -13,38 +13,110 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
 import { useAppTheme } from '../context/ThemeContext';
-import { useAppValues } from '../context/DataContext';
+import { useAppValues, BASE_URL } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function BookingScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, addAlert, addAudit } = useAppValues();
+  const { customers, vehicles, addAlert, addAudit, user, token } = useAppValues();
 
-  // Selected vehicle passed from CustomerPortalScreen
-  const vehicle = route?.params?.vehicle || {
-    registrationNumber: 'AB18 CDE',
-    make: 'FORD',
-    model: 'FOCUS TDCI',
-    customerId: 'c1',
-  };
+  // Find active customer vehicles
+  const activeCustomerVehicles = vehicles.filter(v => v.status !== 'Sold' && v.status !== 'Scrapped');
 
   const isReschedule = route?.params?.isReschedule || false;
 
-  const customer = customers.find((c) => 
-    vehicle.customerId && (
-      String(c.id).toLowerCase() === String(vehicle.customerId || '').toLowerCase() ||
-      String(c._id).toLowerCase() === String(vehicle.customerId || '').toLowerCase()
-    )
-  ) || customers[0];
+  // Selected vehicle state
+  const [selectedVehicle, setSelectedVehicle] = useState<any>(
+    route?.params?.vehicle || activeCustomerVehicles[0] || null
+  );
 
-  if (!customer) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={{ marginTop: 10, color: theme.colors.text }}>Loading booking details...</Text>
-      </SafeAreaView>
-    );
-  }
+  // Garages list & selected garage state
+  const [garages, setGarages] = useState<any[]>([]);
+  const [loadingGarages, setLoadingGarages] = useState(false);
+  const [selectedGarage, setSelectedGarage] = useState<any>(
+    isReschedule && route?.params?.garageId
+      ? { id: route.params.garageId, name: route.params.garageName }
+      : null
+  );
+
+  // Selected service state
+  const [selectedService, setSelectedService] = useState<any>({
+    name: route?.params?.serviceName || 'MOT Test',
+    price: route?.params?.price || 45.00,
+    duration: route?.params?.duration || 45
+  });
+
+  // Fetch garages list
+  useEffect(() => {
+    if (isReschedule) return;
+    const fetchGarages = async () => {
+      setLoadingGarages(true);
+      try {
+        const response = await fetch(`${BASE_URL}/garages`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setGarages(data);
+          
+          // Pre-select garage if passed in params
+          const initialGarageId = route?.params?.garageId;
+          if (initialGarageId) {
+            const found = data.find((g: any) => String(g.id) === String(initialGarageId) || String(g._id) === String(initialGarageId));
+            if (found) {
+              setSelectedGarage(found);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching garages in BookingScreen:', err);
+      } finally {
+        setLoadingGarages(false);
+      }
+    };
+    fetchGarages();
+  }, [route?.params?.garageId, isReschedule, token]);
+
+  // Fetch selected garage services to load MOT dynamically
+  useEffect(() => {
+    if (!selectedGarage || isReschedule) return;
+    
+    const fetchGarageDetails = async () => {
+      try {
+        const response = await fetch(`${BASE_URL}/garages/${selectedGarage.id || selectedGarage._id}`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.services && data.services.length > 0) {
+            // Find MOT service or default to first
+            const motSvc = data.services.find((s: any) => s.name.toUpperCase().includes('MOT'));
+            if (motSvc) {
+              setSelectedService(motSvc);
+            } else {
+              setSelectedService(data.services[0]);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching garage details for services:', err);
+      }
+    };
+    fetchGarageDetails();
+  }, [selectedGarage, isReschedule, token]);
+
+  const customer = customers.find((c) => 
+    selectedVehicle && selectedVehicle.customerId && (
+      String(c.id).toLowerCase() === String(selectedVehicle.customerId || '').toLowerCase() ||
+      String(c._id).toLowerCase() === String(selectedVehicle.customerId || '').toLowerCase()
+    )
+  ) || customers[0] || {
+    id: user?.customerId || 'c1',
+    firstName: user?.name?.split(' ')[0] || 'Customer',
+    lastName: user?.name?.split(' ').slice(1).join(' ') || '',
+    email: user?.email || '',
+    mobile: '',
+  };
 
   // Date and Time options for slot selection
   const [currentViewDate, setCurrentViewDate] = useState(new Date());
@@ -178,6 +250,16 @@ export default function BookingScreen({ route, navigation }: any) {
       return;
     }
 
+    if (!selectedVehicle) {
+      Alert.alert('Error', 'Please select a vehicle first.');
+      return;
+    }
+
+    if (!selectedGarage) {
+      Alert.alert('Error', 'Please select a garage first.');
+      return;
+    }
+
     setLoading(true);
     try {
       const parts = selectedDate.split('-');
@@ -193,8 +275,12 @@ export default function BookingScreen({ route, navigation }: any) {
         type: 'BOOKED',
         customerName: `${customer.firstName} ${customer.lastName}`,
         customerId: customer.id,
-        registrationNumber: vehicle.registrationNumber,
-        makeModel: `${vehicle.make} ${vehicle.model} - Slot: ${displayDateStr} at ${selectedTime}`,
+        garageId: selectedGarage.id || selectedGarage._id,
+        serviceName: selectedService.name,
+        price: selectedService.price,
+        duration: selectedService.duration,
+        registrationNumber: selectedVehicle.registrationNumber,
+        makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - Slot: ${displayDateStr} at ${selectedTime}`,
         status: isAdmin ? 'Approved' : 'Pending',
         date: selectedDate,
       });
@@ -203,8 +289,8 @@ export default function BookingScreen({ route, navigation }: any) {
       await addAudit(
         isReschedule ? 'MOT Booking Rescheduled' : (isAdmin ? 'MOT Booking Booked' : 'MOT Booking Requested'),
         isAdmin
-          ? `Garage staff booked MOT booking slot for ${customer.firstName} ${customer.lastName}'s ${vehicle.make} ${vehicle.model} (${vehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
-          : `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} MOT booking slot for ${vehicle.make} ${vehicle.model} (${vehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
+          ? `Garage staff booked MOT booking slot for ${customer.firstName} ${customer.lastName}'s ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
+          : `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} MOT booking slot for ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
       );
 
       setLoading(false);
@@ -258,20 +344,183 @@ export default function BookingScreen({ route, navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Vehicle Summary Header Card */}
-        <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <View style={styles.plate}>
-            <Text style={styles.plateText}>{vehicle.registrationNumber}</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.vehicleMakeModel, { color: theme.colors.text }]}>
-              {vehicle.make} {vehicle.model}
+        {isReschedule ? (
+          <>
+            {/* Locked Vehicle Summary Card for Rescheduling */}
+            <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              <View style={styles.plate}>
+                <Text style={styles.plateText}>{selectedVehicle?.registrationNumber}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.vehicleMakeModel, { color: theme.colors.text }]}>
+                  {selectedVehicle?.make} {selectedVehicle?.model}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                  <MaterialCommunityIcons name="information-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                  <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder }]}>
+                    Rescheduling appointment for this vehicle
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Locked Garage & Service Info for Rescheduling */}
+            <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 12 }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 4 }}>
+                  Selected Garage & Service
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                  <View style={[styles.selectedGarageIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
+                    <MaterialCommunityIcons name="store" size={18} color={theme.colors.secondary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 14, marginBottom: 0 }]}>
+                      {selectedGarage?.name}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                      <MaterialCommunityIcons name="wrench-clock" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                      <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder }]}>
+                        {selectedService.name} (£{selectedService.price.toFixed(2)}) • {selectedService.duration}m
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </>
+        ) : (
+          <>
+            {/* 1. Dynamic Vehicle Selector */}
+            <Text style={[styles.sectionHeading, { color: theme.colors.text, marginTop: 4, marginBottom: 8 }]}>
+              Select Vehicle
             </Text>
-            <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder }]}>
-              {isReschedule ? 'Rescheduling appointment for this vehicle' : 'Booking an appointment for this vehicle'}
+            {activeCustomerVehicles.length === 0 ? (
+              <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error + '30', marginBottom: 12 }]}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={20} color={theme.colors.error} style={{ marginRight: 8 }} />
+                <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text }]}>
+                  No active registered vehicles found. Please register a vehicle in My Portal first.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                {activeCustomerVehicles.map(v => {
+                  const isSelected = selectedVehicle && (v.registrationNumber === selectedVehicle.registrationNumber);
+                  return (
+                    <TouchableOpacity
+                      key={v.id || v.registrationNumber}
+                      onPress={() => setSelectedVehicle(v)}
+                      style={[
+                        styles.vehicleSelectorCard,
+                        { 
+                          backgroundColor: theme.colors.card, 
+                          borderColor: isSelected 
+                            ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
+                            : theme.colors.border,
+                          borderWidth: isSelected ? 2 : 1.5
+                        }
+                      ]}
+                    >
+                      <View style={[styles.plate, { marginRight: 8, height: 30, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }]}>
+                        <Text style={[styles.plateText, { fontSize: 11 }]}>{v.registrationNumber}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 13, fontWeight: 'bold' }]} numberOfLines={1}>
+                          {v.make} {v.model}
+                        </Text>
+                      </View>
+                      {isSelected && (
+                        <MaterialCommunityIcons 
+                          name="check-circle" 
+                          size={18} 
+                          color={theme.dark ? theme.colors.secondary : theme.colors.primary} 
+                          style={{ marginLeft: 6 }} 
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* 2. Dynamic Garage Selector */}
+            <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 8 }]}>
+              Select Garage
             </Text>
-          </View>
-        </View>
+            {loadingGarages ? (
+              <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 12 }} />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                {garages.map(g => {
+                  const isSelected = selectedGarage && (g.id === selectedGarage.id || g._id === selectedGarage._id);
+                  return (
+                    <TouchableOpacity
+                      key={g.id || g._id}
+                      onPress={() => setSelectedGarage(g)}
+                      style={[
+                        styles.garageSelectorCard,
+                        { 
+                          backgroundColor: theme.colors.card, 
+                          borderColor: isSelected 
+                            ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
+                            : theme.colors.border,
+                          borderWidth: isSelected ? 2 : 1.5
+                        }
+                      ]}
+                    >
+                      <MaterialCommunityIcons 
+                        name="store" 
+                        size={20} 
+                        color={isSelected ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder} 
+                        style={{ marginRight: 8 }} 
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: 'bold' }} numberOfLines={1}>
+                          {g.name}
+                        </Text>
+                        <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 1 }} numberOfLines={1}>
+                          {g.address}
+                        </Text>
+                      </View>
+                      {isSelected && (
+                        <MaterialCommunityIcons 
+                          name="check-circle" 
+                          size={18} 
+                          color={theme.dark ? theme.colors.secondary : theme.colors.primary} 
+                          style={{ marginLeft: 6 }} 
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Selected Service details */}
+            {selectedGarage && (
+              <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginBottom: 12 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 4 }}>
+                    Automated Service Package
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <View style={[styles.selectedGarageIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
+                      <MaterialCommunityIcons name="wrench-clock" size={16} color={theme.colors.secondary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 13 }]}>
+                        {selectedService.name}
+                      </Text>
+                      <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 2 }}>
+                        Price: £{selectedService.price.toFixed(2)} • Duration: {selectedService.duration} mins
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            )}
+          </>
+        )}
 
         {isReschedule && (
           <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.warning + '15', borderColor: theme.colors.warning }]}>
@@ -283,7 +532,10 @@ export default function BookingScreen({ route, navigation }: any) {
         )}
 
         {/* Date Selector Section */}
-        <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>1. Select Appointment Date</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 12 }}>
+          <MaterialCommunityIcons name="calendar-month-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+          <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>1. Select Appointment Date</Text>
+        </View>
         <View style={[styles.calendarCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           {/* Header */}
           <View style={styles.calendarHeader}>
@@ -351,7 +603,10 @@ export default function BookingScreen({ route, navigation }: any) {
         </View>
 
         {/* Time Selector Section */}
-        <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>2. Choose Time Slot</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 14 }}>
+          <MaterialCommunityIcons name="clock-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+          <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>2. Choose Time Slot</Text>
+        </View>
         {timeSlots.filter(slot => !isTimeSlotPassed(slot.time)).length === 0 ? (
           <View
             style={{
@@ -405,7 +660,10 @@ export default function BookingScreen({ route, navigation }: any) {
         )}
 
         {/* Notes/Comments Section */}
-        <Text style={[styles.sectionHeading, { color: theme.colors.text }]}>3. Special Requests / Notes (Optional)</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 14 }}>
+          <MaterialCommunityIcons name="note-text-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+          <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>3. Special Requests / Notes (Optional)</Text>
+        </View>
         <TextInput
           value={notes}
           onChangeText={setNotes}
@@ -460,7 +718,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 56,
+    height: 46,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
   },
@@ -470,83 +728,91 @@ const styles = StyleSheet.create({
     width: 60,
   },
   backBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     marginLeft: 4,
   },
   navTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+    padding: 12,
+    paddingBottom: 24,
   },
   vehicleCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 14,
+    padding: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 24,
-    gap: 16,
-    elevation: 2,
+    marginBottom: 12,
+    gap: 10,
+    elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+  },
+  selectedGarageIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
   plate: {
     backgroundColor: '#FFD300',
     borderWidth: 1.5,
     borderColor: '#000',
     borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   plateText: {
     color: '#000',
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 12,
     letterSpacing: 0.5,
   },
   vehicleMakeModel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 2,
+    marginBottom: 1,
   },
   vehicleSubText: {
-    fontSize: 12,
+    fontSize: 11,
   },
   sectionHeading: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   calendarCard: {
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 24,
-    elevation: 2,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+    elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
   },
   calendarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 8,
   },
   calNavBtn: {
-    padding: 4,
+    padding: 2,
   },
   calendarTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: 'bold',
   },
   weekdayRow: {
@@ -554,73 +820,73 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
-    paddingBottom: 6,
-    marginBottom: 8,
+    paddingBottom: 4,
+    marginBottom: 6,
   },
   weekdayText: {
     width: '14.2%',
     textAlign: 'center',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   daysGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    rowGap: 8,
+    rowGap: 6,
   },
   dayCell: {
     width: '14.2%',
-    height: 36,
+    height: 30,
     justifyContent: 'center',
     alignItems: 'center',
   },
   dayCellText: {
-    fontSize: 13,
+    fontSize: 11,
   },
   timePickerContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 24,
+    gap: 8,
+    marginBottom: 12,
   },
   timeCard: {
     width: '48%',
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
+    padding: 8,
+    borderRadius: 8,
     borderWidth: 1.5,
   },
   timeLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
   },
   timeText: {
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 1,
   },
   notesInput: {
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 13,
-    height: 90,
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 12,
+    height: 70,
     textAlignVertical: 'top',
-    marginBottom: 28,
+    marginBottom: 16,
   },
   actionContainer: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   submitBtn: {
-    height: 48,
-    borderRadius: 10,
+    height: 40,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 3,
+    elevation: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   btnContent: {
     flexDirection: 'row',
@@ -629,19 +895,37 @@ const styles = StyleSheet.create({
   submitBtnText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 13,
   },
   rescheduleNotice: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
+    padding: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   rescheduleNoticeText: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  vehicleSelectorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginRight: 10,
+    minWidth: 200,
+  },
+  garageSelectorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginRight: 10,
+    width: 220,
   },
 });

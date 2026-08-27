@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface Customer {
   id: string;
+  _id?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -15,6 +16,7 @@ export interface Customer {
 
 export interface Vehicle {
   id: string;
+  _id?: string;
   customerId: string;
   registrationNumber: string;
   make: string;
@@ -22,7 +24,8 @@ export interface Vehicle {
   year: string;
   motExpiryDate: string;
   lastServiceDate?: string;
-  status: 'Active' | 'Sold' | 'Scrapped' | 'Pending';
+  status: 'Active' | 'Sold' | 'Scrapped' | 'Pending' | 'Rejected';
+  rejectionReason?: string;
 }
 
 export interface AlertNotification {
@@ -35,6 +38,11 @@ export interface AlertNotification {
   date: string;
   status: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected';
   rejectionReason?: string;
+  garageId?: string;
+  serviceName?: string;
+  price?: number;
+  duration?: number;
+  rescheduled?: boolean;
 }
 
 export interface AuditLog {
@@ -79,41 +87,44 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// Automatically set base API URL based on Platform
-// export const BASE_URL = Platform.OS === 'android' 
-//   ? 'http://localhost:5000/api'  // ✅ Changed to localhost to use adb reverse tunnel
-//   : 'http://localhost:5000/api';
-
-export const BASE_URL = 'http://192.168.1.57:5000/api';
+export const BASE_URL = Platform.OS === 'android' ? 'http://localhost:5000/api' : 'http://127.0.0.1:5000/api';
 
 const decodeToken = (tokenStr: string | null) => {
   if (!tokenStr) return null;
   try {
     const payload = tokenStr.split('.')[1];
     const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-    let decoded = '';
-    if (typeof atob === 'function') {
-      decoded = atob(base64);
-    } else {
-      const raw = base64.replace(/[^A-Za-z0-9+/]/g, '');
-      let output = '';
-      let i = 0;
-      while (i < raw.length) {
-        const enc1 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(raw.charAt(i++));
-        const enc2 = enc1 !== -1 ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(raw.charAt(i++)) : -1;
-        const enc3 = enc2 !== -1 ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(raw.charAt(i++)) : -1;
-        const enc4 = enc3 !== -1 ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(raw.charAt(i++)) : -1;
-        if (enc1 === -1 || enc2 === -1) break;
-        const chr1 = (enc1 << 2) | (enc2 >> 4);
+    const raw = base64.replace(/[^A-Za-z0-9+/]/g, '');
+    let output = '';
+    let i = 0;
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    
+    while (i < raw.length) {
+      const char1 = i < raw.length ? raw.charAt(i++) : '';
+      const char2 = i < raw.length ? raw.charAt(i++) : '';
+      const char3 = i < raw.length ? raw.charAt(i++) : '';
+      const char4 = i < raw.length ? raw.charAt(i++) : '';
+
+      const enc1 = char1 ? chars.indexOf(char1) : -1;
+      const enc2 = char2 ? chars.indexOf(char2) : -1;
+      const enc3 = char3 ? chars.indexOf(char3) : -1;
+      const enc4 = char4 ? chars.indexOf(char4) : -1;
+
+      if (enc1 === -1 || enc2 === -1) break;
+
+      const chr1 = (enc1 << 2) | (enc2 >> 4);
+      output += String.fromCharCode(chr1);
+
+      if (enc3 !== -1) {
         const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
-        const chr3 = ((enc3 & 3) << 6) | enc4;
-        output += String.fromCharCode(chr1);
-        if (enc3 !== 64 && enc3 !== -1) output += String.fromCharCode(chr2);
-        if (enc4 !== 64 && enc4 !== -1) output += String.fromCharCode(chr3);
+        output += String.fromCharCode(chr2);
       }
-      decoded = output;
+      if (enc4 !== -1 && enc3 !== -1) {
+        const chr3 = ((enc3 & 3) << 6) | enc4;
+        output += String.fromCharCode(chr3);
+      }
     }
-    return JSON.parse(decoded);
+    return JSON.parse(output);
   } catch (error) {
     console.error('Error decoding token:', error);
     return null;
@@ -194,10 +205,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           const alertsData = await alertsRes.json();
           setAlerts(alertsData);
         }
-        if (customerRes && customerRes.ok) {
-          const customerData = await customerRes.json();
-          setCustomers([customerData]);
-          setVehicles(customerData.vehicles || []);
+        if (customerRes) {
+          if (customerRes.ok) {
+            const customerData = await customerRes.json();
+            setCustomers([customerData]);
+            setVehicles(customerData.vehicles || []);
+          } else if (customerRes.status === 404 || customerRes.status === 401) {
+            console.log('[DATA CONTEXT] Customer profile not found or unauthorized. Auto-logging out.');
+            setToken(null);
+          }
         }
         setAudits([]); // Clear audits for customer
       }
@@ -219,6 +235,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setAlerts([]);
     }
   };
+
+  useEffect(() => {
+    const loadStoredAuth = async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem('user_token');
+        const storedUserJson = await AsyncStorage.getItem('user_profile');
+        if (storedToken) {
+          setTokenState(storedToken);
+          if (storedUserJson) {
+            setUserState(JSON.parse(storedUserJson));
+          }
+        }
+      } catch (err) {
+        console.error('[DATA CONTEXT] Error loading stored auth details:', err);
+      }
+    };
+    loadStoredAuth();
+  }, []);
 
   useEffect(() => {
     if (token) {

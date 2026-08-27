@@ -27,6 +27,10 @@ export default function LoginScreen({ navigation }: any) {
   const [emailError, setEmailError] = useState(false);
   const [passwordError, setPasswordError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // Interactive focus states
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
 
   React.useEffect(() => {
     const checkPersistedSession = async () => {
@@ -39,10 +43,8 @@ export default function LoginScreen({ navigation }: any) {
           setToken(storedToken);
           setUser(storedUser);
           
-          if (storedUser.role === 'admin' || storedUser.role === 'staff') {
+          if (storedUser.role === 'admin' || storedUser.role === 'staff' || storedUser.role === 'customer') {
             navigation.replace('Main');
-          } else if (storedUser.role === 'customer' && storedUser.customerId) {
-            navigation.replace('CustomerPortal', { customerId: storedUser.customerId });
           }
         }
       } catch (err) {
@@ -87,19 +89,11 @@ export default function LoginScreen({ navigation }: any) {
         return;
       }
 
-      // Save token and user details to context
       setToken(data.token);
       setUser(data.user);
 
-      // Navigate based on actual backend user role
-      if (data.user?.role === 'admin' || data.user?.role === 'staff') {
+      if (data.user?.role === 'admin' || data.user?.role === 'staff' || data.user?.role === 'customer') {
         navigation.replace('Main');
-      } else if (data.user?.role === 'customer') {
-        if (data.user.customerId) {
-          navigation.replace('CustomerPortal', { customerId: data.user.customerId });
-        } else {
-          Alert.alert('Error', 'No customer profile linked to this account.');
-        }
       } else {
         Alert.alert('Error', 'Unknown user role returned from server.');
       }
@@ -119,7 +113,7 @@ export default function LoginScreen({ navigation }: any) {
         {/* Logo and Brand */}
         <View style={styles.headerContainer}>
           <View style={[styles.iconContainer, { backgroundColor: theme.colors.primaryContainer }]}>
-            <MaterialCommunityIcons name="bell-ring" size={50} color={theme.colors.primary} />
+            <MaterialCommunityIcons name="car-shield" size={44} color={theme.colors.primary} />
           </View>
           <Text style={[styles.title, { color: theme.colors.text }]}>
             MOT Reminders
@@ -142,8 +136,18 @@ export default function LoginScreen({ navigation }: any) {
             )}
             
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Email Address</Text>
-            <View style={[styles.inputContainer, { borderColor: emailError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
-              <MaterialCommunityIcons name="email-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
+            <View style={[
+              styles.inputContainer, 
+              { 
+                borderColor: emailError 
+                  ? theme.colors.error 
+                  : emailFocused 
+                  ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
+                  : theme.colors.border, 
+                backgroundColor: theme.colors.background 
+              }
+            ]}>
+              <MaterialCommunityIcons name="email-outline" size={20} color={emailFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder} style={styles.inputIcon} />
               <TextInput
                 value={email}
                 onChangeText={(text) => {
@@ -151,6 +155,8 @@ export default function LoginScreen({ navigation }: any) {
                   setEmailError(false);
                   setErrorMessage(null);
                 }}
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
                 placeholder="E.g. user@example.com"
                 placeholderTextColor={theme.colors.placeholder}
                 keyboardType="email-address"
@@ -160,8 +166,18 @@ export default function LoginScreen({ navigation }: any) {
             </View>
 
             <Text style={[styles.inputLabel, { color: theme.colors.text }]}>Password</Text>
-            <View style={[styles.inputContainer, { borderColor: passwordError ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
-              <MaterialCommunityIcons name="lock-outline" size={20} color={theme.colors.placeholder} style={styles.inputIcon} />
+            <View style={[
+              styles.inputContainer, 
+              { 
+                borderColor: passwordError 
+                  ? theme.colors.error 
+                  : passwordFocused 
+                  ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
+                  : theme.colors.border, 
+                backgroundColor: theme.colors.background 
+              }
+            ]}>
+              <MaterialCommunityIcons name="lock-outline" size={20} color={passwordFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder} style={styles.inputIcon} />
               <TextInput
                 value={password}
                 onChangeText={(text) => {
@@ -169,6 +185,8 @@ export default function LoginScreen({ navigation }: any) {
                   setPasswordError(false);
                   setErrorMessage(null);
                 }}
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={() => setPasswordFocused(false)}
                 placeholder="••••••••"
                 placeholderTextColor={theme.colors.placeholder}
                 secureTextEntry={!showPassword}
@@ -179,7 +197,7 @@ export default function LoginScreen({ navigation }: any) {
                 <MaterialCommunityIcons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   size={20}
-                  color={theme.colors.placeholder}
+                  color={passwordFocused ? (theme.dark ? theme.colors.secondary : theme.colors.primary) : theme.colors.placeholder}
                 />
               </TouchableOpacity>
             </View>
@@ -193,9 +211,9 @@ export default function LoginScreen({ navigation }: any) {
               ]}
             >
               {loading ? (
-                <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={[styles.buttonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Login</Text>
+                <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Login</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -205,7 +223,7 @@ export default function LoginScreen({ navigation }: any) {
         <View style={styles.footerContainer}>
           <Text style={{ color: theme.colors.placeholder }}>Don't have an account? </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-            <Text style={[styles.signupText, { color: theme.colors.secondary }]}>Sign Up</Text>
+            <Text style={[styles.signupText, { color: theme.colors.primary }]}>Sign Up</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -224,17 +242,20 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 32,
   },
   iconContainer: {
-    padding: 16,
-    borderRadius: 24,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   title: {
     fontSize: 28,
@@ -245,47 +266,23 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 13,
     textAlign: 'center',
-  },
-  segmentContainer: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: 20,
-    padding: 4,
-  },
-  segmentButton: {
-    flex: 1,
-    height: 38,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  segmentText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    lineHeight: 18,
   },
   card: {
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
     borderWidth: 1,
-    elevation: 4,
+    elevation: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
   },
   portalHeading: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 20,
     textAlign: 'center',
-  },
-  portalInfoText: {
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
-    marginBottom: 16,
   },
   inputLabel: {
     fontSize: 14,
@@ -296,14 +293,14 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    height: 48,
-    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    height: 52,
+    paddingHorizontal: 16,
     marginBottom: 18,
   },
   inputIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   input: {
     flex: 1,
@@ -315,41 +312,25 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   button: {
-    height: 48,
-    borderRadius: 8,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
-    elevation: 2,
+    marginTop: 12,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   buttonText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  customerSelectorContainer: {
-    marginBottom: 16,
-  },
-  customerSelectorItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-  },
-  customerName: {
-    fontWeight: 'bold',
-    fontSize: 14,
   },
   footerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 24,
+    marginTop: 32,
   },
   signupText: {
     fontWeight: 'bold',
