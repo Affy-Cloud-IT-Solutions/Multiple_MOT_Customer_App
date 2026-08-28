@@ -62,6 +62,14 @@ export default function AdminCustomersScreen({ navigation }: any) {
   const [serviceDate, setServiceDate] = useState('');
 
   const fetchMakesList = async (search: string, pageNum: number) => {
+    const fallbackMakes = [
+      'ALFA ROMEO', 'ASTON MARTIN', 'AUDI', 'BENTLEY', 'BMW', 'CITROEN', 'CUPRA', 'DACIA', 
+      'DS', 'FERRARI', 'FIAT', 'FORD', 'HONDA', 'HYUNDAI', 'JAGUAR', 'JEEP', 'KIA', 
+      'LAMBORGHINI', 'LAND ROVER', 'LEXUS', 'LOTUS', 'MASERATI', 'MAZDA', 'MCLAREN', 
+      'MERCEDES-BENZ', 'MG', 'MINI', 'MITSUBISHI', 'NISSAN', 'PEUGEOT', 'PORSCHE', 
+      'RENAULT', 'ROLLS-ROYCE', 'SEAT', 'SKODA', 'SMART', 'SSANGYONG', 'SUBARU', 
+      'SUZUKI', 'TESLA', 'TOYOTA', 'VAUXHALL', 'VOLKSWAGEN', 'VOLVO'
+    ];
     try {
       const response = await fetch(`${BASE_URL}/vehicles/makes?page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
         headers: {
@@ -69,19 +77,49 @@ export default function AdminCustomersScreen({ navigation }: any) {
           Authorization: `Bearer ${token}`
         }
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
+      const items = data.makes && data.makes.length > 0 ? data.makes : fallbackMakes.filter(m => m.includes(search.toUpperCase()));
       return {
-        items: data.makes || [],
+        items,
         hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
       };
     } catch (e) {
-      console.error(e);
-      return { items: [], hasMore: false };
+      console.warn('Failed to fetch makes, using client-side fallback list:', e);
+      const filtered = search 
+        ? fallbackMakes.filter(m => m.includes(search.toUpperCase()))
+        : fallbackMakes;
+      const limit = 20;
+      const start = (pageNum - 1) * limit;
+      const items = filtered.slice(start, start + limit);
+      const hasMore = start + limit < filtered.length;
+      return { items, hasMore };
     }
   };
 
   const fetchModelsListForMake = (makeVal: string) => async (search: string, pageNum: number) => {
     if (!makeVal) return { items: [], hasMore: false };
+    const fallbackModelsMap: Record<string, string[]> = {
+      'FORD': ['FOCUS', 'FIESTA', 'MUSTANG', 'MONDEO', 'KUGA', 'PUMA', 'RANGER', 'TRANSIT', 'KA', 'GALAXY', 'C-MAX', 'S-MAX'],
+      'BMW': ['1 SERIES', '2 SERIES', '3 SERIES', '4 SERIES', '5 SERIES', 'X1', 'X3', 'X5', 'M3', 'M5', 'i3', 'i8', '320D', '520D'],
+      'MITSUBISHI': ['OUTLANDER', 'L200', 'SHOGUN', 'COLT', 'ASX', 'ECLIPSE CROSS', 'MIRAGE', 'LANCER'],
+      'VOLKSWAGEN': ['GOLF', 'POLO', 'PASSAT', 'TIGUAN', 'UP', 'TOURAN', 'CADDY', 'TRANSPORTER', 'SHARAN', 'SCIROCCO', 'TOUAREG'],
+      'AUDI': ['A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'Q2', 'Q3', 'Q5', 'Q7', 'TT', 'R8', 'E-TRON'],
+      'VAUXHALL': ['ASTRA', 'CORSA', 'INSIGNIA', 'MOKKA', 'ZAFIRA', 'VIVA', 'CROSSLAND', 'GRANDLAND'],
+      'TOYOTA': ['YARIS', 'COROLLA', 'AURIS', 'PRIUS', 'AVENSIS', 'RAV4', 'C-HR', 'LAND CRUISER', 'AYGO', 'HILUX'],
+      'HONDA': ['CIVIC', 'JAZZ', 'CR-V', 'HR-V', 'ACCORD', 'INSIGHT'],
+      'NISSAN': ['QASHQAI', 'JUKE', 'MICRA', 'LEAF', 'X-TRAIL', 'NOTE', 'NAVARA'],
+      'HYUNDAI': ['I10', 'I20', 'I30', 'TUCSON', 'IONIQ', 'KONA', 'SANTA FE'],
+      'KIA': ['SPORTAGE', 'CEED', 'RIO', 'PICANTO', 'NIRO', 'SORENTO', 'STONIC'],
+      'MERCEDES-BENZ': ['A CLASS', 'B CLASS', 'C CLASS', 'E CLASS', 'S CLASS', 'GLA', 'GLC', 'GLE', 'CLA', 'CLS'],
+      'PEUGEOT': ['108', '208', '308', '2008', '3008', '5008', 'PARTNER'],
+      'RENAULT': ['CLIO', 'CAPTUR', 'MEGANE', 'KADJAR', 'ZOE', 'SCENIC'],
+      'FIAT': ['500', 'PANDA', 'PUNTO', 'TIPO', '500X', 'DOBLO'],
+      'LAND ROVER': ['RANGE ROVER', 'DISCOVERY', 'DEFENDER', 'EVOQUE', 'VELAR', 'FREELANDER'],
+      'JAGUAR': ['XE', 'XF', 'XJ', 'F-PACE', 'E-PACE', 'I-PACE', 'F-TYPE'],
+      'MINI': ['COOPER', 'ONE', 'COUNTRYMAN', 'CLUBMAN'],
+      'TESLA': ['MODEL 3', 'MODEL Y', 'MODEL S', 'MODEL X']
+    };
     try {
       const response = await fetch(`${BASE_URL}/vehicles/models?make=${encodeURIComponent(makeVal)}&page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
         headers: {
@@ -89,14 +127,25 @@ export default function AdminCustomersScreen({ navigation }: any) {
           Authorization: `Bearer ${token}`
         }
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
+      const localModels = fallbackModelsMap[makeVal.toUpperCase()] || [];
+      const items = data.models && data.models.length > 0 ? data.models : localModels.filter(m => m.includes(search.toUpperCase()));
       return {
-        items: data.models || [],
+        items,
         hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
       };
     } catch (e) {
-      console.error(e);
-      return { items: [], hasMore: false };
+      console.warn('Failed to fetch models, using client-side fallback list:', e);
+      const localModels = fallbackModelsMap[makeVal.toUpperCase()] || [];
+      const filtered = search 
+        ? localModels.filter(m => m.includes(search.toUpperCase()))
+        : localModels;
+      const limit = 20;
+      const start = (pageNum - 1) * limit;
+      const items = filtered.slice(start, start + limit);
+      const hasMore = start + limit < filtered.length;
+      return { items, hasMore };
     }
   };
 

@@ -95,6 +95,14 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const [expandedBookingReg, setExpandedBookingReg] = useState<string | null>(null);
 
   const fetchMakesList = async (search: string, pageNum: number) => {
+    const fallbackMakes = [
+      'ALFA ROMEO', 'ASTON MARTIN', 'AUDI', 'BENTLEY', 'BMW', 'CITROEN', 'CUPRA', 'DACIA', 
+      'DS', 'FERRARI', 'FIAT', 'FORD', 'HONDA', 'HYUNDAI', 'JAGUAR', 'JEEP', 'KIA', 
+      'LAMBORGHINI', 'LAND ROVER', 'LEXUS', 'LOTUS', 'MASERATI', 'MAZDA', 'MCLAREN', 
+      'MERCEDES-BENZ', 'MG', 'MINI', 'MITSUBISHI', 'NISSAN', 'PEUGEOT', 'PORSCHE', 
+      'RENAULT', 'ROLLS-ROYCE', 'SEAT', 'SKODA', 'SMART', 'SSANGYONG', 'SUBARU', 
+      'SUZUKI', 'TESLA', 'TOYOTA', 'VAUXHALL', 'VOLKSWAGEN', 'VOLVO'
+    ];
     try {
       const response = await fetch(`${BASE_URL}/vehicles/makes?page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
         headers: {
@@ -102,19 +110,49 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
           Authorization: `Bearer ${token}`
         }
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
+      const items = data.makes && data.makes.length > 0 ? data.makes : fallbackMakes.filter(m => m.includes(search.toUpperCase()));
       return {
-        items: data.makes || [],
+        items,
         hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
       };
     } catch (e) {
-      console.error(e);
-      return { items: [], hasMore: false };
+      console.warn('Failed to fetch makes, using client-side fallback list:', e);
+      const filtered = search 
+        ? fallbackMakes.filter(m => m.includes(search.toUpperCase()))
+        : fallbackMakes;
+      const limit = 20;
+      const start = (pageNum - 1) * limit;
+      const items = filtered.slice(start, start + limit);
+      const hasMore = start + limit < filtered.length;
+      return { items, hasMore };
     }
   };
 
   const fetchModelsListForMake = (makeVal: string) => async (search: string, pageNum: number) => {
     if (!makeVal) return { items: [], hasMore: false };
+    const fallbackModelsMap: Record<string, string[]> = {
+      'FORD': ['FOCUS', 'FIESTA', 'MUSTANG', 'MONDEO', 'KUGA', 'PUMA', 'RANGER', 'TRANSIT', 'KA', 'GALAXY', 'C-MAX', 'S-MAX'],
+      'BMW': ['1 SERIES', '2 SERIES', '3 SERIES', '4 SERIES', '5 SERIES', 'X1', 'X3', 'X5', 'M3', 'M5', 'i3', 'i8', '320D', '520D'],
+      'MITSUBISHI': ['OUTLANDER', 'L200', 'SHOGUN', 'COLT', 'ASX', 'ECLIPSE CROSS', 'MIRAGE', 'LANCER'],
+      'VOLKSWAGEN': ['GOLF', 'POLO', 'PASSAT', 'TIGUAN', 'UP', 'TOURAN', 'CADDY', 'TRANSPORTER', 'SHARAN', 'SCIROCCO', 'TOUAREG'],
+      'AUDI': ['A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'Q2', 'Q3', 'Q5', 'Q7', 'TT', 'R8', 'E-TRON'],
+      'VAUXHALL': ['ASTRA', 'CORSA', 'INSIGNIA', 'MOKKA', 'ZAFIRA', 'VIVA', 'CROSSLAND', 'GRANDLAND'],
+      'TOYOTA': ['YARIS', 'COROLLA', 'AURIS', 'PRIUS', 'AVENSIS', 'RAV4', 'C-HR', 'LAND CRUISER', 'AYGO', 'HILUX'],
+      'HONDA': ['CIVIC', 'JAZZ', 'CR-V', 'HR-V', 'ACCORD', 'INSIGHT'],
+      'NISSAN': ['QASHQAI', 'JUKE', 'MICRA', 'LEAF', 'X-TRAIL', 'NOTE', 'NAVARA'],
+      'HYUNDAI': ['I10', 'I20', 'I30', 'TUCSON', 'IONIQ', 'KONA', 'SANTA FE'],
+      'KIA': ['SPORTAGE', 'CEED', 'RIO', 'PICANTO', 'NIRO', 'SORENTO', 'STONIC'],
+      'MERCEDES-BENZ': ['A CLASS', 'B CLASS', 'C CLASS', 'E CLASS', 'S CLASS', 'GLA', 'GLC', 'GLE', 'CLA', 'CLS'],
+      'PEUGEOT': ['108', '208', '308', '2008', '3008', '5008', 'PARTNER'],
+      'RENAULT': ['CLIO', 'CAPTUR', 'MEGANE', 'KADJAR', 'ZOE', 'SCENIC'],
+      'FIAT': ['500', 'PANDA', 'PUNTO', 'TIPO', '500X', 'DOBLO'],
+      'LAND ROVER': ['RANGE ROVER', 'DISCOVERY', 'DEFENDER', 'EVOQUE', 'VELAR', 'FREELANDER'],
+      'JAGUAR': ['XE', 'XF', 'XJ', 'F-PACE', 'E-PACE', 'I-PACE', 'F-TYPE'],
+      'MINI': ['COOPER', 'ONE', 'COUNTRYMAN', 'CLUBMAN'],
+      'TESLA': ['MODEL 3', 'MODEL Y', 'MODEL S', 'MODEL X']
+    };
     try {
       const response = await fetch(`${BASE_URL}/vehicles/models?make=${encodeURIComponent(makeVal)}&page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
         headers: {
@@ -122,17 +160,28 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
           Authorization: `Bearer ${token}`
         }
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
+      const localModels = fallbackModelsMap[makeVal.toUpperCase()] || [];
+      const items = data.models && data.models.length > 0 ? data.models : localModels.filter(m => m.includes(search.toUpperCase()));
       return {
-        items: data.models || [],
+        items,
         hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
       };
     } catch (e) {
-      console.error(e);
-      return { items: [], hasMore: false };
+      console.warn('Failed to fetch models, using client-side fallback list:', e);
+      const localModels = fallbackModelsMap[makeVal.toUpperCase()] || [];
+      const filtered = search 
+        ? localModels.filter(m => m.includes(search.toUpperCase()))
+        : localModels;
+      const limit = 20;
+      const start = (pageNum - 1) * limit;
+      const items = filtered.slice(start, start + limit);
+      const hasMore = start + limit < filtered.length;
+      return { items, hasMore };
     }
   };
-  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'motHistory' | 'profile'>('home');
 
   const getBookingSlot = (makeModel: string) => {
     const parts = makeModel.split(' - Slot: ');
@@ -293,6 +342,14 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         >
           <Text style={[styles.segmentText, { color: activeTab === 'home' ? theme.colors.primary : theme.colors.placeholder }]}>
             My Vehicles
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab('motHistory')}
+          style={[styles.segmentButton, activeTab === 'motHistory' && { borderBottomColor: theme.colors.primary }]}
+        >
+          <Text style={[styles.segmentText, { color: activeTab === 'motHistory' ? theme.colors.primary : theme.colors.placeholder }]}>
+            MOT History
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -758,6 +815,138 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
           </ScrollView>
         )}
 
+        {activeTab === 'motHistory' && (
+          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+            <View style={styles.welcomeBlock}>
+              <Text style={[styles.welcomeTitle, { color: theme.colors.text }]}>
+                Live MOT History Check
+              </Text>
+              <Text style={[styles.welcomeSubtitle, { color: theme.colors.placeholder }]}>
+                Select one of your registered vehicles to query its full official MOT history from the live registry.
+              </Text>
+            </View>
+
+            {customerVehicles.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <MaterialCommunityIcons name="car-outline" size={48} color={theme.colors.placeholder} style={{ marginBottom: 12 }} />
+                <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>
+                  You have no active vehicles registered.
+                </Text>
+              </View>
+            ) : (
+              customerVehicles.map((v) => {
+                const vehicleId = v.id || v._id || v.registrationNumber;
+                return (
+                  <TouchableOpacity
+                    key={vehicleId}
+                    onPress={() => navigation.navigate('MotHistory', { registration: v.registrationNumber })}
+                    style={[
+                      styles.vehicleCard,
+                      {
+                        backgroundColor: theme.colors.card,
+                        borderColor: theme.colors.border,
+                        padding: 14,
+                        elevation: 2,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1.5 },
+                        shadowOpacity: 0.05,
+                        shadowRadius: 3,
+                      }
+                    ]}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <View style={[styles.vehicleIconCircle, { backgroundColor: theme.colors.primary + '15', width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' }]}>
+                          <MaterialCommunityIcons name="car-cog" size={22} color={theme.colors.primary} />
+                        </View>
+                        
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={{ fontSize: 15, fontWeight: 'bold', color: theme.colors.text }} numberOfLines={1}>
+                            {v.make} {v.model}
+                          </Text>
+                          
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                            {/* License Plate Style */}
+                            <View style={{
+                              flexDirection: 'row',
+                              backgroundColor: '#FFD300',
+                              borderWidth: 1,
+                              borderColor: '#000000',
+                              borderRadius: 4,
+                              paddingHorizontal: 6,
+                              paddingVertical: 1.5,
+                              alignItems: 'center',
+                              marginRight: 8
+                            }}>
+                              <View style={{ width: 3.5, height: '100%', backgroundColor: '#0A4E9B', marginRight: 4, borderRadius: 0.5 }} />
+                              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#000000', letterSpacing: 0.5 }}>
+                                {v.registrationNumber}
+                              </Text>
+                            </View>
+                            
+                            {v.year ? (
+                              <Text style={{ fontSize: 12, color: theme.colors.placeholder }}>
+                                Year: {v.year}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Chevron indicator */}
+                      <View style={{ 
+                        width: 28, 
+                        height: 28, 
+                        borderRadius: 14, 
+                        backgroundColor: theme.colors.primary + '10', 
+                        justifyContent: 'center', 
+                        alignItems: 'center',
+                        marginLeft: 6
+                      }}>
+                        <MaterialCommunityIcons name="chevron-right" size={18} color={theme.colors.primary} />
+                      </View>
+                    </View>
+
+                    {/* Bottom Info Section if MOT Expiry exists */}
+                    {v.motExpiryDate && (
+                      <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginTop: 10,
+                        paddingTop: 10,
+                        borderTopWidth: 0.5,
+                        borderTopColor: theme.colors.border
+                      }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <MaterialCommunityIcons name="calendar-range" size={13} color={theme.colors.placeholder} style={{ marginRight: 5 }} />
+                          <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                            MOT Expiry: {new Date(v.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </Text>
+                        </View>
+                        
+                        <View style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: theme.colors.success + '12',
+                          paddingHorizontal: 8,
+                          paddingVertical: 2,
+                          borderRadius: 10
+                        }}>
+                          <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: theme.colors.success, marginRight: 5 }} />
+                          <Text style={{ fontSize: 9, fontWeight: 'bold', color: theme.colors.success }}>
+                            Active
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+        )}
+
         {activeTab === 'history' && (
           <ScrollView contentContainerStyle={styles.scrollContent}>
             {/* <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 16 }]}>MOT Booking History</Text> */}
@@ -801,9 +990,10 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                   }
 
                   return (
-                    <View
+                    <TouchableOpacity
                       key={item.id}
                       style={[styles.historyCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                      onPress={() => navigation.navigate('MotHistory', { registration: item.registrationNumber })}
                     >
                       <View style={styles.historyCardHeader}>
                         <View style={styles.smallPlate}>
@@ -857,7 +1047,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           Requested: {new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </Text>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })
             )}

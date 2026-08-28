@@ -16,7 +16,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function ResultScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
   const { user } = useAppValues();
-  const [saving, setSaving] = useState(false);
 
   const defaultVehicle = {
     registration: 'AB18 CDE',
@@ -42,41 +41,7 @@ export default function ResultScreen({ route, navigation }: any) {
   const vehicle = route?.params?.vehicleData || defaultVehicle;
   const isPass = vehicle.status === 'PASS';
 
-  const handleSaveToHistory = async () => {
-    if (!user?.id) {
-      Alert.alert('Notice', 'Please sign in to save vehicle search history.');
-      return;
-    }
 
-    setSaving(true);
-    try {
-      const historyKey = `@search_history_${user.id}`;
-      const historyStr = await AsyncStorage.getItem(historyKey);
-      let history = historyStr ? JSON.parse(historyStr) : [];
-      
-      // Remove duplicates
-      history = history.filter((h: any) => h.registration.toUpperCase() !== vehicle.registration.toUpperCase());
-      
-      // Prepend
-      history.unshift(vehicle);
-      
-      // Limit to 20 items
-      if (history.length > 20) {
-        history = history.slice(0, 20);
-      }
-      
-      await AsyncStorage.setItem(historyKey, JSON.stringify(history));
-      setSaving(false);
-      Alert.alert(
-        'Success',
-        `Vehicle ${vehicle.registration} has been saved to your local search history!`
-      );
-    } catch (e) {
-      setSaving(false);
-      console.error('Failed to save to history:', e);
-      Alert.alert('Error', 'Failed to save vehicle details to local history.');
-    }
-  };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -205,30 +170,29 @@ export default function ResultScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* Save Button */}
+      {/* MOT History Button */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          onPress={handleSaveToHistory}
-          disabled={saving}
-          style={[
-            styles.saveButton,
-            { backgroundColor: theme.colors.primary, opacity: saving ? 0.7 : 1 },
-          ]}
-        >
-          {saving ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
+        {vehicle.motTests && vehicle.motTests.length > 0 && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('MotHistory', { vehicleData: vehicle })}
+            style={[
+              styles.saveButton,
+              { backgroundColor: theme.colors.primary },
+            ]}
+          >
             <View style={styles.saveButtonContent}>
               <MaterialCommunityIcons 
-                name="bookmark-outline" 
+                name="history" 
                 size={20} 
                 color="#FFFFFF" 
                 style={{ marginRight: 8 }} 
               />
-              <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>Save to History</Text>
+              <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
+                View Full MOT History
+              </Text>
             </View>
-          )}
-        </TouchableOpacity>
+          </TouchableOpacity>
+        )}
       </View>
     </ScrollView>
   );

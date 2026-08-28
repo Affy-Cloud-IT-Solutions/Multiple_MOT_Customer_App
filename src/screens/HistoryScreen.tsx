@@ -5,85 +5,6 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const HISTORICAL_CHECKS = [
-  {
-    registration: 'AB18 CDE',
-    make: 'FORD',
-    model: 'FOCUS TDCI',
-    year: '2018',
-    color: 'Metallic Grey',
-    fuelType: 'Diesel',
-    engineSize: '1499cc',
-    status: 'PASS',
-    expiryDate: '12 July 2027',
-    testDate: '13 July 2026',
-    testNumber: '8910 2345 6789',
-    mileage: '48,250 miles',
-    advisories: [
-      'Front brake pads wearing thin (minor)',
-      'Nearside rear tyre worn close to legal limit (advisory)',
-      'Front suspension arm pin or bush worn but not resulting in excessive movement (advisory)',
-    ],
-    failures: [],
-  },
-  {
-    registration: 'LD65 XYZ',
-    make: 'VAUXHALL',
-    model: 'CORSA ECOFLEX',
-    year: '2015',
-    color: 'Red',
-    fuelType: 'Petrol',
-    engineSize: '1398cc',
-    status: 'FAIL',
-    expiryDate: 'Expired (14 Jan 2026)',
-    testDate: '15 Jan 2026',
-    testNumber: '1122 3344 5566',
-    mileage: '67,890 miles',
-    advisories: [
-      'Nearside front tyre slightly damaged (advisory)',
-      'Monitor oil leak from gearbox area (minor)',
-    ],
-    failures: [
-      'Nearside front headlamp not working on dipped beam (major failure)',
-      'Offside rear brake disc worn below limit (major failure)',
-      'Exhaust emissions exceed limit values (major failure)',
-    ],
-  },
-  {
-    registration: 'MH07 KKK',
-    make: 'BMW',
-    model: '320D M SPORT',
-    year: '2019',
-    color: 'White',
-    fuelType: 'Diesel',
-    engineSize: '1995cc',
-    status: 'PASS',
-    expiryDate: '28 October 2026',
-    testDate: '29 October 2025',
-    testNumber: '9988 7766 5544',
-    mileage: '32,100 miles',
-    advisories: [],
-    failures: [],
-  },
-  {
-    registration: 'GY19 PLK',
-    make: 'AUDI',
-    model: 'A3 SPORTBACK',
-    year: '2019',
-    color: 'Black',
-    fuelType: 'Petrol',
-    engineSize: '1495cc',
-    status: 'PASS',
-    expiryDate: '03 March 2027',
-    testDate: '04 March 2026',
-    testNumber: '5566 7788 9900',
-    mileage: '41,500 miles',
-    advisories: [
-      'Offside front tyre slightly worn on outer edge (advisory)',
-    ],
-    failures: [],
-  },
-];
 
 const mapBackendVehicleToFrontend = (v: any) => {
   const isPass = v.motStatus === 'Valid' || v.status === 'PASS' || v.status === 'Active';
@@ -101,7 +22,8 @@ const mapBackendVehicleToFrontend = (v: any) => {
   let advisories = v.advisories || [];
   let failures = v.failures || [];
 
-  if (advisories.length === 0 && failures.length === 0) {
+  // Only inject mock details if there is no live motTests array present
+  if (!v.motTests && advisories.length === 0 && failures.length === 0) {
     if (regUpper === 'AB18 CDE') {
       advisories = [
         'Front brake pads wearing thin (minor)',
@@ -145,6 +67,7 @@ const mapBackendVehicleToFrontend = (v: any) => {
     mileage: v.mileage || '45,000 miles',
     advisories,
     failures,
+    motTests: v.motTests || null
   };
 };
 
@@ -210,7 +133,7 @@ export default function HistoryScreen({ navigation }: any) {
   }
 
   const handleCardPress = (item: any) => {
-    navigation.navigate('Result', { vehicleData: item });
+    navigation.navigate('Result', { vehicleData: item, fromHistory: true });
   };
 
   return (

@@ -12,6 +12,7 @@ import MainTabNavigator from './MainTabNavigator';
 import GarageListScreen from '../screens/GarageListScreen';
 import GarageDetailScreen from '../screens/GarageDetailScreen';
 import ResultScreen from '../screens/ResultScreen';
+import MotHistoryScreen from '../screens/MotHistoryScreen';
 import { useAppTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator();
@@ -92,6 +93,11 @@ export default function RootNavigator() {
         name="Result"
         component={ResultScreen}
         options={{ title: 'MOT Check Results' }}
+      />
+      <Stack.Screen
+        name="MotHistory"
+        component={MotHistoryScreen}
+        options={{ title: 'MOT History' }}
       />
     </Stack.Navigator>
   );
