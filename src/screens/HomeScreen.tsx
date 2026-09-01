@@ -191,11 +191,91 @@ export default function HomeScreen({ navigation }: any) {
         {/* Banner */}
         <View style={styles.banner}>
           <Text style={[styles.bannerTitle, { color: theme.colors.text }]}>
-            UK MOT Status Check
+            Smart MOT Hub & Booking Marketplace
           </Text>
           <Text style={[styles.bannerSubtitle, { color: theme.colors.placeholder }]}>
-            Enter a registration plate to view real-time MOT status, history, advisories, and failures.
+            Search registration marks, book certified MOT services, compare garages, and set up automatic reminders.
           </Text>
+        </View>
+
+        {/* Core Actions Grid */}
+        <View style={styles.quickGrid}>
+          {/* Action 1: Book MOT */}
+          <TouchableOpacity
+            style={[styles.quickCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            onPress={() => {
+              if (token) {
+                navigation.navigate('My Portal');
+              } else {
+                Alert.alert('Authentication Required', 'Please sign in to access booking portal.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Sign In', onPress: () => navigation.navigate('Login') }
+                ]);
+              }
+            }}
+          >
+            <View style={[styles.quickIconCircle, { backgroundColor: theme.colors.primary + '15' }]}>
+              <MaterialCommunityIcons name="calendar-plus" size={20} color={theme.colors.primary} />
+            </View>
+            <Text style={[styles.quickCardTitle, { color: theme.colors.text }]}>Book MOT Slot</Text>
+            <Text style={[styles.quickCardDesc, { color: theme.colors.placeholder }]}>Schedule certified test</Text>
+          </TouchableOpacity>
+
+          {/* Action 2: Manage Vehicles */}
+          <TouchableOpacity
+            style={[styles.quickCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            onPress={() => {
+              if (token) {
+                navigation.navigate('My Portal');
+              } else {
+                Alert.alert('Authentication Required', 'Please sign in to access portal.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Sign In', onPress: () => navigation.navigate('Login') }
+                ]);
+              }
+            }}
+          >
+            <View style={[styles.quickIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
+              <MaterialCommunityIcons name="car-cog" size={20} color={theme.colors.secondary} />
+            </View>
+            <Text style={[styles.quickCardTitle, { color: theme.colors.text }]}>My Vehicles</Text>
+            <Text style={[styles.quickCardDesc, { color: theme.colors.placeholder }]}>Manage & track expiries</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.quickGrid}>
+          {/* Action 3: Find Garages */}
+          <TouchableOpacity
+            style={[styles.quickCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            onPress={() => navigation.navigate('Garages')}
+          >
+            <View style={[styles.quickIconCircle, { backgroundColor: theme.colors.success + '15' }]}>
+              <MaterialCommunityIcons name="store-search" size={20} color={theme.colors.success} />
+            </View>
+            <Text style={[styles.quickCardTitle, { color: theme.colors.text }]}>Approved Centers</Text>
+            <Text style={[styles.quickCardDesc, { color: theme.colors.placeholder }]}>Compare prices & rates</Text>
+          </TouchableOpacity>
+
+          {/* Action 4: Expiry Reminders */}
+          <TouchableOpacity
+            style={[styles.quickCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            onPress={() => {
+              if (token) {
+                navigation.navigate('Profile');
+              } else {
+                Alert.alert('Authentication Required', 'Please sign in to view reminders.', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Sign In', onPress: () => navigation.navigate('Login') }
+                ]);
+              }
+            }}
+          >
+            <View style={[styles.quickIconCircle, { backgroundColor: theme.colors.warning + '15' }]}>
+              <MaterialCommunityIcons name="bell-ring" size={20} color={theme.colors.warning} />
+            </View>
+            <Text style={[styles.quickCardTitle, { color: theme.colors.text }]}>Smart Reminders</Text>
+            <Text style={[styles.quickCardDesc, { color: theme.colors.placeholder }]}>SMS, Email alerts setup</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Plate Search Input Container */}
@@ -234,7 +314,7 @@ export default function HomeScreen({ navigation }: any) {
             ) : (
               <View style={styles.searchButtonContent}>
                 <MaterialCommunityIcons name="magnify" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={[styles.searchButtonText, { color: '#FFFFFF' }]}>Check MOT Status</Text>
+                <Text style={[styles.searchButtonText, { color: '#FFFFFF' }]}>Search Vehicle Details</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -243,7 +323,7 @@ export default function HomeScreen({ navigation }: any) {
         {/* Browse Garages Premium Card */}
         <TouchableOpacity
           style={[styles.browseCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-          onPress={() => navigation.navigate('GarageList')}
+          onPress={() => navigation.navigate('Garages')}
         >
           <View style={[styles.browseIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
             <MaterialCommunityIcons name="store-search" size={22} color={theme.colors.secondary} />
@@ -254,6 +334,43 @@ export default function HomeScreen({ navigation }: any) {
           </View>
           <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.placeholder} />
         </TouchableOpacity>
+
+        {/* Marketplace Guide */}
+        <View style={[styles.guideCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <Text style={[styles.guideHeader, { color: theme.colors.text }]}>
+            How Smart MOT Booking Works
+          </Text>
+          
+          <View style={styles.guideStepRow}>
+            <View style={[styles.stepNumCircle, { backgroundColor: theme.colors.primary }]}>
+              <Text style={styles.stepNumText}>1</Text>
+            </View>
+            <View style={styles.stepTextContainer}>
+              <Text style={[styles.stepTitle, { color: theme.colors.text }]}>Register Your Vehicles</Text>
+              <Text style={[styles.stepDesc, { color: theme.colors.placeholder }]}>Add details and get automatic SMS & email reminder alerts before expiry.</Text>
+            </View>
+          </View>
+
+          <View style={styles.guideStepRow}>
+            <View style={[styles.stepNumCircle, { backgroundColor: theme.colors.secondary }]}>
+              <Text style={styles.stepNumText}>2</Text>
+            </View>
+            <View style={styles.stepTextContainer}>
+              <Text style={[styles.stepTitle, { color: theme.colors.text }]}>Select Approved Center</Text>
+              <Text style={[styles.stepDesc, { color: theme.colors.placeholder }]}>Browse verified local garages, view review ratings, and compare testing fees.</Text>
+            </View>
+          </View>
+
+          <View style={styles.guideStepRow}>
+            <View style={[styles.stepNumCircle, { backgroundColor: theme.colors.success }]}>
+              <Text style={styles.stepNumText}>3</Text>
+            </View>
+            <View style={styles.stepTextContainer}>
+              <Text style={[styles.stepTitle, { color: theme.colors.text }]}>Confirm Appointment Slot</Text>
+              <Text style={[styles.stepDesc, { color: theme.colors.placeholder }]}>Choose a live calendar date and time. Staff will review and confirm instantly.</Text>
+            </View>
+          </View>
+        </View>
 
         {/* Recent Checks Section */}
         {token ? (
@@ -537,5 +654,88 @@ const styles = StyleSheet.create({
   },
   browseCardSubtitle: {
     fontSize: 10,
+  },
+  quickGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  quickCard: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginHorizontal: 4,
+    alignItems: 'flex-start',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2.5,
+  },
+  quickIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  quickCardTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  quickCardDesc: {
+    fontSize: 9,
+    lineHeight: 12,
+  },
+  guideCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginTop: 12,
+    marginBottom: 8,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2.5,
+  },
+  guideHeader: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  guideStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  stepNumCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    marginTop: 2,
+  },
+  stepNumText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  stepTextContainer: {
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  stepDesc: {
+    fontSize: 10,
+    lineHeight: 14,
   },
 });

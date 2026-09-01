@@ -64,7 +64,7 @@ export default function MainTabNavigator() {
       <Tab.Screen 
         name="Home" 
         component={HomeScreen} 
-        options={{ title: 'MOT Status Checker' }} 
+        options={{ title: 'Smart MOT Hub' }} 
       />
       <Tab.Screen 
         name="Garages" 

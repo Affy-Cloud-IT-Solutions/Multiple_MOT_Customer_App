@@ -20,8 +20,15 @@ export default function BookingScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
   const { customers, vehicles, addAlert, addAudit, user, token } = useAppValues();
 
+  // Find active customer
+  const customerId = user?.customerId || 'c1';
+
   // Find active customer vehicles
-  const activeCustomerVehicles = vehicles.filter(v => v.status !== 'Sold' && v.status !== 'Scrapped');
+  const activeCustomerVehicles = vehicles.filter(v => 
+    v.customerId && (
+      String(v.customerId).toLowerCase() === String(customerId).toLowerCase()
+    ) && v.status !== 'Sold' && v.status !== 'Scrapped'
+  );
 
   const isReschedule = route?.params?.isReschedule || false;
 
@@ -255,6 +262,24 @@ export default function BookingScreen({ route, navigation }: any) {
       return;
     }
 
+    const getDaysUntilExpiry = (expiryDateStr?: string) => {
+      if (!expiryDateStr) return -1;
+      const expiryDate = new Date(expiryDateStr);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const diffTime = expiryDate.getTime() - today.getTime();
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    };
+
+    const daysLeft = getDaysUntilExpiry(selectedVehicle.motExpiryDate);
+    if (daysLeft > 30) {
+      Alert.alert(
+        'Booking Restriction',
+        `You can only book an MOT test when your vehicle is within 30 days of its expiry date. This vehicle has ${daysLeft} days remaining.`
+      );
+      return;
+    }
+
     if (!selectedGarage) {
       Alert.alert('Error', 'Please select a garage first.');
       return;
@@ -395,7 +420,25 @@ export default function BookingScreen({ route, navigation }: any) {
             <Text style={[styles.sectionHeading, { color: theme.colors.text, marginTop: 4, marginBottom: 8 }]}>
               Select Vehicle
             </Text>
-            {activeCustomerVehicles.length === 0 ? (
+            {route?.params?.vehicle ? (
+              /* If vehicle is passed from portal, lock it and show a premium summary card */
+              <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginBottom: 14, flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 10, borderWidth: 1 }]}>
+                <View style={[styles.plate, { marginRight: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, height: 32 }]}>
+                  <Text style={[styles.plateText, { fontSize: 12 }]}>{selectedVehicle?.registrationNumber}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 14, fontWeight: 'bold' }]}>
+                    {selectedVehicle?.make} {selectedVehicle?.model}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <MaterialCommunityIcons name="check-circle" size={13} color={theme.colors.success} style={{ marginRight: 4 }} />
+                    <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder, fontSize: 11 }]}>
+                      Selected vehicle for MOT booking
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ) : activeCustomerVehicles.length === 0 ? (
               <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error + '30', marginBottom: 12 }]}>
                 <MaterialCommunityIcons name="alert-circle-outline" size={20} color={theme.colors.error} style={{ marginRight: 8 }} />
                 <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text }]}>

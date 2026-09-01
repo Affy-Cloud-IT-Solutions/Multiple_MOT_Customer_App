@@ -26,7 +26,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function CustomerPortalScreen({ route, navigation }: any) {
   const { isDarkMode, theme, toggleTheme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData, setToken, setUser, token, user } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData, setToken, setUser, token, user, acknowledgeAlert } = useAppValues();
 
   // Find active customer
   const customerId = route?.params?.customerId || user?.customerId || 'c1';
@@ -78,6 +78,38 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
     ) && v.status !== 'Sold' && v.status !== 'Scrapped'
   );
 
+  const getDaysUntilExpiry = (expiryDateStr?: string) => {
+    if (!expiryDateStr) return -1;
+    const expiryDate = new Date(expiryDateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = expiryDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const rejectedAlerts = alerts.filter(a => a.status === 'Rejected' && a.customerId && (
+    String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
+    String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
+  ));
+
+  const totalVehicles = customerVehicles.length;
+  const pendingApprovals = customerVehicles.filter(v => v.status === 'Pending').length;
+
+  let upcomingExpiryVehicle = null;
+  let upcomingExpiryDays = Infinity;
+  customerVehicles.forEach(v => {
+    const days = getDaysUntilExpiry(v.motExpiryDate);
+    if (days >= 0 && days < upcomingExpiryDays) {
+      upcomingExpiryDays = days;
+      upcomingExpiryVehicle = v;
+    }
+  });
+
+  const activeBookings = alerts.filter(a => a.type === 'BOOKED' && a.status === 'Approved' && a.customerId && (
+    String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
+    String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
+  ) && customerVehicles.some(v => v.registrationNumber.toUpperCase() === a.registrationNumber.toUpperCase())).length;
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       refreshData();
@@ -93,6 +125,34 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const [year, setYear] = useState('');
   const [expiry, setExpiry] = useState('');
   const [expandedBookingReg, setExpandedBookingReg] = useState<string | null>(null);
+
+  const [selectedAddGarage, setSelectedAddGarage] = useState<any>(null);
+  const [garagesList, setGaragesList] = useState<any[]>([]);
+  const [loadingGarages, setLoadingGarages] = useState(false);
+
+
+
+  useEffect(() => {
+    const loadGarages = async () => {
+      setLoadingGarages(true);
+      try {
+        const response = await fetch(`${BASE_URL}/garages`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setGaragesList(data);
+        }
+      } catch (err) {
+        console.error('Error fetching garages in CustomerPortalScreen:', err);
+      } finally {
+        setLoadingGarages(false);
+      }
+    };
+    if (token) {
+      loadGarages();
+    }
+  }, [token]);
 
   const fetchMakesList = async (search: string, pageNum: number) => {
     const fallbackMakes = [
@@ -242,6 +302,9 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
               // Update vehicle status in shared DB
               updateVehicleStatus(vehicleId, 'Sold');
 
+              const vehicleBooking = alerts.find((a) => a.type === 'BOOKED' && a.registrationNumber === reg);
+              const targetGarageId = vehicleBooking?.garageId;
+
               // Add notification to Admin alerts
               addAlert({
                 type: 'SOLD',
@@ -249,6 +312,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 customerId: customer.id,
                 registrationNumber: reg,
                 makeModel: makeModel,
+                garageId: targetGarageId,
               });
 
               Alert.alert(
@@ -263,8 +327,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   };
 
   const handleAddNewVehicle = async () => {
-    if (!regNo.trim() || !make.trim() || !model.trim() || !year.trim() || !expiry.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!regNo.trim() || !make.trim() || !model.trim() || !year.trim() || !expiry.trim() || !selectedAddGarage) {
+      Alert.alert('Error', 'Please fill in all fields and select a garage');
       return;
     }
 
@@ -283,7 +347,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
     setLoadingAction('add_vehicle');
     try {
-      // 1. Create the vehicle directly in the database
+      // 1. Create the vehicle in the database with Pending status
       await addVehicle({
         customerId: customer.id,
         registrationNumber: regNo.trim().toUpperCase(),
@@ -291,17 +355,18 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         model: model.trim().toUpperCase(),
         year: year.trim(),
         motExpiryDate: expiry,
-        status: 'Active'
+        status: 'Pending'
       });
 
-      // 2. Send alert notification to Admin for log/info (pre-approved)
+      // 2. Send alert notification to Admin for log/info (Pending approval)
       await addAlert({
         type: 'NEW_VEHICLE',
         customerName: `${customer.firstName} ${customer.lastName}`,
         customerId: customer.id,
+        garageId: selectedAddGarage.id || selectedAddGarage._id,
         registrationNumber: regNo.trim().toUpperCase(),
         makeModel: `${make.trim().toUpperCase()} ${model.trim().toUpperCase()}`,
-        status: 'Approved'
+        status: 'Pending'
       });
 
       await addAudit(
@@ -317,11 +382,12 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       setModel('');
       setYear('');
       setExpiry('');
+      setSelectedAddGarage(null);
       setShowAddForm(false);
 
       Alert.alert(
         'Vehicle Registered',
-        'Your new vehicle has been registered successfully and is ready! You can now book an MOT slot.'
+        'Your vehicle registration request has been submitted. Booking will be enabled once staff approves it.'
       );
     } catch (error: any) {
       setLoadingAction(null);
@@ -376,6 +442,55 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
               </Text>
             </View>
 
+            {/* Rejected Notifications Banner */}
+            {rejectedAlerts.map(alert => (
+              <View key={alert.id} style={[styles.notificationAlertBox, { backgroundColor: theme.colors.error + '12', borderColor: theme.colors.error }]}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={20} color={alert.type === 'NEW_VEHICLE' ? theme.colors.error : theme.colors.warning} />
+                <Text style={[styles.notificationAlertText, { color: theme.colors.text }]}>
+                  {alert.type === 'NEW_VEHICLE' ? 'Registration' : 'Booking'} request for {alert.registrationNumber} was rejected: "{alert.rejectionReason || 'No reason provided'}"
+                </Text>
+                <TouchableOpacity
+                  onPress={() => acknowledgeAlert(alert.id)}
+                  style={[styles.notificationDismissBtn, { backgroundColor: theme.colors.error + '20' }]}
+                >
+                  <Text style={[styles.notificationDismissText, { color: theme.colors.error }]}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {/* Stats Dashboard Summary */}
+            <View style={styles.statsContainer}>
+              {/* Vehicles Stat */}
+              <View style={[styles.statCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="car-multiple" size={22} color={theme.colors.secondary} />
+                <Text style={[styles.statLabel, { color: theme.colors.placeholder }]}>MY VEHICLES</Text>
+                <Text style={[styles.statValue, { color: theme.colors.text }]}>{totalVehicles}</Text>
+                <Text style={[styles.statSubtext, { color: pendingApprovals > 0 ? theme.colors.warning : theme.colors.placeholder }]}>
+                  {pendingApprovals > 0 ? `${pendingApprovals} Pending` : 'All Approved'}
+                </Text>
+              </View>
+
+              {/* Nearest Expiry Stat */}
+              <View style={[styles.statCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="calendar-alert" size={22} color={upcomingExpiryDays <= 30 ? theme.colors.error : theme.colors.success} />
+                <Text style={[styles.statLabel, { color: theme.colors.placeholder }]}>NEXT EXPIRY</Text>
+                <Text style={[styles.statValue, { color: theme.colors.text }]} numberOfLines={1}>
+                  {upcomingExpiryVehicle ? (upcomingExpiryVehicle as any).registrationNumber : 'None'}
+                </Text>
+                <Text style={[styles.statSubtext, { color: upcomingExpiryDays <= 30 ? theme.colors.error : theme.colors.placeholder }]}>
+                  {upcomingExpiryVehicle ? (upcomingExpiryDays === 0 ? 'Today' : upcomingExpiryDays === 1 ? '1 day left' : `${upcomingExpiryDays} days left`) : 'No due vehicles'}
+                </Text>
+              </View>
+
+              {/* Bookings Stat */}
+              <View style={[styles.statCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="calendar-check" size={22} color={theme.colors.primary} />
+                <Text style={[styles.statLabel, { color: theme.colors.placeholder }]}>BOOKINGS</Text>
+                <Text style={[styles.statValue, { color: theme.colors.text }]}>{activeBookings}</Text>
+                <Text style={[styles.statSubtext, { color: theme.colors.placeholder }]}>Confirmed Active</Text>
+              </View>
+            </View>
+
             {/* Add Vehicle Button & Collapsible Form */}
             {showAddForm && (
               <View style={[styles.formCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
@@ -393,6 +508,30 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                     style={[styles.inputField, { color: theme.colors.text }]}
                   />
                 </View>
+
+                <Text style={[styles.label, { color: theme.colors.text }]}>Select Garage for Review</Text>
+                {loadingGarages ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 8, alignSelf: 'flex-start' }} />
+                ) : (
+                  <SearchableDropdown
+                    placeholder="Select Garage"
+                    selectedValue={selectedAddGarage ? selectedAddGarage.name : ''}
+                    onValueChange={(val) => {
+                      const found = garagesList.find(g => g.name === val);
+                      setSelectedAddGarage(found || null);
+                    }}
+                    fetchItems={async (search, pageNum) => {
+                      const filtered = search
+                        ? garagesList.filter(g => g.name.toUpperCase().includes(search.toUpperCase()))
+                        : garagesList;
+                      const limit = 20;
+                      const start = (pageNum - 1) * limit;
+                      const items = filtered.slice(start, start + limit).map(g => g.name);
+                      const hasMore = start + limit < filtered.length;
+                      return { items, hasMore };
+                    }}
+                  />
+                )}
 
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
@@ -789,23 +928,42 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                               <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Reschedule</Text>
                             </View>
                           </TouchableOpacity>
-                        ) : (
-                          <TouchableOpacity
-                            onPress={() => handleBookMOT(v)}
-                            disabled={loadingAction !== null}
-                            style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.secondary }]}
-                          >
-                            <View style={styles.actionBtnContent}>
-                              <MaterialCommunityIcons 
-                                name="calendar-plus" 
-                                size={16} 
-                                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
-                                style={{ marginRight: 4 }} 
-                              />
-                              <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Book MOT</Text>
-                            </View>
-                          </TouchableOpacity>
-                        )}
+                        ) : (() => {
+                          const daysLeft = getDaysUntilExpiry(v.motExpiryDate);
+                          const isBookable = daysLeft <= 30;
+                          return (
+                            <TouchableOpacity
+                              onPress={() => {
+                                if (isBookable) {
+                                  handleBookMOT(v);
+                                } else {
+                                  Alert.alert(
+                                    'Booking Restriction',
+                                    `You can only book an MOT test when your vehicle is within 30 days of its expiry date. (${daysLeft} days remaining).`
+                                  );
+                                }
+                              }}
+                              disabled={loadingAction !== null}
+                              style={[
+                                styles.actionBtn, 
+                                styles.bookBtn, 
+                                { backgroundColor: isBookable ? theme.colors.secondary : theme.colors.placeholder + '40' }
+                              ]}
+                            >
+                              <View style={styles.actionBtnContent}>
+                                <MaterialCommunityIcons 
+                                  name={isBookable ? "calendar-plus" : "calendar-lock"} 
+                                  size={16} 
+                                  color={isBookable ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder} 
+                                  style={{ marginRight: 4 }} 
+                                />
+                                <Text style={[styles.actionBtnText, { color: isBookable ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder }]}>
+                                  {isBookable ? 'Book MOT' : 'Locked'}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })()}
                       </View>
                     )}
                   </View>
@@ -1535,6 +1693,69 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontSize: 13,
+    fontWeight: 'bold',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingHorizontal: 2,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    marginHorizontal: 4,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1.5 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2.5,
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  statSubtext: {
+    fontSize: 9,
+    marginTop: 1,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  notificationAlertBox: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  notificationAlertText: {
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
+    marginLeft: 8,
+    lineHeight: 14,
+  },
+  notificationDismissBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  notificationDismissText: {
+    fontSize: 10,
     fontWeight: 'bold',
   },
 });
