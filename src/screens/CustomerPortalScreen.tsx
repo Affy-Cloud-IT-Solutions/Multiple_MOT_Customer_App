@@ -347,7 +347,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
     setLoadingAction('add_vehicle');
     try {
-      // 1. Create the vehicle in the database with Pending status
+      // 1. Create the vehicle in the database with Active status
       await addVehicle({
         customerId: customer.id,
         registrationNumber: regNo.trim().toUpperCase(),
@@ -355,10 +355,10 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         model: model.trim().toUpperCase(),
         year: year.trim(),
         motExpiryDate: expiry,
-        status: 'Pending'
+        status: 'Active'
       });
 
-      // 2. Send alert notification to Admin for log/info (Pending approval)
+      // 2. Send informational alert for garage
       await addAlert({
         type: 'NEW_VEHICLE',
         customerName: `${customer.firstName} ${customer.lastName}`,
@@ -366,12 +366,12 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         garageId: selectedAddGarage.id || selectedAddGarage._id,
         registrationNumber: regNo.trim().toUpperCase(),
         makeModel: `${make.trim().toUpperCase()} ${model.trim().toUpperCase()}`,
-        status: 'Pending'
+        status: 'Approved'
       });
 
       await addAudit(
         'New Vehicle Registered', 
-        `${customer.firstName} ${customer.lastName} registered vehicle ${make.trim().toUpperCase()} (${regNo.trim().toUpperCase()})`
+        `${customer.firstName} ${customer.lastName} added vehicle ${make.trim().toUpperCase()} (${regNo.trim().toUpperCase()}) - active immediately`
       );
 
       setLoadingAction(null);
@@ -386,8 +386,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       setShowAddForm(false);
 
       Alert.alert(
-        'Vehicle Registered',
-        'Your vehicle registration request has been submitted. Booking will be enabled once staff approves it.'
+        'Vehicle Added',
+        'Your vehicle has been added successfully! You can now book MOT appointments and manage reminders.'
       );
     } catch (error: any) {
       setLoadingAction(null);
@@ -615,7 +615,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                     {loadingAction === 'add_vehicle' ? (
                       <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
                     ) : (
-                      <Text style={[styles.submitButtonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Request Approval</Text>
+                      <Text style={[styles.submitButtonText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Add Vehicle</Text>
                     )}
                   </TouchableOpacity>
                 </View>
