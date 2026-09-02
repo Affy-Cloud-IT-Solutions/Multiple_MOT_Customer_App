@@ -42,6 +42,9 @@ export interface AlertNotification {
   serviceName?: string;
   price?: number;
   duration?: number;
+  slotTime?: string;
+  stationId?: string;
+  stationName?: string;
   rescheduled?: boolean;
 }
 

@@ -126,34 +126,6 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const [expiry, setExpiry] = useState('');
   const [expandedBookingReg, setExpandedBookingReg] = useState<string | null>(null);
 
-  const [selectedAddGarage, setSelectedAddGarage] = useState<any>(null);
-  const [garagesList, setGaragesList] = useState<any[]>([]);
-  const [loadingGarages, setLoadingGarages] = useState(false);
-
-
-
-  useEffect(() => {
-    const loadGarages = async () => {
-      setLoadingGarages(true);
-      try {
-        const response = await fetch(`${BASE_URL}/garages`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setGaragesList(data);
-        }
-      } catch (err) {
-        console.error('Error fetching garages in CustomerPortalScreen:', err);
-      } finally {
-        setLoadingGarages(false);
-      }
-    };
-    if (token) {
-      loadGarages();
-    }
-  }, [token]);
-
   const fetchMakesList = async (search: string, pageNum: number) => {
     const fallbackMakes = [
       'ALFA ROMEO', 'ASTON MARTIN', 'AUDI', 'BENTLEY', 'BMW', 'CITROEN', 'CUPRA', 'DACIA', 
@@ -327,8 +299,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   };
 
   const handleAddNewVehicle = async () => {
-    if (!regNo.trim() || !make.trim() || !model.trim() || !year.trim() || !expiry.trim() || !selectedAddGarage) {
-      Alert.alert('Error', 'Please fill in all fields and select a garage');
+    if (!regNo.trim() || !make.trim() || !model.trim() || !year.trim() || !expiry.trim()) {
+      Alert.alert('Error', 'Please fill in all vehicle details');
       return;
     }
 
@@ -358,12 +330,11 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         status: 'Active'
       });
 
-      // 2. Send informational alert for garage
+      // 2. Send informational alert for vehicle registration
       await addAlert({
         type: 'NEW_VEHICLE',
         customerName: `${customer.firstName} ${customer.lastName}`,
         customerId: customer.id,
-        garageId: selectedAddGarage.id || selectedAddGarage._id,
         registrationNumber: regNo.trim().toUpperCase(),
         makeModel: `${make.trim().toUpperCase()} ${model.trim().toUpperCase()}`,
         status: 'Approved'
@@ -382,7 +353,6 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       setModel('');
       setYear('');
       setExpiry('');
-      setSelectedAddGarage(null);
       setShowAddForm(false);
 
       Alert.alert(
@@ -508,30 +478,6 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                     style={[styles.inputField, { color: theme.colors.text }]}
                   />
                 </View>
-
-                <Text style={[styles.label, { color: theme.colors.text }]}>Select Garage for Review</Text>
-                {loadingGarages ? (
-                  <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 8, alignSelf: 'flex-start' }} />
-                ) : (
-                  <SearchableDropdown
-                    placeholder="Select Garage"
-                    selectedValue={selectedAddGarage ? selectedAddGarage.name : ''}
-                    onValueChange={(val) => {
-                      const found = garagesList.find(g => g.name === val);
-                      setSelectedAddGarage(found || null);
-                    }}
-                    fetchItems={async (search, pageNum) => {
-                      const filtered = search
-                        ? garagesList.filter(g => g.name.toUpperCase().includes(search.toUpperCase()))
-                        : garagesList;
-                      const limit = 20;
-                      const start = (pageNum - 1) * limit;
-                      const items = filtered.slice(start, start + limit).map(g => g.name);
-                      const hasMore = start + limit < filtered.length;
-                      return { items, hasMore };
-                    }}
-                  />
-                )}
 
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
