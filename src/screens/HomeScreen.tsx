@@ -87,6 +87,7 @@ export default function HomeScreen({ navigation }: any) {
   const { theme } = useAppTheme();
   const { token, vehicles, refreshData, lookupVehicle, user } = useAppValues();
   const [regNumber, setRegNumber] = useState('');
+  const [garageSearchText, setGarageSearchText] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
 
@@ -180,6 +181,12 @@ export default function HomeScreen({ navigation }: any) {
 
   const handleRecentCheckPress = (item: any) => {
     navigation.navigate('Result', { vehicleData: item });
+  };
+
+  const handleSearchGarages = () => {
+    Keyboard.dismiss();
+    const query = garageSearchText.trim();
+    navigation.navigate('Garages', { searchQuery: query });
   };
 
   return (
@@ -278,6 +285,48 @@ export default function HomeScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
+        {/* Garage Search Input Container */}
+        <View style={[styles.searchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+            <MaterialCommunityIcons name="store-search" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+            <Text style={[styles.inputLabel, { color: theme.colors.text, marginBottom: 0 }]}>
+              Search Garages
+            </Text>
+          </View>
+          <Text style={[styles.inputSublabel, { color: theme.colors.placeholder }]}>
+            Find certified MOT centres by garage name, town, or postcode
+          </Text>
+
+          {/* Garage Search Input Field */}
+          <View style={[styles.garageInputContainer, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+            <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} style={styles.garageSearchIcon} />
+            <TextInput
+              value={garageSearchText}
+              onChangeText={setGarageSearchText}
+              placeholder="E.g. Apex, Manchester, M1..."
+              placeholderTextColor={theme.colors.placeholder}
+              style={[styles.garageSearchInput, { color: theme.colors.text }]}
+              returnKeyType="search"
+              onSubmitEditing={handleSearchGarages}
+            />
+            {garageSearchText.length > 0 && (
+              <TouchableOpacity onPress={() => setGarageSearchText('')} style={{ padding: 4 }}>
+                <MaterialCommunityIcons name="close-circle" size={18} color={theme.colors.placeholder} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <TouchableOpacity
+            onPress={handleSearchGarages}
+            style={[styles.searchButton, { backgroundColor: theme.colors.secondary }]}
+          >
+            <View style={styles.searchButtonContent}>
+              <MaterialCommunityIcons name="store-search" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={[styles.searchButtonText, { color: '#FFFFFF' }]}>Search Garages</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         {/* Plate Search Input Container */}
         <View style={[styles.searchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
@@ -319,21 +368,6 @@ export default function HomeScreen({ navigation }: any) {
             )}
           </TouchableOpacity>
         </View>
-
-        {/* Browse Garages Premium Card */}
-        <TouchableOpacity
-          style={[styles.browseCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-          onPress={() => navigation.navigate('Garages')}
-        >
-          <View style={[styles.browseIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
-            <MaterialCommunityIcons name="store-search" size={22} color={theme.colors.secondary} />
-          </View>
-          <View style={styles.browseCardContent}>
-            <Text style={[styles.browseCardTitle, { color: theme.colors.text }]}>Find Local Approved Garages</Text>
-            <Text style={[styles.browseCardSubtitle, { color: theme.colors.placeholder }]}>Compare prices, ratings, and book slots instantly</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.placeholder} />
-        </TouchableOpacity>
 
         {/* Marketplace Guide */}
         <View style={[styles.guideCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
@@ -622,38 +656,28 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  browseCard: {
+  inputSublabel: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: 10,
+  },
+  garageInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    borderRadius: 10,
+    height: 44,
+    borderRadius: 8,
     borderWidth: 1,
-    marginTop: 10,
-    marginBottom: 4,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
+    paddingHorizontal: 10,
+    marginBottom: 10,
   },
-  browseIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+  garageSearchIcon: {
+    marginRight: 6,
   },
-  browseCardContent: {
+  garageSearchInput: {
     flex: 1,
-    marginLeft: 10,
-    justifyContent: 'center',
-  },
-  browseCardTitle: {
+    height: '100%',
     fontSize: 13,
-    fontWeight: 'bold',
-  },
-  browseCardSubtitle: {
-    fontSize: 10,
+    paddingVertical: 0,
   },
   quickGrid: {
     flexDirection: 'row',

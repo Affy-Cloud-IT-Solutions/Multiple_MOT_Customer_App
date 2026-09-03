@@ -32,6 +32,15 @@ export default function BookingScreen({ route, navigation }: any) {
 
   const isReschedule = route?.params?.isReschedule || false;
 
+  const getDaysUntilExpiry = (expiryDateStr?: string) => {
+    if (!expiryDateStr) return -1;
+    const expiryDate = new Date(expiryDateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = expiryDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
   // Selected vehicle state
   const [selectedVehicle, setSelectedVehicle] = useState<any>(
     route?.params?.vehicle || activeCustomerVehicles[0] || null
@@ -297,20 +306,11 @@ export default function BookingScreen({ route, navigation }: any) {
       return;
     }
 
-    const getDaysUntilExpiry = (expiryDateStr?: string) => {
-      if (!expiryDateStr) return -1;
-      const expiryDate = new Date(expiryDateStr);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const diffTime = expiryDate.getTime() - today.getTime();
-      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    };
-
     const daysLeft = getDaysUntilExpiry(selectedVehicle.motExpiryDate);
     if (daysLeft > 30) {
       Alert.alert(
-        'Booking Restriction',
-        `You can only book an MOT test when your vehicle is within 30 days of its expiry date. This vehicle has ${daysLeft} days remaining.`
+        isReschedule ? 'Reschedule Restriction (DVSA Rule)' : 'Booking Restriction (DVSA Rule)',
+        `Under DVSA regulations, you can only ${isReschedule ? 'reschedule' : 'book'} an MOT test when your vehicle is within 30 days of its expiry date. This vehicle is not due yet (${daysLeft} days remaining).`
       );
       return;
     }
@@ -340,6 +340,7 @@ export default function BookingScreen({ route, navigation }: any) {
         price: selectedService.price,
         duration: selectedSlot?.slotDuration || 45,
         slotTime: selectedSlot?.time || selectedTime,
+        slotNumber: selectedSlot?.slotNumber,
         registrationNumber: selectedVehicle.registrationNumber,
         makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - Slot: ${selectedSlot?.time || selectedTime}`,
         status: isAdmin ? 'Approved' : 'Pending',
@@ -407,7 +408,7 @@ export default function BookingScreen({ route, navigation }: any) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {isReschedule ? (
           <>
-            {/* Locked Vehicle Summary Card for Rescheduling */}
+            {/* Vehicle Summary Card for Rescheduling */}
             <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <View style={styles.plate}>
                 <Text style={styles.plateText}>{selectedVehicle?.registrationNumber}</Text>
@@ -424,6 +425,21 @@ export default function BookingScreen({ route, navigation }: any) {
                 </View>
               </View>
             </View>
+
+            {/* Ineligible / Not Due Yet Notice */}
+            {selectedVehicle && getDaysUntilExpiry(selectedVehicle.motExpiryDate) > 30 && (
+              <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.error + '12', borderColor: theme.colors.error, marginTop: 12 }]}>
+                <MaterialCommunityIcons name="clock-alert-outline" size={20} color={theme.colors.error} style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.colors.error, fontWeight: 'bold', fontSize: 13 }}>
+                    MOT Not Due Yet
+                  </Text>
+                  <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text, marginTop: 2 }]}>
+                    Under DVSA regulations, MOT tests can only be booked or rescheduled within 30 days of expiry. {selectedVehicle?.registrationNumber} has {getDaysUntilExpiry(selectedVehicle.motExpiryDate)} days remaining.
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {/* Locked Garage & Service Info for Rescheduling */}
             <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 12 }]}>
@@ -787,27 +803,44 @@ export default function BookingScreen({ route, navigation }: any) {
 
         {/* Action Buttons */}
         <View style={styles.actionContainer}>
-          <TouchableOpacity
-            onPress={handleConfirmBooking}
-            disabled={loading}
-            style={[styles.submitBtn, { backgroundColor: isReschedule ? theme.colors.warning : theme.colors.secondary }]}
-          >
-            {loading ? (
-              <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
-            ) : (
-              <View style={styles.btnContent}>
-                <MaterialCommunityIcons 
-                  name="calendar-check" 
-                  size={20} 
-                  color={theme.dark ? theme.colors.background : '#FFFFFF'} 
-                  style={{ marginRight: 8 }} 
-                />
-                <Text style={[styles.submitBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
-                  {isReschedule ? 'Confirm Rescheduling' : 'Confirm Appointment Booking'}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {(() => {
+            const daysLeft = selectedVehicle ? getDaysUntilExpiry(selectedVehicle.motExpiryDate) : -1;
+            const isVehicleEligible = selectedVehicle ? (daysLeft <= 30) : true;
+
+            return (
+              <TouchableOpacity
+                onPress={handleConfirmBooking}
+                disabled={loading || !isVehicleEligible}
+                style={[
+                  styles.submitBtn, 
+                  { 
+                    backgroundColor: !isVehicleEligible 
+                      ? theme.colors.placeholder + '40' 
+                      : (isReschedule ? theme.colors.warning : theme.colors.secondary),
+                    elevation: !isVehicleEligible ? 0 : 1,
+                  }
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
+                ) : (
+                  <View style={styles.btnContent}>
+                    <MaterialCommunityIcons 
+                      name={!isVehicleEligible ? "clock-alert-outline" : "calendar-check"} 
+                      size={20} 
+                      color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+                      style={{ marginRight: 8 }} 
+                    />
+                    <Text style={[styles.submitBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
+                      {!isVehicleEligible 
+                        ? 'Not Due Yet (Ineligible)' 
+                        : (isReschedule ? 'Confirm Rescheduling' : 'Confirm Appointment Booking')}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })()}
         </View>
       </ScrollView>
     </SafeAreaView>

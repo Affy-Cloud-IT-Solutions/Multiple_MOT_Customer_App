@@ -43,6 +43,7 @@ export interface AlertNotification {
   price?: number;
   duration?: number;
   slotTime?: string;
+  slotNumber?: number;
   stationId?: string;
   stationName?: string;
   rescheduled?: boolean;
@@ -59,8 +60,9 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'staff' | 'customer';
+  role: 'admin' | 'garage_admin' | 'staff' | 'customer';
   customerId?: string;
+  garageId?: string;
 }
 
 interface DataContextType {

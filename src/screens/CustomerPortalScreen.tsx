@@ -858,34 +858,57 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           )}
                         </TouchableOpacity>
 
-                        {isBooked ? (
-                          <TouchableOpacity
-                            onPress={() => navigation.navigate('Booking', { vehicle: v, isReschedule: true })}
-                            disabled={loadingAction !== null}
-                            style={[styles.actionBtn, styles.bookBtn, { backgroundColor: theme.colors.warning }]}
-                          >
-                            <View style={styles.actionBtnContent}>
-                              <MaterialCommunityIcons 
-                                name="calendar-edit" 
-                                size={16} 
-                                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
-                                style={{ marginRight: 4 }} 
-                              />
-                              <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Reschedule</Text>
-                            </View>
-                          </TouchableOpacity>
-                        ) : (() => {
+                        {(() => {
                           const daysLeft = getDaysUntilExpiry(v.motExpiryDate);
-                          const isBookable = daysLeft <= 30;
+                          const isEligible = daysLeft <= 30;
+
+                          if (isBooked) {
+                            return (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  if (isEligible) {
+                                    navigation.navigate('Booking', { vehicle: v, isReschedule: true });
+                                  } else {
+                                    Alert.alert(
+                                      'Reschedule Restriction (DVSA Rule)',
+                                      `Under DVSA regulations, MOT appointments can only be booked or rescheduled within 30 days of the vehicle's MOT expiry date.\n\n${v.registrationNumber} has ${daysLeft} days remaining until expiry (${formatShortDate(v.motExpiryDate)}). Rescheduling will become available once the vehicle is within 30 days of its expiry date.`
+                                    );
+                                  }
+                                }}
+                                disabled={loadingAction !== null}
+                                style={[
+                                  styles.actionBtn, 
+                                  styles.bookBtn, 
+                                  { 
+                                    backgroundColor: isEligible ? theme.colors.warning : theme.colors.placeholder + '25',
+                                    elevation: 0,
+                                  }
+                                ]}
+                              >
+                                <View style={styles.actionBtnContent}>
+                                  <MaterialCommunityIcons 
+                                    name={isEligible ? "calendar-edit" : "clock-alert-outline"} 
+                                    size={16} 
+                                    color={isEligible ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder} 
+                                    style={{ marginRight: 4 }} 
+                                  />
+                                  <Text style={[styles.actionBtnText, { color: isEligible ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder }]}>
+                                    {isEligible ? 'Reschedule' : 'Not Due Yet'}
+                                  </Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          }
+
                           return (
                             <TouchableOpacity
                               onPress={() => {
-                                if (isBookable) {
+                                if (isEligible) {
                                   handleBookMOT(v);
                                 } else {
                                   Alert.alert(
-                                    'Booking Restriction',
-                                    `You can only book an MOT test when your vehicle is within 30 days of its expiry date. (${daysLeft} days remaining).`
+                                    'Booking Restriction (DVSA Rule)',
+                                    `Under DVSA regulations, you can only book an MOT test when your vehicle is within 30 days of its expiry date.\n\n${v.registrationNumber} has ${daysLeft} days remaining until expiry (${formatShortDate(v.motExpiryDate)}). Booking will become available once the vehicle is within 30 days of its expiry date.`
                                   );
                                 }
                               }}
@@ -893,18 +916,21 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                               style={[
                                 styles.actionBtn, 
                                 styles.bookBtn, 
-                                { backgroundColor: isBookable ? theme.colors.secondary : theme.colors.placeholder + '40' }
+                                { 
+                                  backgroundColor: isEligible ? theme.colors.secondary : theme.colors.placeholder + '25',
+                                  elevation: 0,
+                                }
                               ]}
                             >
                               <View style={styles.actionBtnContent}>
                                 <MaterialCommunityIcons 
-                                  name={isBookable ? "calendar-plus" : "calendar-lock"} 
+                                  name={isEligible ? "calendar-plus" : "clock-alert-outline"} 
                                   size={16} 
-                                  color={isBookable ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder} 
+                                  color={isEligible ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder} 
                                   style={{ marginRight: 4 }} 
                                 />
-                                <Text style={[styles.actionBtnText, { color: isBookable ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder }]}>
-                                  {isBookable ? 'Book MOT' : 'Locked'}
+                                <Text style={[styles.actionBtnText, { color: isEligible ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder }]}>
+                                  {isEligible ? 'Book MOT' : 'Not Due Yet'}
                                 </Text>
                               </View>
                             </TouchableOpacity>
@@ -1405,7 +1431,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.2,
   },
   bookBtn: {
-    elevation: 1,
+    elevation: 0,
   },
   actionBtnContent: {
     flexDirection: 'row',

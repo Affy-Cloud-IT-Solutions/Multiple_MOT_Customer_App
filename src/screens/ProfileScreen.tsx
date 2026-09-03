@@ -20,6 +20,7 @@ import {
   validateEmail,
   validatePassword,
 } from '../utils/validationUtils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -61,14 +62,18 @@ export default function ProfileScreen({ navigation }: any) {
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
             setLoggingOut(true);
-            setTimeout(() => {
-              setLoggingOut(false);
-              setToken(null);
-              setUser(null);
-              navigation.replace('Login');
-            }, 1200);
+            try {
+              await AsyncStorage.removeItem('user_token');
+              await AsyncStorage.removeItem('user_profile');
+            } catch (e) {
+              console.error('Error clearing AsyncStorage:', e);
+            }
+            setToken(null);
+            setUser(null);
+            setLoggingOut(false);
+            navigation.replace('Login');
           },
         },
       ]
@@ -162,6 +167,8 @@ export default function ProfileScreen({ navigation }: any) {
     switch (role) {
       case 'admin':
         return '#7C3AED';
+      case 'garage_admin':
+        return '#D97706';
       case 'staff':
         return '#059669';
       default:
@@ -173,6 +180,8 @@ export default function ProfileScreen({ navigation }: any) {
     switch (role) {
       case 'admin':
         return 'shield-account';
+      case 'garage_admin':
+        return 'store';
       case 'staff':
         return 'account-tie';
       default:
@@ -214,7 +223,7 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
         <View style={styles.headerMeta}>
           <Text style={[styles.userName, { color: theme.colors.text }]}>
-            {user?.name || 'Guest User'}
+            {customer ? `${customer.firstName} ${customer.lastName}`.trim() : (user?.name || 'Guest User')}
           </Text>
           <View style={styles.userEmailRow}>
             <MaterialCommunityIcons
@@ -251,6 +260,8 @@ export default function ProfileScreen({ navigation }: any) {
               >
                 {user.role === 'admin'
                   ? 'Super Admin'
+                  : user.role === 'garage_admin'
+                  ? 'Garage Admin'
                   : user.role === 'staff'
                   ? 'Staff'
                   : 'Customer'}
