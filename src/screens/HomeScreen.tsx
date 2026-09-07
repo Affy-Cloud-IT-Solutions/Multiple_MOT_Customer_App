@@ -92,9 +92,9 @@ export default function HomeScreen({ navigation }: any) {
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
 
   const loadSearchHistory = async () => {
-    if (!user?.id) return;
     try {
-      const historyStr = await AsyncStorage.getItem(`@search_history_${user.id}`);
+      const historyKey = user?.id ? `@search_history_${user.id}` : '@search_history_guest';
+      const historyStr = await AsyncStorage.getItem(historyKey);
       if (historyStr) {
         setSearchHistory(JSON.parse(historyStr));
       } else {
@@ -106,9 +106,8 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const saveVehicleToHistory = async (mappedVehicle: any) => {
-    if (!user?.id) return;
     try {
-      const historyKey = `@search_history_${user.id}`;
+      const historyKey = user?.id ? `@search_history_${user.id}` : '@search_history_guest';
       const historyStr = await AsyncStorage.getItem(historyKey);
       let history = historyStr ? JSON.parse(historyStr) : [];
       
@@ -134,9 +133,10 @@ export default function HomeScreen({ navigation }: any) {
     const unsubscribe = navigation.addListener('focus', () => {
       if (token) {
         refreshData();
-        loadSearchHistory();
       }
+      loadSearchHistory();
     });
+    loadSearchHistory();
     return unsubscribe;
   }, [navigation, token, user]);
 
@@ -150,32 +150,20 @@ export default function HomeScreen({ navigation }: any) {
     Keyboard.dismiss();
     setLoading(true);
 
-    if (token) {
-      try {
-        const res = await lookupVehicle(formattedReg);
-        setLoading(false);
-        if (res && res.found && res.vehicle) {
-          const mappedVehicle = mapBackendVehicleToFrontend(res.vehicle);
-          await saveVehicleToHistory(mappedVehicle);
-          navigation.navigate('Result', { vehicleData: mappedVehicle });
-        } else {
-          Alert.alert('Not Found', 'Vehicle details not found in registry.');
-        }
-      } catch (err: any) {
-        setLoading(false);
-        console.error('[HomeScreen] lookup error:', err);
-        Alert.alert('Lookup Failed', err.message || 'Failed to fetch details from DVLA registry');
-      }
-    } else {
+    try {
+      const res = await lookupVehicle(formattedReg);
       setLoading(false);
-      Alert.alert(
-        'Authentication Required',
-        'Please sign in to check MOT status using the live registry.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => navigation.navigate('Login') }
-        ]
-      );
+      if (res && res.found && res.vehicle) {
+        const mappedVehicle = mapBackendVehicleToFrontend(res.vehicle);
+        await saveVehicleToHistory(mappedVehicle);
+        navigation.navigate('Result', { vehicleData: mappedVehicle });
+      } else {
+        Alert.alert('Not Found', 'Vehicle details not found in registry.');
+      }
+    } catch (err: any) {
+      setLoading(false);
+      console.error('[HomeScreen] lookup error:', err);
+      Alert.alert('Lookup Failed', err.message || 'Failed to fetch details from DVLA registry');
     }
   };
 

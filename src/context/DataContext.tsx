@@ -520,11 +520,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const lookupVehicle = async (vrn: string): Promise<any> => {
     try {
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const response = await fetch(`${BASE_URL}/vehicles/dvla/${encodeURIComponent(vrn)}`, {
         method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${token}`
-        }
+        headers
       });
       const data = await response.json();
       if (!response.ok) {

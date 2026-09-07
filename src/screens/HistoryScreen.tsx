@@ -78,9 +78,9 @@ export default function HistoryScreen({ navigation }: any) {
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
 
   const loadSearchHistory = async () => {
-    if (!user?.id) return;
     try {
-      const historyStr = await AsyncStorage.getItem(`@search_history_${user.id}`);
+      const historyKey = user?.id ? `@search_history_${user.id}` : '@search_history_guest';
+      const historyStr = await AsyncStorage.getItem(historyKey);
       if (historyStr) {
         setSearchHistory(JSON.parse(historyStr));
       } else {
@@ -93,44 +93,11 @@ export default function HistoryScreen({ navigation }: any) {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      if (token) {
-        loadSearchHistory();
-      }
+      loadSearchHistory();
     });
+    loadSearchHistory();
     return unsubscribe;
   }, [navigation, token, user]);
-
-  if (!token) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
-        <MaterialCommunityIcons name="account-lock-outline" size={72} color={theme.colors.placeholder} style={{ marginBottom: 16 }} />
-        <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.text, marginBottom: 8, textAlign: 'center' }}>
-          Access Search History
-        </Text>
-        <Text style={{ fontSize: 13, color: theme.colors.placeholder, textAlign: 'center', marginBottom: 24, paddingHorizontal: 20, lineHeight: 18 }}>
-          Please sign in to view your recent vehicle search history and MOT checks.
-        </Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Login')}
-          style={{
-            backgroundColor: theme.colors.primary,
-            paddingHorizontal: 28,
-            paddingVertical: 12,
-            borderRadius: 8,
-            elevation: 2,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.1,
-            shadowRadius: 2,
-          }}
-        >
-          <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 }}>
-            Sign In / Sign Up
-          </Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
 
   const handleCardPress = (item: any) => {
     navigation.navigate('Result', { vehicleData: item, fromHistory: true });
