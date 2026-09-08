@@ -15,6 +15,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { openGarageDirections } from '../utils/mapUtils';
 
 export default function BookedMotsScreen({ navigation }: any) {
   const { theme } = useAppTheme();
@@ -207,6 +208,32 @@ export default function BookedMotsScreen({ navigation }: any) {
                               {item.makeModel}
                             </Text>
                           </View>
+
+                          {/* Garage Information Row */}
+                          {(item.garageName || item.stationName || item.garage?.name) && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 6, borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                                <MaterialCommunityIcons name="storefront-outline" size={15} color={theme.colors.secondary} style={{ marginRight: 4 }} />
+                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text }} numberOfLines={1}>
+                                  {item.garageName || item.stationName || item.garage?.name}
+                                </Text>
+                              </View>
+                              <TouchableOpacity
+                                onPress={() => openGarageDirections({
+                                  name: item.garageName || item.stationName || item.garage?.name,
+                                  address: item.garageAddress || item.garage?.address,
+                                  city: item.garageCity || item.garage?.city,
+                                  postcode: item.garagePostcode || item.garage?.postcode,
+                                  latitude: item.garageLatitude || item.garage?.latitude,
+                                  longitude: item.garageLongitude || item.garage?.longitude,
+                                })}
+                                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.secondary + '15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 }}
+                              >
+                                <MaterialCommunityIcons name="navigation-variant" size={12} color={theme.colors.secondary} style={{ marginRight: 3 }} />
+                                <Text style={{ fontSize: 10, fontWeight: 'bold', color: theme.colors.secondary }}>Directions</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
 
                           {isRejected && item.rejectionReason && (
                             <View style={{ marginTop: 8, padding: 8, borderRadius: 6, backgroundColor: theme.colors.error + '10', borderWidth: 0.5, borderColor: theme.colors.error }}>

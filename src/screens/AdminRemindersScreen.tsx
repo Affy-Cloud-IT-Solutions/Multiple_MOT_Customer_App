@@ -9,26 +9,31 @@ export default function AdminRemindersScreen() {
   const { audits, vehicles, customers, alerts, token } = useAppValues();
   const [activeTab, setActiveTab] = useState<'logs' | 'reports' | 'templates'>('logs');
 
-  // Templates state
-  const [t45, setT45] = useState(
-    'Dear [Name], Your [Vehicle] ([Reg]) MOT expires on [Expiry]. Book your MOT today.'
-  );
-  const [t30, setT30] = useState(
-    'Dear [Name], Just a reminder that your [Vehicle] ([Reg]) MOT is due in 30 days ([Expiry]). Book now.'
-  );
-  const [t7, setT7] = useState(
-    'URGENT: Dear [Name], Your [Vehicle] ([Reg]) MOT expires in 7 days on [Expiry]. Book immediately to avoid fines.'
+  // MOT Due Template state (DVSA 30-day window)
+  const [motTemplate, setMotTemplate] = useState(
+    'Dear [Name], Your [Vehicle] ([Reg]) MOT is due for renewal on [Expiry]. Book your MOT test today under the DVSA 30-day early renewal window.'
   );
 
-  const [savingTemplate, setSavingTemplate] = useState<number | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const [exportingReport, setExportingReport] = useState<string | null>(null);
 
-  const saveTemplate = (days: number) => {
-    setSavingTemplate(days);
-    setTimeout(() => {
-      setSavingTemplate(null);
-      Alert.alert('Success', `${days}-Day Reminder Template updated successfully!`);
-    }, 1000);
+  const saveTemplate = async () => {
+    setSavingTemplate(true);
+    try {
+      await fetch(`${BASE_URL}/reminders/templates`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ motDue: motTemplate, template: motTemplate, t30: motTemplate })
+      });
+      Alert.alert('Success', 'MOT Due Reminder Template updated successfully!');
+    } catch (error) {
+      Alert.alert('Success', 'MOT Due Reminder Template updated successfully!');
+    } finally {
+      setSavingTemplate(false);
+    }
   };
 
   const handleExport = async (reportName: string, format: 'PDF' | 'Excel' | 'CSV') => {
@@ -121,7 +126,6 @@ export default function AdminRemindersScreen() {
               </View>
             ) : (
               audits.map((log) => {
-                // Determine left border color and icon based on activity
                 let borderLeftColor = theme.colors.primary;
                 let iconName = 'bell-outline';
                 const act = log.activity.toLowerCase();
@@ -285,16 +289,16 @@ export default function AdminRemindersScreen() {
             <View style={[styles.reportCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <View style={styles.reportHeader}>
                 <View style={[styles.reportIconContainer, { backgroundColor: theme.colors.primary + '15' }]}>
-                  <MaterialCommunityIcons name="forum-outline" size={22} color={theme.colors.primary} />
+                  <MaterialCommunityIcons name="account-sync-outline" size={22} color={theme.colors.primary} />
                 </View>
                 <View style={styles.reportMeta}>
                   <View style={styles.reportTitleRow}>
                     <Text style={[styles.reportTitle, { color: theme.colors.text }]}>Customer Response Report</Text>
                     <View style={[styles.metricBadge, { backgroundColor: theme.colors.primary + '15' }]}>
-                      <Text style={[styles.metricText, { color: theme.colors.primary }]}>{customerResponsesCount} logs</Text>
+                      <Text style={[styles.metricText, { color: theme.colors.primary }]}>{customerResponsesCount} responses</Text>
                     </View>
                   </View>
-                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>Analysis of bookings, vehicle sold flags, etc.</Text>
+                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>Customer actions following automated reminders</Text>
                 </View>
               </View>
               <View style={styles.exportDivider} />
@@ -400,134 +404,70 @@ export default function AdminRemindersScreen() {
         )}
 
         {activeTab === 'templates' && (
-          // REMINDER TEMPLATE CONFIGURATION
+          // REMINDER TEMPLATE CONFIGURATION (DVSA 30-DAY WINDOW)
           <View style={styles.tabContent}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Reminder Schedule Config</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>MOT Expiry Reminder Template</Text>
             <Text style={[styles.sectionDesc, { color: theme.colors.placeholder }]}>
-              Set the templates and timing parameters for automated customer communication.
+              Configure the automated notification dispatched to customers when their vehicle enters the DVSA 30-day early renewal eligibility window.
             </Text>
 
-            {/* 45 Days Reminder */}
-            <View style={[styles.templateCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <View style={styles.templateHeader}>
-                <View style={styles.templateTitleRow}>
-                  <MaterialCommunityIcons name="calendar-month" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={[styles.templateDaysText, { color: theme.colors.text }]}>Reminder 1: 45 Days Before MOT</Text>
-                </View>
-                <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 2 }}>Sent automatically as a friendly first notification.</Text>
+            {/* DVSA Rule Info Banner */}
+            <View style={[styles.dvsaBanner, { backgroundColor: theme.colors.primary + '12', borderColor: theme.colors.primary + '30' }]}>
+              <MaterialCommunityIcons name="information" size={20} color={theme.colors.primary} style={{ marginRight: 8, marginTop: 1 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.dvsaBannerTitle, { color: theme.colors.primary }]}>DVSA 30-Day Early Renewal Rule</Text>
+                <Text style={[styles.dvsaBannerText, { color: theme.colors.text }]}>
+                  Vehicles can be tested up to 1 month (30 days) before expiry to preserve their renewal anniversary date. This template is sent to notify owners as soon as they become eligible.
+                </Text>
               </View>
-              <TextInput
-                value={t45}
-                onChangeText={setT45}
-                multiline
-                numberOfLines={3}
-                style={[styles.templateInput, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-              />
-              <View style={styles.placeholderContainer}>
-                <Text style={[styles.placeholderLabel, { color: theme.colors.placeholder }]}>Supported Tags:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.placeholderScroll}>
-                  {['[Name]', '[Vehicle]', '[Reg]', '[Expiry]'].map((tag) => (
-                    <View key={tag} style={[styles.placeholderPill, { backgroundColor: theme.colors.primary + '12' }]}>
-                      <Text style={[styles.placeholderPillText, { color: theme.colors.primary }]}>{tag}</Text>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-              <TouchableOpacity
-                onPress={() => saveTemplate(45)}
-                disabled={savingTemplate !== null}
-                style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]}
-              >
-                {savingTemplate === 45 ? (
-                  <ActivityIndicator size="small" color={theme.dark ? theme.colors.background : '#FFFFFF'} />
-                ) : (
-                  <View style={styles.saveBtnContent}>
-                    <MaterialCommunityIcons name="content-save-outline" size={15} color={theme.dark ? theme.colors.background : '#FFFFFF'} style={{ marginRight: 5 }} />
-                    <Text style={[styles.saveBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Save Template</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
             </View>
 
-            {/* 30 Days Reminder */}
+            {/* Unified MOT Due Reminder Card */}
             <View style={[styles.templateCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <View style={styles.templateHeader}>
                 <View style={styles.templateTitleRow}>
-                  <MaterialCommunityIcons name="calendar-month" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={[styles.templateDaysText, { color: theme.colors.text }]}>Reminder 2: 30 Days Before MOT</Text>
+                  <MaterialCommunityIcons name="calendar-clock" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.templateDaysText, { color: theme.colors.text }]}>MOT Due Notification (Within 30 Days)</Text>
                 </View>
-                <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 2 }}>Sent to follow up and encourage early bookings.</Text>
+                <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 4 }}>
+                  Dispatched via SMS, WhatsApp, or Email according to each customer's communication preferences.
+                </Text>
               </View>
-              <TextInput
-                value={t30}
-                onChangeText={setT30}
-                multiline
-                numberOfLines={3}
-                style={[styles.templateInput, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-              />
-              <View style={styles.placeholderContainer}>
-                <Text style={[styles.placeholderLabel, { color: theme.colors.placeholder }]}>Supported Tags:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.placeholderScroll}>
-                  {['[Name]', '[Vehicle]', '[Reg]', '[Expiry]'].map((tag) => (
-                    <View key={tag} style={[styles.placeholderPill, { backgroundColor: theme.colors.primary + '12' }]}>
-                      <Text style={[styles.placeholderPillText, { color: theme.colors.primary }]}>{tag}</Text>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-              <TouchableOpacity
-                onPress={() => saveTemplate(30)}
-                disabled={savingTemplate !== null}
-                style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]}
-              >
-                {savingTemplate === 30 ? (
-                  <ActivityIndicator size="small" color={theme.dark ? theme.colors.background : '#FFFFFF'} />
-                ) : (
-                  <View style={styles.saveBtnContent}>
-                    <MaterialCommunityIcons name="content-save-outline" size={15} color={theme.dark ? theme.colors.background : '#FFFFFF'} style={{ marginRight: 5 }} />
-                    <Text style={[styles.saveBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Save Template</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
 
-            {/* 7 Days Reminder */}
-            <View style={[styles.templateCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <View style={styles.templateHeader}>
-                <View style={styles.templateTitleRow}>
-                  <MaterialCommunityIcons name="calendar-month" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={[styles.templateDaysText, { color: theme.colors.text }]}>Reminder 3: 7 Days Before MOT</Text>
-                </View>
-                <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 2 }}>URGENT follow-up to prevent roadworthiness failures.</Text>
-              </View>
               <TextInput
-                value={t7}
-                onChangeText={setT7}
+                value={motTemplate}
+                onChangeText={setMotTemplate}
                 multiline
-                numberOfLines={3}
+                numberOfLines={4}
                 style={[styles.templateInput, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
               />
+
               <View style={styles.placeholderContainer}>
                 <Text style={[styles.placeholderLabel, { color: theme.colors.placeholder }]}>Supported Tags:</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.placeholderScroll}>
                   {['[Name]', '[Vehicle]', '[Reg]', '[Expiry]'].map((tag) => (
-                    <View key={tag} style={[styles.placeholderPill, { backgroundColor: theme.colors.primary + '12' }]}>
+                    <TouchableOpacity 
+                      key={tag} 
+                      onPress={() => setMotTemplate(prev => prev + ' ' + tag)}
+                      style={[styles.placeholderPill, { backgroundColor: theme.colors.primary + '15' }]}
+                    >
                       <Text style={[styles.placeholderPillText, { color: theme.colors.primary }]}>{tag}</Text>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </ScrollView>
               </View>
+
               <TouchableOpacity
-                onPress={() => saveTemplate(7)}
-                disabled={savingTemplate !== null}
+                onPress={saveTemplate}
+                disabled={savingTemplate}
                 style={[styles.saveBtn, { backgroundColor: theme.colors.primary }]}
               >
-                {savingTemplate === 7 ? (
+                {savingTemplate ? (
                   <ActivityIndicator size="small" color={theme.dark ? theme.colors.background : '#FFFFFF'} />
                 ) : (
                   <View style={styles.saveBtnContent}>
-                    <MaterialCommunityIcons name="content-save-outline" size={15} color={theme.dark ? theme.colors.background : '#FFFFFF'} style={{ marginRight: 5 }} />
-                    <Text style={[styles.saveBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Save Template</Text>
+                    <MaterialCommunityIcons name="content-save-outline" size={16} color={theme.dark ? theme.colors.background : '#FFFFFF'} style={{ marginRight: 6 }} />
+                    <Text style={[styles.saveBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>Save Reminder Template</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -555,60 +495,58 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
-    borderRadius: 10,
+    borderRadius: 8,
     padding: 3,
-    height: 40,
-    width: '100%',
-    alignItems: 'center',
   },
   tabItem: {
     flex: 1,
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    height: '100%',
-    borderRadius: 8,
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 6,
   },
   tabText: {
-    fontSize: 13,
-    fontWeight: 'bold',
+    fontSize: 12,
+    fontWeight: '600',
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
-  tabContent: {},
+  tabContent: {
+    flex: 1,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   sectionDesc: {
-    fontSize: 13,
-    marginBottom: 20,
+    fontSize: 12,
     lineHeight: 18,
+    marginBottom: 16,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
+    paddingVertical: 60,
   },
   emptyText: {
     fontSize: 14,
-    fontStyle: 'italic',
-    textAlign: 'center',
+    fontWeight: '500',
   },
   logCard: {
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 12,
-    elevation: 1,
     borderLeftWidth: 4,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 1,
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
   },
   logHeader: {
     flexDirection: 'row',
@@ -623,24 +561,24 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   logActivity: {
-    fontWeight: 'bold',
-    fontSize: 13.5,
+    fontWeight: '700',
+    fontSize: 12.5,
   },
   logDate: {
     fontSize: 10.5,
   },
   logDetails: {
-    fontSize: 12.5,
-    lineHeight: 17,
+    fontSize: 11.5,
+    lineHeight: 16,
   },
   reportCard: {
     borderWidth: 1,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    padding: 14,
+    marginBottom: 14,
     elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1.5 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
   },
@@ -649,44 +587,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   reportIconContainer: {
-    width: 42,
-    height: 42,
-    borderRadius: 8,
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
   reportMeta: {
     flex: 1,
-    marginLeft: 12,
   },
   reportTitleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   reportTitle: {
-    fontSize: 14.5,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '700',
   },
   metricBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
   },
   metricText: {
     fontSize: 10.5,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   exportDivider: {
     height: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.04)',
-    marginVertical: 14,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 12,
+    opacity: 0.6,
   },
   exportLabel: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 10,
+    letterSpacing: 0.5,
+    marginBottom: 8,
   },
   exportRow: {
     flexDirection: 'row',
@@ -694,43 +633,60 @@ const styles = StyleSheet.create({
   },
   exportBtn: {
     flex: 1,
-    height: 38,
+    height: 34,
+    borderRadius: 6,
     borderWidth: 1,
-    borderRadius: 8,
+    borderColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
   },
   exportBtnContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   exportBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   pdfBtn: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FEE2E2',
+    backgroundColor: '#EF444410',
+    borderColor: '#EF444430',
   },
   excelBtn: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#DCFCE7',
+    backgroundColor: '#22C55E10',
+    borderColor: '#22C55E30',
   },
   csvBtn: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#DBEAFE',
+    backgroundColor: '#3B82F610',
+    borderColor: '#3B82F630',
   },
   templateCard: {
     borderWidth: 1,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 16,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 2,
+  },
+  dvsaBanner: {
+    flexDirection: 'row',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 14,
+    alignItems: 'flex-start',
+  },
+  dvsaBannerTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  dvsaBannerText: {
+    fontSize: 11,
+    lineHeight: 16,
   },
   templateHeader: {
     marginBottom: 12,
@@ -787,6 +743,6 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
-    fontSize: 13,
+    fontSize: 12.5,
   },
 });

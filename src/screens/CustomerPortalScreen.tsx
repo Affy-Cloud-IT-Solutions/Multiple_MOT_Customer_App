@@ -19,6 +19,7 @@ import { useAppValues, BASE_URL } from '../context/DataContext';
 import SearchableDropdown from '../components/SearchableDropdown';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { validateMotExpiryDate } from '../utils/validationUtils';
+import { openGarageDirections } from '../utils/mapUtils';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -754,8 +755,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                                  bookingAlert.status === 'Approved' ? 'Confirmed ✅' : 
                                  'Acknowledged'}
                               </Text>
-                            </View>
-                            <View style={styles.bookingInfoRow}>
+                            </View>                            <View style={styles.bookingInfoRow}>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <MaterialCommunityIcons name="calendar-month-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
                                 <Text style={[styles.bookingInfoLabel, { color: theme.colors.placeholder }]}>Requested On:</Text>
@@ -764,6 +764,41 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                                 {new Date(bookingAlert.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </Text>
                             </View>
+
+                            {/* Booked Garage Info & Navigation on Home Card */}
+                            {(bookingAlert.garageName || bookingAlert.stationName || bookingAlert.garage?.name) && (
+                              <View style={[styles.homeGarageCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                                  <MaterialCommunityIcons name="storefront" size={16} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                                  <Text style={[styles.homeGarageName, { color: theme.colors.text }]}>
+                                    {bookingAlert.garageName || bookingAlert.stationName || bookingAlert.garage?.name}
+                                  </Text>
+                                </View>
+                                {(bookingAlert.garageAddress || bookingAlert.garageCity || bookingAlert.garagePostcode || bookingAlert.garage?.address) && (
+                                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginBottom: 8, paddingLeft: 22 }}>
+                                    {[
+                                      bookingAlert.garageAddress || bookingAlert.garage?.address,
+                                      bookingAlert.garageCity || bookingAlert.garage?.city,
+                                      bookingAlert.garagePostcode || bookingAlert.garage?.postcode
+                                    ].filter(Boolean).join(', ')}
+                                  </Text>
+                                )}
+                                <TouchableOpacity
+                                  style={[styles.bookingDirectionsBtn, { backgroundColor: theme.colors.primary }]}
+                                  onPress={() => openGarageDirections({
+                                    name: bookingAlert.garageName || bookingAlert.stationName || bookingAlert.garage?.name,
+                                    address: bookingAlert.garageAddress || bookingAlert.garage?.address,
+                                    city: bookingAlert.garageCity || bookingAlert.garage?.city,
+                                    postcode: bookingAlert.garagePostcode || bookingAlert.garage?.postcode,
+                                    latitude: bookingAlert.garageLatitude || bookingAlert.garage?.latitude,
+                                    longitude: bookingAlert.garageLongitude || bookingAlert.garage?.longitude,
+                                  })}
+                                >
+                                  <MaterialCommunityIcons name="navigation-variant" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                                  <Text style={styles.bookingDirectionsBtnText}>Get Directions to Garage</Text>
+                                </TouchableOpacity>
+                              </View>
+                            )}
                           </View>
                         );
                       })()}
@@ -1079,7 +1114,6 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
         {activeTab === 'history' && (
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            {/* <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 16 }]}>MOT Booking History</Text> */}
             {alerts.filter((a) => a.type === 'BOOKED' && a.customerId && (
               String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
               String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
@@ -1119,16 +1153,25 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                     statusBg = theme.colors.error + '15';
                   }
 
+                  const garageDisplayName = item.garageName || item.stationName || item.garage?.name || 'MOT Testing Station';
+                  const garageAddressStr = [
+                    item.garageAddress || item.garage?.address,
+                    item.garageCity || item.garage?.city,
+                    item.garagePostcode || item.garage?.postcode
+                  ].filter(Boolean).join(', ');
+
                   return (
-                    <TouchableOpacity
+                    <View
                       key={item.id}
                       style={[styles.historyCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-                      onPress={() => navigation.navigate('MotHistory', { registration: item.registrationNumber })}
                     >
                       <View style={styles.historyCardHeader}>
-                        <View style={styles.smallPlate}>
+                        <TouchableOpacity 
+                          onPress={() => navigation.navigate('MotHistory', { registration: item.registrationNumber })}
+                          style={styles.smallPlate}
+                        >
                           <Text style={styles.smallPlateText}>{item.registrationNumber}</Text>
-                        </View>
+                        </TouchableOpacity>
                         <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor + '40', flexDirection: 'row', alignItems: 'center', borderWidth: 0.5 }]}>
                           <MaterialCommunityIcons 
                             name={isPending ? 'clock-outline' : isApproved ? 'check-circle' : isRejected ? 'close-circle' : 'checkbox-marked-circle'} 
@@ -1147,11 +1190,61 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             {item.makeModel.split(' - Slot: ')[0]}
                           </Text>
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, marginBottom: 8 }}>
                           <MaterialCommunityIcons name="calendar-clock" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
                           <Text style={{ fontSize: 13, color: theme.colors.text }}>
                             Slot: {getBookingSlot(item.makeModel)}
                           </Text>
+                        </View>
+
+                        {/* Booked Garage Information Block */}
+                        <View style={[styles.historyGarageBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                              <MaterialCommunityIcons name="storefront" size={16} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                              <Text style={[styles.historyGarageName, { color: theme.colors.text }]} numberOfLines={1}>
+                                {garageDisplayName}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {garageAddressStr ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 2, marginBottom: 8 }}>
+                              <MaterialCommunityIcons name="map-marker-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4, marginTop: 1 }} />
+                              <Text style={{ fontSize: 11, color: theme.colors.placeholder, flex: 1 }} numberOfLines={2}>
+                                {garageAddressStr}
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          {/* Action Buttons: Get Directions & View Garage */}
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                            <TouchableOpacity
+                              style={[styles.historyDirectionsBtn, { backgroundColor: theme.colors.primary }]}
+                              onPress={() => openGarageDirections({
+                                name: garageDisplayName,
+                                address: item.garageAddress || item.garage?.address,
+                                city: item.garageCity || item.garage?.city,
+                                postcode: item.garagePostcode || item.garage?.postcode,
+                                latitude: item.garageLatitude || item.garage?.latitude,
+                                longitude: item.garageLongitude || item.garage?.longitude,
+                              })}
+                            >
+                              <MaterialCommunityIcons name="navigation-variant" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                              <Text style={styles.historyDirectionsBtnText}>Get Directions</Text>
+                            </TouchableOpacity>
+
+                            {item.garageId ? (
+                              <TouchableOpacity
+                                style={[styles.historyViewGarageBtn, { borderColor: theme.colors.primary }]}
+                                onPress={() => navigation.navigate('GarageDetail', { garageId: item.garageId })}
+                              >
+                                <MaterialCommunityIcons name="store-outline" size={14} color={theme.colors.primary} style={{ marginRight: 4 }} />
+                                <Text style={[styles.historyViewGarageBtnText, { color: theme.colors.primary }]}>View Garage</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
                         </View>
 
                         {item.rescheduled && (
@@ -1171,13 +1264,13 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         )}
                       </View>
 
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 8 }}>
                         <MaterialCommunityIcons name="clock-outline" size={12} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
                         <Text style={[styles.historyDate, { color: theme.colors.placeholder }]}>
                           Requested: {new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </Text>
                       </View>
-                    </TouchableOpacity>
+                    </View>
                   );
                 })
             )}
@@ -1728,6 +1821,67 @@ const styles = StyleSheet.create({
   },
   notificationDismissText: {
     fontSize: 10,
+    fontWeight: 'bold',
+  },
+  homeGarageCard: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 8,
+  },
+  homeGarageName: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  bookingDirectionsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  bookingDirectionsBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  historyGarageBox: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  historyGarageName: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  historyDirectionsBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    borderRadius: 6,
+  },
+  historyDirectionsBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  historyViewGarageBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  historyViewGarageBtnText: {
+    fontSize: 11,
     fontWeight: 'bold',
   },
 });

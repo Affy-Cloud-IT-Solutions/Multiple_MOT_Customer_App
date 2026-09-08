@@ -39,6 +39,15 @@ export interface AlertNotification {
   status: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected';
   rejectionReason?: string;
   garageId?: string;
+  garageName?: string;
+  garageAddress?: string;
+  garageCity?: string;
+  garagePostcode?: string;
+  garagePhone?: string;
+  garageEmail?: string;
+  garageLatitude?: number | string;
+  garageLongitude?: number | string;
+  garage?: any;
   serviceName?: string;
   price?: number;
   duration?: number;

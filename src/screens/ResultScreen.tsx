@@ -103,7 +103,7 @@ export default function ResultScreen({ route, navigation }: any) {
       {/* Vehicle Specification Details Card */}
       <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-          <MaterialCommunityIcons name="file-document-check-outline" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+          <MaterialCommunityIcons name="file-document" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
           <Text style={[styles.cardTitle, { color: theme.colors.text, marginBottom: 0 }]}>Test Details</Text>
         </View>
         
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 12,
     alignItems: 'center',
-    elevation: 3,
+    // elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     padding: 16,
-    elevation: 3,
+    // elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,

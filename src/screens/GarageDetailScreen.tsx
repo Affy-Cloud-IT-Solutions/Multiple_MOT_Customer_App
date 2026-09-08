@@ -19,6 +19,7 @@ import Toast from 'react-native-toast-message';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { openGarageDirections } from '../utils/mapUtils';
 
 const GarageLogo = ({ uri, name, style, theme }: any) => {
   const [error, setError] = useState(false);
@@ -524,6 +525,16 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     {garage.distance ? `${garage.distance.toFixed(1)} miles` : '1.5 miles'}
                   </Text>
                 </View>
+
+                {/* DVLA MOT Authorised Station Badge */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B98115', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: '#10B98140' }}>
+                    <MaterialCommunityIcons name="shield-check" size={12} color="#10B981" style={{ marginRight: 4 }} />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#10B981' }}>
+                      DVLA MOT Authorised {garage.vtsNumber ? `• ${garage.vtsNumber}` : ''}
+                    </Text>
+                  </View>
+                </View>
               </View>
             </View>
 
@@ -534,12 +545,39 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
           {/* Location & Details */}
           <View style={[styles.sectionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Garage Information</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 0 }]}>Garage Information</Text>
+              <TouchableOpacity
+                onPress={() => openGarageDirections({
+                  name: garage.name,
+                  address: garage.address,
+                  city: garage.city,
+                  postcode: garage.postcode,
+                  latitude: garage.latitude || (garage.location && garage.location.coordinates ? garage.location.coordinates[1] : null),
+                  longitude: garage.longitude || (garage.location && garage.location.coordinates ? garage.location.coordinates[0] : null),
+                })}
+                style={[styles.smallDirectionsBtn, { backgroundColor: theme.colors.primary + '15', borderColor: theme.colors.primary + '40' }]}
+              >
+                <MaterialCommunityIcons name="navigation-variant" size={14} color={theme.colors.primary} style={{ marginRight: 4 }} />
+                <Text style={[styles.smallDirectionsBtnText, { color: theme.colors.primary }]}>Directions</Text>
+              </TouchableOpacity>
+            </View>
             
             <View style={styles.infoItem}>
               <MaterialCommunityIcons name="map-marker" size={18} color={theme.colors.secondary} style={styles.infoIcon} />
-              <Text style={[styles.infoText, { color: theme.colors.text }]}>{garage.address}</Text>
+              <Text style={[styles.infoText, { color: theme.colors.text, flex: 1 }]}>
+                {garage.address}{garage.city ? `, ${garage.city}` : ''} {garage.postcode || ''}
+              </Text>
             </View>
+
+            {garage.phone ? (
+              <View style={styles.infoItem}>
+                <MaterialCommunityIcons name="phone-outline" size={18} color={theme.colors.secondary} style={styles.infoIcon} />
+                <Text style={[styles.infoText, { color: theme.colors.text }]}>
+                  {garage.phone}
+                </Text>
+              </View>
+            ) : null}
 
             <View style={styles.infoItem}>
               <MaterialCommunityIcons name="clock-outline" size={18} color={theme.colors.secondary} style={styles.infoIcon} />
@@ -554,16 +592,33 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 Open Days: {garage.workingDays ? garage.workingDays.join(', ') : 'Mon - Fri'}
               </Text>
             </View>
+
+            {/* Prominent Full Width Get Directions Button */}
+            <TouchableOpacity
+              style={[styles.fullDirectionsBtn, { backgroundColor: theme.colors.primary }]}
+              onPress={() => openGarageDirections({
+                name: garage.name,
+                address: garage.address,
+                city: garage.city,
+                postcode: garage.postcode,
+                latitude: garage.latitude || (garage.location && garage.location.coordinates ? garage.location.coordinates[1] : null),
+                longitude: garage.longitude || (garage.location && garage.location.coordinates ? garage.location.coordinates[0] : null),
+              })}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons name="directions" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.fullDirectionsBtnText}>Get Directions to Garage</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Facility & Workshop Photos Gallery */}
+          {/* Facility & Workshop Photos Gallery (5 Images) */}
           {garage.images && garage.images.length > 1 && (
             <View style={[styles.sectionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <MaterialCommunityIcons name="image-multiple-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
                   <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 0 }]}>
-                    Garage Photos
+                    Garage Facility Photos
                   </Text>
                 </View>
                 <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
@@ -573,15 +628,17 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                 {garage.images.map((imgUrl: string, idx: number) => (
-                  <View
+                  <TouchableOpacity
                     key={`thumb-${imgUrl}-${idx}`}
+                    onPress={() => setActiveImageIndex(idx)}
+                    activeOpacity={0.8}
                     style={[
                       styles.galleryThumbContainer,
-                      { borderColor: activeImageIndex === idx ? theme.colors.primary : theme.colors.border }
+                      { borderColor: activeImageIndex === idx ? theme.colors.primary : theme.colors.border, borderWidth: activeImageIndex === idx ? 2 : 1 }
                     ]}
                   >
                     <Image source={{ uri: imgUrl }} style={styles.galleryThumb} />
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
             </View>
@@ -1743,5 +1800,30 @@ const styles = StyleSheet.create({
     fontSize: 11,
     flex: 1,
     lineHeight: 15,
+  },
+  smallDirectionsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  smallDirectionsBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  fullDirectionsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  fullDirectionsBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 });
