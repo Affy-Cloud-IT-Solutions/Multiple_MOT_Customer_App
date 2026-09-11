@@ -520,10 +520,14 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   <Text style={[styles.ratingText, { color: theme.colors.text }]}>
                     {garage.rating ? garage.rating.toFixed(1) : '4.5'}
                   </Text>
-                  <Text style={{ color: theme.colors.placeholder, marginLeft: 8 }}>•</Text>
-                  <Text style={[styles.distanceText, { color: theme.colors.placeholder, marginLeft: 8 }]}>
-                    {garage.distance ? `${garage.distance.toFixed(1)} miles` : '1.5 miles'}
-                  </Text>
+                  {garage.city ? (
+                    <>
+                      <Text style={{ color: theme.colors.placeholder, marginLeft: 8 }}>•</Text>
+                      <Text style={{ color: theme.colors.placeholder, marginLeft: 8, fontSize: 12 }}>
+                        {garage.city}
+                      </Text>
+                    </>
+                  ) : null}
                 </View>
 
                 {/* DVLA MOT Authorised Station Badge */}
@@ -761,7 +765,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   style={[styles.primaryActionBtn, { backgroundColor: theme.colors.primary, width: '100%', marginBottom: 10 }]}
                   onPress={() => {
                     setIsBookingModalVisible(false);
-                    navigation.navigate('My Portal');
+                    navigation.navigate('Main', { screen: 'My Portal' });
                   }}
                 >
                   <Text style={styles.primaryActionBtnText}>View in My Portal</Text>
@@ -810,7 +814,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         style={[styles.enterVrnBtn, { backgroundColor: theme.colors.primary + '15' }]}
                         onPress={() => {
                           setIsBookingModalVisible(false);
-                          navigation.navigate('My Portal');
+                          navigation.navigate('Main', { screen: 'My Portal' });
                         }}
                       >
                         <Text style={[styles.enterVrnBtnText, { color: theme.colors.primary }]}>

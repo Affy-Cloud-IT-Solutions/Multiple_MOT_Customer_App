@@ -20,6 +20,7 @@ import SearchableDropdown from '../components/SearchableDropdown';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { validateMotExpiryDate } from '../utils/validationUtils';
 import { openGarageDirections } from '../utils/mapUtils';
+import Toast from 'react-native-toast-message';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -27,7 +28,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function CustomerPortalScreen({ route, navigation }: any) {
   const { isDarkMode, theme, toggleTheme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, refreshData, setToken, setUser, token, user, acknowledgeAlert } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, lookupVehicle, refreshData, setToken, setUser, token, user, acknowledgeAlert } = useAppValues();
 
   // Find active customer
   const customerId = route?.params?.customerId || user?.customerId || 'c1';
@@ -125,7 +126,52 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const [model, setModel] = useState('');
   const [year, setYear] = useState('');
   const [expiry, setExpiry] = useState('');
+  const [isSearchingPlate, setIsSearchingPlate] = useState(false);
+  const [lookupSuccessInfo, setLookupSuccessInfo] = useState<string | null>(null);
   const [expandedBookingReg, setExpandedBookingReg] = useState<string | null>(null);
+
+  const handleLookupPlate = async () => {
+    const vrnClean = regNo.trim().toUpperCase().replace(/\s+/g, '');
+    if (!vrnClean) {
+      Alert.alert('Registration Required', 'Please enter a vehicle registration number to look up.');
+      return;
+    }
+
+    setIsSearchingPlate(true);
+    setLookupSuccessInfo(null);
+
+    try {
+      const res = await lookupVehicle(vrnClean);
+      if (res && res.found && res.vehicle) {
+        const v = res.vehicle;
+        setMake(v.make || '');
+        setModel(v.model || '');
+        setYear(v.year ? String(v.year) : '');
+        setExpiry(v.motExpiryDate || '');
+        const infoStr = `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}`;
+        setLookupSuccessInfo(infoStr);
+
+        Toast.show({
+          type: 'success',
+          text1: 'Vehicle Found on DVSA',
+          text2: `${v.make} ${v.model} details autofilled!`,
+        });
+      } else {
+        Alert.alert(
+          'Vehicle Not Found',
+          `No vehicle details found for "${regNo.trim().toUpperCase()}" in the DVSA database.\n\nPlease check the registration plate number or fill the details manually.`
+        );
+      }
+    } catch (err: any) {
+      console.error('[CustomerPortalScreen] lookup error:', err);
+      Alert.alert(
+        'Lookup Failed',
+        err.message || `Could not find registration "${regNo.trim().toUpperCase()}". Please verify the plate or enter the vehicle details manually.`
+      );
+    } finally {
+      setIsSearchingPlate(false);
+    }
+  };
 
   const fetchMakesList = async (search: string, pageNum: number) => {
     const fallbackMakes = [
@@ -354,6 +400,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       setModel('');
       setYear('');
       setExpiry('');
+      setLookupSuccessInfo(null);
       setShowAddForm(false);
 
       Alert.alert(
@@ -467,18 +514,52 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
               <View style={[styles.formCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <Text style={[styles.formTitle, { color: theme.colors.text }]}>Register New Vehicle</Text>
                 
-                <Text style={[styles.label, { color: theme.colors.text }]}>Registration Number</Text>
-                <View style={[styles.inputWrapper, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
-                  <MaterialCommunityIcons name="card-text-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
-                  <TextInput
-                    value={regNo}
-                    onChangeText={setRegNo}
-                    placeholder="E.g. AB12 XYZ"
-                    placeholderTextColor={theme.colors.placeholder}
-                    autoCapitalize="characters"
-                    style={[styles.inputField, { color: theme.colors.text }]}
-                  />
+                <Text style={[styles.label, { color: theme.colors.text }]}>UK Registration Number</Text>
+                {/* UK Plate Input & Lookup Row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: lookupSuccessInfo ? 8 : 12 }}>
+                  <View style={{ flexDirection: 'row', flex: 1, height: 42, backgroundColor: '#FFD300', borderWidth: 1.5, borderColor: '#000000', borderRadius: 8, overflow: 'hidden', alignItems: 'center' }}>
+                    <View style={{ width: 32, height: '100%', backgroundColor: '#0A4E9B', justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 10 }}>UK</Text>
+                    </View>
+                    <TextInput
+                      value={regNo}
+                      onChangeText={(txt) => {
+                        setRegNo(txt.toUpperCase());
+                        if (lookupSuccessInfo) setLookupSuccessInfo(null);
+                      }}
+                      placeholder="ENTER REG (E.G. AB18 CDE)"
+                      placeholderTextColor="#777777"
+                      autoCapitalize="characters"
+                      maxLength={9}
+                      style={{ flex: 1, fontSize: 14, fontWeight: 'bold', color: '#000000', textAlign: 'center', height: '100%', padding: 0 }}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleLookupPlate}
+                    disabled={isSearchingPlate}
+                    style={{ marginLeft: 8, height: 42, paddingHorizontal: 14, backgroundColor: theme.colors.primary, borderRadius: 8, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', elevation: 2 }}
+                    activeOpacity={0.8}
+                  >
+                    {isSearchingPlate ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="magnify" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                        <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 }}>LOOKUP</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
+
+                {/* Lookup Success Banner */}
+                {lookupSuccessInfo && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B98115', borderColor: '#10B98150', borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12 }}>
+                    <MaterialCommunityIcons name="check-decagram" size={16} color="#10B981" style={{ marginRight: 6 }} />
+                    <Text style={{ fontSize: 11, color: '#10B981', fontWeight: '600', flex: 1 }}>
+                      DVSA Verified: Autofilled details for {lookupSuccessInfo}
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
@@ -548,6 +629,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                       setModel('');
                       setYear('');
                       setExpiry('');
+                      setLookupSuccessInfo(null);
                     }}
                     style={[styles.cancelFormBtn, { borderColor: theme.colors.border }]}
                   >
@@ -1072,39 +1154,64 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                       </View>
                     </View>
 
-                    {/* Bottom Info Section if MOT Expiry exists */}
-                    {v.motExpiryDate && (
-                      <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginTop: 10,
-                        paddingTop: 10,
-                        borderTopWidth: 0.5,
-                        borderTopColor: theme.colors.border
-                      }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <MaterialCommunityIcons name="calendar-range" size={13} color={theme.colors.placeholder} style={{ marginRight: 5 }} />
-                          <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
-                            MOT Expiry: {new Date(v.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </Text>
-                        </View>
-                        
+                    {/* Bottom Info Section */}
+                    {(() => {
+                      const expiryDateObj = v.motExpiryDate ? new Date(v.motExpiryDate) : null;
+                      const isExpired = expiryDateObj && !isNaN(expiryDateObj.getTime()) ? expiryDateObj < new Date() : false;
+
+                      let statusLabel = 'Active';
+                      let statusColor = theme.colors.success;
+
+                      if (v.status === 'Rejected') {
+                        statusLabel = 'Rejected';
+                        statusColor = theme.colors.error;
+                      } else if (v.status === 'Pending') {
+                        statusLabel = 'Pending';
+                        statusColor = theme.colors.warning;
+                      } else if (v.status === 'Sold') {
+                        statusLabel = 'Sold';
+                        statusColor = theme.colors.placeholder;
+                      } else if (v.status === 'Scrapped') {
+                        statusLabel = 'Scrapped';
+                        statusColor = theme.colors.placeholder;
+                      } else if (isExpired) {
+                        statusLabel = 'Expired';
+                        statusColor = theme.colors.error;
+                      }
+
+                      return (
                         <View style={{
                           flexDirection: 'row',
                           alignItems: 'center',
-                          backgroundColor: theme.colors.success + '12',
-                          paddingHorizontal: 8,
-                          paddingVertical: 2,
-                          borderRadius: 10
+                          justifyContent: 'space-between',
+                          marginTop: 10,
+                          paddingTop: 10,
+                          borderTopWidth: 0.5,
+                          borderTopColor: theme.colors.border
                         }}>
-                          <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: theme.colors.success, marginRight: 5 }} />
-                          <Text style={{ fontSize: 9, fontWeight: 'bold', color: theme.colors.success }}>
-                            Active
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <MaterialCommunityIcons name="calendar-range" size={13} color={theme.colors.placeholder} style={{ marginRight: 5 }} />
+                            <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                              {v.motExpiryDate ? `MOT Expiry: ${new Date(v.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No MOT Expiry on record'}
+                            </Text>
+                          </View>
+                          
+                          <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: statusColor + '15',
+                            paddingHorizontal: 8,
+                            paddingVertical: 2,
+                            borderRadius: 10
+                          }}>
+                            <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: statusColor, marginRight: 5 }} />
+                            <Text style={{ fontSize: 9, fontWeight: 'bold', color: statusColor }}>
+                              {statusLabel}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                    )}
+                      );
+                    })()}
                   </TouchableOpacity>
                 );
               })

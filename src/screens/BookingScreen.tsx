@@ -382,7 +382,7 @@ export default function BookingScreen({ route, navigation }: any) {
         if (navigation.canGoBack()) {
           navigation.goBack();
         } else {
-          navigation.navigate('Main', { screen: 'Customers' });
+          navigation.navigate('Main', { screen: 'My Portal' });
         }
       }
     } catch (err: any) {

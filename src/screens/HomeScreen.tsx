@@ -304,15 +304,30 @@ export default function HomeScreen({ navigation }: any) {
             )}
           </View>
 
-          <TouchableOpacity
-            onPress={handleSearchGarages}
-            style={[styles.searchButton, { backgroundColor: theme.colors.secondary }]}
-          >
-            <View style={styles.searchButtonContent}>
-              <MaterialCommunityIcons name="store-search" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={[styles.searchButtonText, { color: '#FFFFFF' }]}>Search Garages</Text>
-            </View>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+            <TouchableOpacity
+              onPress={handleSearchGarages}
+              style={[styles.searchButton, { backgroundColor: theme.colors.secondary, flex: 1, marginTop: 0 }]}
+            >
+              <View style={styles.searchButtonContent}>
+                <MaterialCommunityIcons name="store-search" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={[styles.searchButtonText, { color: '#FFFFFF', fontSize: 13 }]}>Search</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                Keyboard.dismiss();
+                navigation.navigate('Garages', { nearMe: true });
+              }}
+              style={[styles.searchButton, { backgroundColor: '#10B981', paddingHorizontal: 14, marginTop: 0 }]}
+            >
+              <View style={styles.searchButtonContent}>
+                <MaterialCommunityIcons name="crosshairs-gps" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={[styles.searchButtonText, { color: '#FFFFFF', fontSize: 13 }]}>Near Me</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Plate Search Input Container */}

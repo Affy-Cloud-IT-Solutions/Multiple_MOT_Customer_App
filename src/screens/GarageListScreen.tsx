@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,6 +15,12 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import {
+  calculateDistanceInMiles,
+  requestUserLiveLocation,
+  openGarageDirections,
+  Coordinates,
+} from '../utils/mapUtils';
 
 const GarageLogo = ({ uri, name, style, theme }: any) => {
   const [error, setError] = useState(false);
@@ -38,7 +44,7 @@ const GarageLogo = ({ uri, name, style, theme }: any) => {
   );
 };
 
-const GarageCoverBanner = ({ uri, imagesCount, rating, distance, theme }: any) => {
+const GarageCoverBanner = ({ uri, imagesCount, rating, city, postcode, distanceInMiles, theme }: any) => {
   const [error, setError] = useState(false);
 
   return (
@@ -69,16 +75,25 @@ const GarageCoverBanner = ({ uri, imagesCount, rating, distance, theme }: any) =
         </View>
       )}
 
-      {/* Bottom Floating Chips: Rating & Distance */}
+      {/* Bottom Floating Chips: Rating, Location & Distance in Miles */}
       <View style={styles.bannerBottomChips}>
         <View style={styles.bannerChip}>
           <MaterialCommunityIcons name="star" size={12} color="#F59E0B" />
           <Text style={styles.bannerChipText}>{rating ? Number(rating).toFixed(1) : '4.8'}</Text>
         </View>
-        <View style={styles.bannerChip}>
-          <MaterialCommunityIcons name="map-marker" size={12} color="#FFFFFF" />
-          <Text style={styles.bannerChipText}>{distance ? `${Number(distance).toFixed(1)} mi` : '1.5 mi'}</Text>
-        </View>
+        {distanceInMiles !== undefined && distanceInMiles !== null && distanceInMiles > 0 ? (
+          <View style={[styles.bannerChip, { backgroundColor: 'rgba(16, 185, 129, 0.9)' }]}>
+            <MaterialCommunityIcons name="map-marker-distance" size={12} color="#FFFFFF" />
+            <Text style={styles.bannerChipText}>{`${Number(distanceInMiles).toFixed(1)} miles away`}</Text>
+          </View>
+        ) : (city || postcode) ? (
+          <View style={styles.bannerChip}>
+            <MaterialCommunityIcons name="map-marker" size={12} color="#FFFFFF" />
+            <Text style={styles.bannerChipText}>
+              {[city, postcode].filter(Boolean).join(', ')}
+            </Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -93,21 +108,37 @@ export default function GarageListScreen({ route, navigation }: any) {
   const [searchQuery, setSearchQuery] = useState(route?.params?.searchQuery || route?.params?.search || '');
   const [error, setError] = useState<string | null>(null);
 
-  // Sync searchQuery when navigating with parameters
+  // Live Location & Sorting State
+  const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>({
+    latitude: 51.5074,
+    longitude: -0.1278,
+    label: 'London (Default)',
+  });
+  const [isNearMeActive, setIsNearMeActive] = useState<boolean>(route?.params?.nearMe === true);
+  const [fetchingLocation, setFetchingLocation] = useState<boolean>(false);
+
+  // Background fetch user's live coordinates on screen mount
+  useEffect(() => {
+    requestUserLiveLocation().then((coords) => {
+      if (coords) {
+        setUserCoordinates(coords);
+      }
+    });
+  }, []);
+
+  // Sync searchQuery & nearMe when navigating with parameters
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       if (route?.params?.searchQuery !== undefined) {
         setSearchQuery(route.params.searchQuery);
       } else if (route?.params?.search !== undefined) {
         setSearchQuery(route.params.search);
       }
-    }, [route?.params?.searchQuery, route?.params?.search])
+      if (route?.params?.nearMe === true) {
+        handleTriggerNearMe();
+      }
+    }, [route?.params?.searchQuery, route?.params?.search, route?.params?.nearMe])
   );
-
-  const handleClearSearch = () => {
-    setSearchQuery('');
-    navigation.setParams({ searchQuery: '', search: '' });
-  };
 
   const fetchGaragesList = async () => {
     setLoading(true);
@@ -117,7 +148,7 @@ export default function GarageListScreen({ route, navigation }: any) {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
       if (!response.ok) {
-        throw new Error('Failed to load garages.');
+        throw new Error('Failed to load registered garages.');
       }
       const data = await response.json();
       setGarages(data);
@@ -133,15 +164,70 @@ export default function GarageListScreen({ route, navigation }: any) {
     fetchGaragesList();
   }, [token]);
 
-  const filteredGarages = garages.filter((g) => {
+  // Handler: Hardware Live GPS for "Near Me"
+  const handleTriggerNearMe = async () => {
+    setFetchingLocation(true);
+    try {
+      const coords = await requestUserLiveLocation();
+      if (coords) {
+        setUserCoordinates(coords);
+        setIsNearMeActive(true);
+      }
+    } catch (e) {
+      console.error('GPS error:', e);
+    } finally {
+      setFetchingLocation(false);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    navigation.setParams({ searchQuery: '', search: '' });
+  };
+
+  const handleResetNearMe = () => {
+    setIsNearMeActive(false);
+  };
+
+  // Filter and sort registered garages cleanly
+  const processedGarages = useMemo(() => {
     const q = (searchQuery || '').toLowerCase().trim();
-    if (!q) return true;
-    return (
-      (g.name && g.name.toLowerCase().includes(q)) ||
-      (g.address && g.address.toLowerCase().includes(q)) ||
-      (g.description && g.description.toLowerCase().includes(q))
-    );
-  });
+    const cleanQ = q.replace(/\s+/g, '');
+
+    // Map each registered garage with dynamic calculated distance in miles
+    const mapped = garages.map((g) => {
+      let calculatedDistance = g.distance || 0;
+      if (userCoordinates && g.latitude && g.longitude) {
+        calculatedDistance = calculateDistanceInMiles(
+          userCoordinates.latitude,
+          userCoordinates.longitude,
+          g.latitude,
+          g.longitude
+        );
+      }
+      return {
+        ...g,
+        calculatedDistance,
+      };
+    });
+
+    // Filter by search query (name, address, city, postcode)
+    const filtered = mapped.filter((g) => {
+      if (!q) return true;
+      const nameMatch = (g.name || '').toLowerCase().includes(q);
+      const addressMatch = (g.address || '').toLowerCase().includes(q);
+      const cityMatch = (g.city || '').toLowerCase().includes(q);
+      const postcodeMatch = (g.postcode || '').toLowerCase().replace(/\s+/g, '').includes(cleanQ);
+
+      return nameMatch || addressMatch || cityMatch || postcodeMatch;
+    });
+
+    // Sorting: If "Near Me" is active, sort by nearest to device first. Otherwise sort by highest DVSA rating
+    if (isNearMeActive) {
+      return filtered.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
+    }
+    return filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  }, [garages, searchQuery, isNearMeActive, userCoordinates]);
 
   const renderGarageItem = ({ item }: { item: any }) => {
     const coverUri = (item.images && item.images.length > 0) ? item.images[0] : (item.logoUrl || '');
@@ -158,7 +244,9 @@ export default function GarageListScreen({ route, navigation }: any) {
           uri={coverUri}
           imagesCount={imagesCount}
           rating={item.rating}
-          distance={item.distance}
+          city={item.city}
+          postcode={item.postcode}
+          distanceInMiles={item.calculatedDistance}
           theme={theme}
         />
 
@@ -177,13 +265,35 @@ export default function GarageListScreen({ route, navigation }: any) {
               <View style={styles.addressRow}>
                 <MaterialCommunityIcons name="map-marker-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
                 <Text style={[styles.garageAddress, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                  {item.address}
+                  {item.address || `${item.city || ''} ${item.postcode || ''}`}
                 </Text>
               </View>
+
+              {item.postcode ? (
+                <View style={styles.postcodeTagRow}>
+                  <View style={[styles.postcodeBadge, { backgroundColor: theme.colors.secondary + '15' }]}>
+                    <Text style={[styles.postcodeBadgeText, { color: theme.colors.secondary }]}>
+                      {item.postcode}
+                    </Text>
+                  </View>
+                  {item.city ? (
+                    <Text style={[styles.cityText, { color: theme.colors.placeholder }]}>• {item.city}</Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
 
-            <View style={[styles.bookPill, { backgroundColor: theme.colors.primary }]}>
-              <Text style={styles.bookPillText}>Book MOT</Text>
+            <View style={{ gap: 6, alignItems: 'flex-end' }}>
+              <View style={[styles.bookPill, { backgroundColor: theme.colors.primary }]}>
+                <Text style={styles.bookPillText}>Book MOT</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => openGarageDirections(item)}
+                style={[styles.directionsBtn, { borderColor: theme.colors.border }]}
+              >
+                <MaterialCommunityIcons name="directions" size={12} color={theme.colors.secondary} />
+                <Text style={[styles.directionsBtnText, { color: theme.colors.secondary }]}>Directions</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -197,7 +307,9 @@ export default function GarageListScreen({ route, navigation }: any) {
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <MaterialCommunityIcons name="calendar-check-outline" size={12} color={theme.colors.secondary} style={{ marginRight: 4 }} />
               <Text style={[styles.daysText, { color: theme.colors.secondary }]}>
-                {item.workingDays && item.workingDays.length > 0 ? `${item.workingDays[0].substring(0, 3)} - ${item.workingDays[item.workingDays.length - 1].substring(0, 3)}` : 'Mon - Fri'}
+                {item.workingDays && item.workingDays.length > 0 
+                  ? `${item.workingDays[0].substring(0, 3)} - ${item.workingDays[item.workingDays.length - 1].substring(0, 3)}` 
+                  : 'Mon - Fri'}
               </Text>
             </View>
           </View>
@@ -210,35 +322,75 @@ export default function GarageListScreen({ route, navigation }: any) {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.colors.text }]}>Available Garages</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Registered Garages</Text>
+          <View style={styles.registeredShieldBadge}>
+            <MaterialCommunityIcons name="shield-check" size={13} color="#10B981" style={{ marginRight: 3 }} />
+            <Text style={styles.registeredShieldText}>Platform Verified</Text>
+          </View>
+        </View>
         <Text style={[styles.subtitle, { color: theme.colors.placeholder }]}>
-          Compare services, check ratings, and book your MOT appointments.
+          Compare certified MOT testing bays, review ratings, and book appointments.
         </Text>
       </View>
 
-      {/* Search Bar */}
-      <View style={[styles.searchContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-        <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} style={styles.searchIcon} />
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search by name, city, or postcode..."
-          placeholderTextColor={theme.colors.placeholder}
-          style={[styles.searchInput, { color: theme.colors.text }]}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={handleClearSearch} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <MaterialCommunityIcons name="close-circle" size={18} color={theme.colors.placeholder} />
-          </TouchableOpacity>
-        )}
+      {/* Search Bar + Near Me Button */}
+      <View style={styles.searchRow}>
+        <View style={[styles.searchContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} style={styles.searchIcon} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search by postcode (e.g. M1, SE1) or town..."
+            placeholderTextColor={theme.colors.placeholder}
+            style={[styles.searchInput, { color: theme.colors.text }]}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={handleClearSearch} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <MaterialCommunityIcons name="close-circle" size={18} color={theme.colors.placeholder} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* One-Tap Near Me Live GPS Button */}
+        <TouchableOpacity
+          style={[
+            styles.nearMeButton,
+            { backgroundColor: isNearMeActive ? '#10B981' : theme.colors.primary }
+          ]}
+          onPress={handleTriggerNearMe}
+          disabled={fetchingLocation}
+        >
+          {fetchingLocation ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <MaterialCommunityIcons name="crosshairs-gps" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.nearMeButtonText}>Near Me</Text>
+            </>
+          )}
+        </TouchableOpacity>
       </View>
+
+      {/* Near Me Active Badge */}
+      {isNearMeActive && (
+        <View style={[styles.nearMeActivePill, { backgroundColor: '#10B98115', borderColor: '#10B98140' }]}>
+          <MaterialCommunityIcons name="crosshairs-gps" size={14} color="#10B981" style={{ marginRight: 6 }} />
+          <Text style={[styles.nearMeActiveText, { color: '#10B981', flex: 1 }]}>
+            Sorted by nearest garages to your location
+          </Text>
+          <TouchableOpacity onPress={handleResetNearMe} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={[styles.clearFilterLink, { color: theme.colors.primary }]}>Reset</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Active Filter Pill */}
       {searchQuery.trim().length > 0 && !loading && !error && (
         <View style={[styles.searchFilterBadge, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <MaterialCommunityIcons name="filter-variant" size={14} color={theme.colors.secondary} style={{ marginRight: 6 }} />
           <Text style={[styles.searchFilterText, { color: theme.colors.text, flex: 1 }]} numberOfLines={1}>
-            Found {filteredGarages.length} {filteredGarages.length === 1 ? 'garage' : 'garages'} for "{searchQuery.trim()}"
+            Found {processedGarages.length} registered {processedGarages.length === 1 ? 'garage' : 'garages'} for "{searchQuery.trim()}"
           </Text>
           <TouchableOpacity onPress={handleClearSearch} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={[styles.clearFilterLink, { color: theme.colors.primary }]}>Show All</Text>
@@ -246,10 +398,11 @@ export default function GarageListScreen({ route, navigation }: any) {
         </View>
       )}
 
+      {/* Garages List */}
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.text }]}>Finding nearest garages...</Text>
+          <Text style={[styles.loadingText, { color: theme.colors.text }]}>Loading registered garages...</Text>
         </View>
       ) : error ? (
         <View style={styles.centerContainer}>
@@ -259,24 +412,26 @@ export default function GarageListScreen({ route, navigation }: any) {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      ) : filteredGarages.length === 0 ? (
+      ) : processedGarages.length === 0 ? (
         <View style={styles.centerContainer}>
           <MaterialCommunityIcons name="store-search-outline" size={48} color={theme.colors.placeholder} />
           <Text style={[styles.errorText, { color: theme.colors.placeholder }]}>
-            {searchQuery.trim() ? `No garages found matching "${searchQuery.trim()}".` : 'No garages match your criteria.'}
+            {searchQuery.trim() 
+              ? `No registered garages match "${searchQuery.trim()}".` 
+              : 'No registered garages found.'}
           </Text>
           {searchQuery.trim().length > 0 && (
             <TouchableOpacity 
               style={[styles.retryButton, { backgroundColor: theme.colors.secondary, marginTop: 14 }]} 
               onPress={handleClearSearch}
             >
-              <Text style={styles.retryButtonText}>Show All Garages</Text>
+              <Text style={styles.retryButtonText}>Show All Registered Garages</Text>
             </TouchableOpacity>
           )}
         </View>
       ) : (
         <FlatList
-          data={filteredGarages}
+          data={processedGarages}
           keyExtractor={(item) => item.id}
           renderItem={renderGarageItem}
           contentContainerStyle={styles.listContent}
@@ -294,23 +449,43 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 6,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   title: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 2,
+  },
+  registeredShieldBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B98115',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  registeredShieldText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#10B981',
   },
   subtitle: {
     fontSize: 11,
     lineHeight: 14,
+    marginTop: 2,
   },
-  searchContainer: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
-    marginBottom: 12,
+    marginTop: 10,
+    marginBottom: 8,
+    gap: 8,
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     height: 42,
     borderRadius: 21,
@@ -329,6 +504,38 @@ const styles = StyleSheet.create({
     height: '100%',
     fontSize: 13,
     paddingVertical: 0,
+  },
+  nearMeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 42,
+    paddingHorizontal: 14,
+    borderRadius: 21,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  nearMeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  nearMeActivePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  nearMeActiveText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   listContent: {
     paddingHorizontal: 16,
@@ -368,7 +575,7 @@ const styles = StyleSheet.create({
     left: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
@@ -384,7 +591,7 @@ const styles = StyleSheet.create({
     right: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
@@ -404,7 +611,7 @@ const styles = StyleSheet.create({
   bannerChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingHorizontal: 7,
     paddingVertical: 2.5,
     borderRadius: 6,
@@ -456,6 +663,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     flex: 1,
   },
+  postcodeTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+    gap: 4,
+  },
+  postcodeBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  postcodeBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  cityText: {
+    fontSize: 10,
+  },
   bookPill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -465,6 +690,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  directionsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 2,
+  },
+  directionsBtnText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   cardFooter: {
     flexDirection: 'row',
@@ -499,13 +737,14 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 9,
     borderRadius: 8,
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+    fontSize: 12,
   },
   searchFilterBadge: {
     flexDirection: 'row',
