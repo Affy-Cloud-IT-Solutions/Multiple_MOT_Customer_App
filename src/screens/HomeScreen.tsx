@@ -16,6 +16,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { requestUserLiveLocation, isWithinUKBoundary, Coordinates } from '../utils/mapUtils';
 
 
 const mapBackendVehicleToFrontend = (v: any) => {
@@ -129,12 +130,27 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
+  const [userCoords, setUserCoords] = useState<Coordinates | null>(null);
+
+  useEffect(() => {
+    requestUserLiveLocation().then((coords) => {
+      if (coords) {
+        setUserCoords(coords);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       if (token) {
         refreshData();
       }
       loadSearchHistory();
+      requestUserLiveLocation().then((coords) => {
+        if (coords) {
+          setUserCoords(coords);
+        }
+      });
     });
     loadSearchHistory();
     return unsubscribe;
@@ -192,6 +208,52 @@ export default function HomeScreen({ navigation }: any) {
             Search registration marks, book certified MOT services, compare garages, and set up automatic reminders.
           </Text>
         </View>
+
+        {/* Live Service Availability & Region Status */}
+        {userCoords && (() => {
+          const isUK = isWithinUKBoundary(userCoords);
+          return (
+            <TouchableOpacity
+              style={[
+                styles.homeLocationBar,
+                {
+                  backgroundColor: isUK ? '#10B98115' : '#EF444415',
+                  borderColor: isUK ? '#10B98140' : '#EF444440',
+                },
+              ]}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Garages', { nearMe: true })}
+            >
+              <MaterialCommunityIcons
+                name={isUK ? 'map-marker-check' : 'map-marker-remove-variant'}
+                size={15}
+                color={isUK ? '#10B981' : '#DC2626'}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.homeLocationText,
+                  { color: isUK ? '#10B981' : '#DC2626', flex: 1, fontWeight: '700' },
+                ]}
+                numberOfLines={1}
+              >
+                {isUK
+                  ? `📍 ${userCoords.label || 'United Kingdom'} • Service Active`
+                  : `📍 ${userCoords.label || 'Outside UK'} • Service Not Available`}
+              </Text>
+              <View style={styles.homeLocationAction}>
+                <Text style={[styles.homeLocationActionText, { color: isUK ? '#10B981' : '#DC2626' }]}>
+                  {isUK ? 'Find Garages' : 'Check Area'}
+                </Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={14}
+                  color={isUK ? '#10B981' : '#DC2626'}
+                />
+              </View>
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* Core Actions Grid */}
         <View style={styles.quickGrid}>
@@ -764,5 +826,28 @@ const styles = StyleSheet.create({
   stepDesc: {
     fontSize: 10,
     lineHeight: 14,
+  },
+  homeLocationBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 0,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  homeLocationText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  homeLocationAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 6,
+  },
+  homeLocationActionText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

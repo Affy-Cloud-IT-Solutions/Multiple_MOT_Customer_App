@@ -13,12 +13,14 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   calculateDistanceInMiles,
   requestUserLiveLocation,
   openGarageDirections,
+  isWithinUKBoundary,
+  DEFAULT_UK_LOCATION,
+  UK_PRESET_LOCATIONS,
   Coordinates,
 } from '../utils/mapUtils';
 
@@ -109,13 +111,10 @@ export default function GarageListScreen({ route, navigation }: any) {
   const [error, setError] = useState<string | null>(null);
 
   // Live Location & Sorting State
-  const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>({
-    latitude: 51.5074,
-    longitude: -0.1278,
-    label: 'London (Default)',
-  });
+  const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>(null);
   const [isNearMeActive, setIsNearMeActive] = useState<boolean>(route?.params?.nearMe === true);
   const [fetchingLocation, setFetchingLocation] = useState<boolean>(false);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
   // Background fetch user's live coordinates on screen mount
   useEffect(() => {
@@ -167,6 +166,7 @@ export default function GarageListScreen({ route, navigation }: any) {
   // Handler: Hardware Live GPS for "Near Me"
   const handleTriggerNearMe = async () => {
     setFetchingLocation(true);
+    setIsDemoMode(false);
     try {
       const coords = await requestUserLiveLocation();
       if (coords) {
@@ -188,6 +188,37 @@ export default function GarageListScreen({ route, navigation }: any) {
   const handleResetNearMe = () => {
     setIsNearMeActive(false);
   };
+
+  // Switch to UK London Demo Mode
+  const handleEnableDemoMode = () => {
+    setUserCoordinates(DEFAULT_UK_LOCATION);
+    setIsDemoMode(true);
+    setIsNearMeActive(true);
+  };
+
+  // Quick preset selection
+  const handleSelectPresetLocation = (presetKey: string) => {
+    const preset = UK_PRESET_LOCATIONS[presetKey];
+    if (preset) {
+      setUserCoordinates(preset);
+      setIsDemoMode(true);
+      setIsNearMeActive(true);
+      setSearchQuery('');
+    }
+  };
+
+  // Boundary check: is user outside the UK and not currently using search query or demo mode?
+  const isWithinUK = useMemo(() => {
+    if (!userCoordinates) return true;
+    return isWithinUKBoundary(userCoordinates);
+  }, [userCoordinates]);
+
+  const isOutsideUKServiceArea = useMemo(() => {
+    if (isDemoMode) return false;
+    if (searchQuery.trim().length > 0) return false;
+    if (!userCoordinates) return false;
+    return !isWithinUKBoundary(userCoordinates);
+  }, [userCoordinates, isDemoMode, searchQuery]);
 
   // Filter and sort registered garages cleanly
   const processedGarages = useMemo(() => {
@@ -326,12 +357,50 @@ export default function GarageListScreen({ route, navigation }: any) {
           <Text style={[styles.title, { color: theme.colors.text }]}>Registered Garages</Text>
           <View style={styles.registeredShieldBadge}>
             <MaterialCommunityIcons name="shield-check" size={13} color="#10B981" style={{ marginRight: 3 }} />
-            <Text style={styles.registeredShieldText}>Platform Verified</Text>
+            <Text style={styles.registeredShieldText}>DVSA Certified</Text>
           </View>
         </View>
         <Text style={[styles.subtitle, { color: theme.colors.placeholder }]}>
           Compare certified MOT testing bays, review ratings, and book appointments.
         </Text>
+
+        {/* Live Detected Region Status Pill */}
+        {userCoordinates && (
+          <View style={[
+            styles.locationRegionBar,
+            { 
+              backgroundColor: isWithinUK 
+                ? '#10B98115' 
+                : '#EF444415',
+              borderColor: isWithinUK 
+                ? '#10B98140' 
+                : '#EF444440'
+            }
+          ]}>
+            <MaterialCommunityIcons 
+              name={isWithinUK ? "map-marker-check" : "map-marker-remove-variant"} 
+              size={15} 
+              color={isWithinUK ? "#10B981" : "#DC2626"} 
+              style={{ marginRight: 6 }} 
+            />
+            <Text 
+              style={[
+                styles.locationRegionText, 
+                { color: isWithinUK ? '#10B981' : '#DC2626', flex: 1, fontWeight: '700' }
+              ]} 
+              numberOfLines={1}
+            >
+              {isWithinUK 
+                ? `📍 ${userCoordinates.label || 'United Kingdom'} • Service Active`
+                : `📍 ${userCoordinates.label || 'Outside UK'} • Service Not Available`}
+            </Text>
+            {isDemoMode && (
+              <View style={styles.demoBadge}>
+                <Text style={styles.demoBadgeText}>UK Demo</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Search Bar + Near Me Button */}
@@ -341,7 +410,7 @@ export default function GarageListScreen({ route, navigation }: any) {
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search by postcode (e.g. M1, SE1) or town..."
+            placeholder="Search UK postcode (e.g. M1, SE1) or town..."
             placeholderTextColor={theme.colors.placeholder}
             style={[styles.searchInput, { color: theme.colors.text }]}
           />
@@ -356,7 +425,7 @@ export default function GarageListScreen({ route, navigation }: any) {
         <TouchableOpacity
           style={[
             styles.nearMeButton,
-            { backgroundColor: isNearMeActive ? '#10B981' : theme.colors.primary }
+            { backgroundColor: isNearMeActive && !isOutsideUKServiceArea ? '#10B981' : theme.colors.primary }
           ]}
           onPress={handleTriggerNearMe}
           disabled={fetchingLocation}
@@ -372,8 +441,8 @@ export default function GarageListScreen({ route, navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* Near Me Active Badge */}
-      {isNearMeActive && (
+      {/* Near Me Active Badge (when inside UK) */}
+      {isNearMeActive && !isOutsideUKServiceArea && (
         <View style={[styles.nearMeActivePill, { backgroundColor: '#10B98115', borderColor: '#10B98140' }]}>
           <MaterialCommunityIcons name="crosshairs-gps" size={14} color="#10B981" style={{ marginRight: 6 }} />
           <Text style={[styles.nearMeActiveText, { color: '#10B981', flex: 1 }]}>
@@ -398,13 +467,14 @@ export default function GarageListScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* Garages List */}
+      {/* State 1: Loading */}
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.text }]}>Loading registered garages...</Text>
         </View>
       ) : error ? (
+        /* State 2: Error */
         <View style={styles.centerContainer}>
           <MaterialCommunityIcons name="alert-circle-outline" size={48} color={theme.colors.error} />
           <Text style={[styles.errorText, { color: theme.colors.text }]}>{error}</Text>
@@ -412,13 +482,62 @@ export default function GarageListScreen({ route, navigation }: any) {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
+      ) : isOutsideUKServiceArea ? (
+        /* State 3: Blinkit-style "Service Not Available in Your Area" (Outside UK) - NO GARAGES SHOWN */
+        <ScrollView contentContainerStyle={styles.unavailableContainer}>
+          <View style={[styles.unavailableCard, { backgroundColor: theme.colors.card, borderColor: '#EF444450' }]}>
+            <View style={[styles.unavailableIconCircle, { backgroundColor: '#EF444415' }]}>
+              <MaterialCommunityIcons name="map-marker-off-outline" size={46} color="#DC2626" />
+            </View>
+
+            <View style={[styles.detectedPill, { backgroundColor: '#EF444415', borderColor: '#EF444430', borderWidth: 1 }]}>
+              <MaterialCommunityIcons name="crosshairs-gps" size={13} color="#DC2626" style={{ marginRight: 5 }} />
+              <Text style={[styles.detectedPillText, { color: '#DC2626' }]} numberOfLines={1}>
+                {userCoordinates?.label || 'Outside UK Region'}
+              </Text>
+            </View>
+
+            <Text style={[styles.unavailableTitle, { color: '#DC2626' }]}>
+              Service Not Available In Your Area
+            </Text>
+
+            <Text style={[styles.unavailableDesc, { color: theme.colors.placeholder }]}>
+              Multiple MOT operates exclusively across the United Kingdom (England, Scotland, Wales & Northern Ireland). No DVSA-certified MOT garages are available in your detected region.
+            </Text>
+
+            {/* Action 1: Switch to London Demo Mode */}
+            <TouchableOpacity 
+              style={[styles.primaryActionBtn, { backgroundColor: theme.colors.primary }]}
+              onPress={handleEnableDemoMode}
+            >
+              <MaterialCommunityIcons name="eye-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.primaryActionBtnText}>Explore UK Garages (London Demo Mode)</Text>
+            </TouchableOpacity>
+
+            {/* Quick UK City Presets */}
+            <Text style={[styles.presetHeading, { color: theme.colors.placeholder }]}>Or explore garages by UK city:</Text>
+            <View style={styles.presetRow}>
+              {['London Central', 'Manchester', 'Birmingham', 'Leeds'].map((cityKey) => (
+                <TouchableOpacity
+                  key={cityKey}
+                  style={[styles.presetChip, { backgroundColor: theme.colors.secondary + '15', borderColor: theme.colors.secondary + '30' }]}
+                  onPress={() => handleSelectPresetLocation(cityKey)}
+                >
+                  <Text style={[styles.presetChipText, { color: theme.colors.secondary }]}>{cityKey.split(' ')[0]}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+
       ) : processedGarages.length === 0 ? (
+        /* State 4: Empty search results */
         <View style={styles.centerContainer}>
           <MaterialCommunityIcons name="store-search-outline" size={48} color={theme.colors.placeholder} />
           <Text style={[styles.errorText, { color: theme.colors.placeholder }]}>
             {searchQuery.trim() 
               ? `No registered garages match "${searchQuery.trim()}".` 
-              : 'No registered garages found.'}
+              : 'No registered garages found in this area.'}
           </Text>
           {searchQuery.trim().length > 0 && (
             <TouchableOpacity 
@@ -430,6 +549,7 @@ export default function GarageListScreen({ route, navigation }: any) {
           )}
         </View>
       ) : (
+        /* State 5: Garage List (inside UK) */
         <FlatList
           data={processedGarages}
           keyExtractor={(item) => item.id}
@@ -473,6 +593,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     marginTop: 2,
+  },
+  locationRegionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  locationRegionText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  demoBadge: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+  demoBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: 'bold',
   },
   searchRow: {
     flexDirection: 'row',
@@ -764,5 +909,92 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  // Unavailable / Blinkit-style View Styles
+  unavailableContainer: {
+    padding: 16,
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  unavailableCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  unavailableIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F59E0B18',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  detectedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F59E0B15',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    marginBottom: 12,
+  },
+  detectedPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#D97706',
+  },
+  unavailableTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  unavailableDesc: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 20,
+  },
+  primaryActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  primaryActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  presetHeading: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  presetChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  presetChipText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
