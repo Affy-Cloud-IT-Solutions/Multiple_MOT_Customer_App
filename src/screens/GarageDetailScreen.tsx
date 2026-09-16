@@ -167,18 +167,41 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     }
   }, [route?.params?.vehicle, activeCustomerVehicles, selectedVehicle, alerts]);
 
-  // Calculate available working days for the next 14 days
+  // Calculate available working days for the next window:
+  // - If vehicle MOT is in the future (>30 days away): Show pre-booking slots within the 30-day window prior to expiry [Expiry - 30 days -> Expiry]
+  // - If vehicle MOT is within 30 days or already expired: Show immediate available dates from Today onwards
   const availableDates = useMemo(() => {
     const dates = [];
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const workingDays = garage?.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    for (let i = 0; i < 14; i++) {
-      const d = new Date();
-      d.setDate(today.getDate() + i);
-      const dayName = daysMap[d.getDay()];
+    let startDate = new Date(today);
+    let totalDaysToScan = 21;
 
+    if (selectedVehicle?.motExpiryDate) {
+      const expiryDate = new Date(selectedVehicle.motExpiryDate);
+      expiryDate.setHours(0, 0, 0, 0);
+      const daysLeft = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysLeft > 30) {
+        // Pre-booking mode: Show available operating days within the 30-day window leading up to expiry
+        startDate = new Date(expiryDate);
+        startDate.setDate(startDate.getDate() - 30);
+        totalDaysToScan = 31;
+      }
+    }
+
+    for (let i = 0; i < totalDaysToScan; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+
+      // Never show past days
+      if (d < today) continue;
+
+      const dayName = daysMap[d.getDay()];
       const isWorkingDay = workingDays.some((w: string) => w.toLowerCase() === dayName.toLowerCase());
       if (isWorkingDay) {
         const year = d.getFullYear();
@@ -194,7 +217,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       }
     }
     return dates;
-  }, [garage?.workingDays]);
+  }, [garage?.workingDays, selectedVehicle]);
 
   // Fetch live 45-min slots for selected date
   const fetchSlotsForDate = useCallback(async (dateStr: string) => {
@@ -218,6 +241,14 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       setLoadingSlots(false);
     }
   }, [garage, garageId, token]);
+
+  useEffect(() => {
+    if (availableDates.length > 0) {
+      if (!selectedDate || !availableDates.some(d => d.dateStr === selectedDate)) {
+        setSelectedDate(availableDates[0].dateStr);
+      }
+    }
+  }, [availableDates, selectedDate]);
 
   useEffect(() => {
     if (selectedDate && isBookingModalVisible) {
@@ -354,12 +385,21 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     }
 
     const daysLeft = getDaysUntilExpiry(selectedVehicle.motExpiryDate);
+    // If vehicle is in pre-booking mode (>30 days away), ensure booking date is within the 30-day window before expiry
     if (daysLeft > 30) {
-      Alert.alert(
-        'Booking Restriction (30-Day Rule)',
-        `Under DVSA regulations, you can only book an MOT test when your vehicle is within 30 days of its expiry date.\n\n${selectedVehicle.registrationNumber} has ${daysLeft} days remaining (eligible in ${daysLeft - 30} days).`
-      );
-      return;
+      const expDate = new Date(selectedVehicle.motExpiryDate);
+      const minDate = new Date(expDate);
+      minDate.setDate(minDate.getDate() - 30);
+      minDate.setHours(0, 0, 0, 0);
+      const selD = new Date(selectedDate);
+      selD.setHours(0, 0, 0, 0);
+      if (selD < minDate) {
+        Alert.alert(
+          'Pre-Booking Window',
+          `Under DVSA rules, pre-booking slots must be within 30 days of your expiry date (${formatDisplayDate(selectedVehicle.motExpiryDate)}).\nPlease select an appointment date on or after ${formatDisplayDate(minDate.toISOString())}.`
+        );
+        return;
+      }
     }
 
     if (!selectedDate || !selectedTime) {
@@ -796,11 +836,11 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     Choose which registered vehicle is attending the MOT test
                   </Text>
 
-                  {/* DVSA 30-Day Limit Notice */}
+                  {/* DVSA Pre-Booking & Renewal Window Notice */}
                   <View style={[styles.dvsaNoticeBox, { backgroundColor: theme.colors.primary + '10', borderColor: theme.colors.primary + '30' }]}>
                     <MaterialCommunityIcons name="information-outline" size={16} color={theme.colors.primary} style={{ marginRight: 6 }} />
                     <Text style={[styles.dvsaNoticeText, { color: theme.colors.text }]}>
-                      DVSA 30-Day Rule: Vehicles can only be booked for MOT testing within 30 days of their expiry date.
+                      DVSA Pre-Booking & Renewal: Pre-book slots within 30 days before expiry to preserve your anniversary date. Expired vehicles can book immediately.
                     </Text>
                   </View>
 
@@ -827,7 +867,6 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       {activeCustomerVehicles.map((veh) => {
                         const isSelected = selectedVehicle?.registrationNumber?.toUpperCase() === veh.registrationNumber?.toUpperCase();
                         const daysLeft = getDaysUntilExpiry(veh.motExpiryDate);
-                        const is30DayEligible = daysLeft <= 30;
                         const isPendingApproval = veh.status === 'Pending';
                         const isRejected = veh.status === 'Rejected';
                         const pendingBookingAlert = alerts.find(a => 
@@ -841,7 +880,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           a.status === 'Approved'
                         );
 
-                        const isEligible = is30DayEligible && !isPendingApproval && !isRejected && !pendingBookingAlert && !activeBookingAlert;
+                        const isEligible = !isPendingApproval && !isRejected && !pendingBookingAlert && !activeBookingAlert;
 
                         // Resolve badge appearance
                         let badgeText = '';
@@ -870,20 +909,20 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           badgeColor = theme.colors.primary;
                           statusIconName = 'calendar-check';
                         } else if (daysLeft <= 0) {
-                          badgeText = 'Expired (Eligible)';
+                          badgeText = 'Expired (Book ASAP)';
                           badgeBg = theme.colors.error + '18';
                           badgeColor = theme.colors.error;
                           statusIconName = 'alert-circle';
                         } else if (daysLeft <= 30) {
-                          badgeText = `${daysLeft}d left (Eligible)`;
+                          badgeText = `${daysLeft}d left (Book Now)`;
                           badgeBg = theme.colors.success + '18';
                           badgeColor = theme.colors.success;
                           statusIconName = 'check-circle-outline';
                         } else {
-                          badgeText = `Not Due Yet (${daysLeft}d left)`;
-                          badgeBg = theme.colors.placeholder + '20';
-                          badgeColor = theme.colors.placeholder;
-                          statusIconName = 'clock-alert-outline';
+                          badgeText = `Pre-Book (${daysLeft}d left)`;
+                          badgeBg = theme.colors.primary + '18';
+                          badgeColor = theme.colors.primary;
+                          statusIconName = 'calendar-clock';
                         }
 
                         let rightIcon = 'radiobox-blank';
@@ -900,9 +939,6 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         } else if (isRejected) {
                           rightIcon = 'close-circle-outline';
                           rightIconColor = theme.colors.error;
-                        } else if (!is30DayEligible) {
-                          rightIcon = 'clock-alert-outline';
-                          rightIconColor = theme.colors.placeholder;
                         } else if (isSelected) {
                           rightIcon = 'radiobox-marked';
                           rightIconColor = theme.colors.primary;
@@ -950,13 +986,6 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                                 );
                                 return;
                               }
-                              if (!is30DayEligible) {
-                                Alert.alert(
-                                  'Booking Restriction (30-Day Rule)',
-                                  `Under DVSA regulations, you can only book an MOT test when your vehicle is within 30 days of its expiry date.\n\n${veh.registrationNumber} has ${daysLeft} days remaining (eligible in ${daysLeft - 30} days).`
-                                );
-                                return;
-                              }
                               setSelectedVehicle(veh);
                             }}
                           >
@@ -992,7 +1021,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                                   style={{ marginRight: 4 }} 
                                 />
                                 <Text style={[styles.vehicleSelectExpiry, { color: theme.colors.placeholder }]}>
-                                  MOT Expiry: {formatDisplayDate(veh.motExpiryDate) || 'N/A'}
+                                  MOT Expiry: {formatDisplayDate(veh.motExpiryDate) || 'N/A'} {veh.motExpiryDate ? `(${daysLeft >= 0 ? `${daysLeft} days left` : `${Math.abs(daysLeft)} days ago`})` : ''}
                                 </Text>
                               </View>
                             </View>
@@ -1030,10 +1059,17 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                             </Text>
                           </View>
                         ) : getDaysUntilExpiry(selectedVehicle.motExpiryDate) > 30 ? (
-                          <View style={[styles.inlineNotice, { backgroundColor: theme.colors.placeholder + '15', borderColor: theme.colors.border }]}>
-                            <MaterialCommunityIcons name="clock-alert-outline" size={18} color={theme.colors.placeholder} style={{ marginRight: 8 }} />
+                          <View style={[styles.inlineNotice, { backgroundColor: theme.colors.primary + '15', borderColor: theme.colors.primary + '30' }]}>
+                            <MaterialCommunityIcons name="calendar-clock" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
                             <Text style={[styles.inlineNoticeText, { color: theme.colors.text }]}>
-                              <Text style={{ fontWeight: 'bold' }}>MOT Not Due Yet:</Text> {selectedVehicle.registrationNumber} has {getDaysUntilExpiry(selectedVehicle.motExpiryDate)} days left. Bookings open 30 days before expiry.
+                              <Text style={{ fontWeight: 'bold' }}>Pre-Booking Active:</Text> Showing slots within the 30-day renewal window ({selectedVehicle.registrationNumber} expires {formatDisplayDate(selectedVehicle.motExpiryDate)}).
+                            </Text>
+                          </View>
+                        ) : getDaysUntilExpiry(selectedVehicle.motExpiryDate) <= 0 ? (
+                          <View style={[styles.inlineNotice, { backgroundColor: theme.colors.error + '15', borderColor: theme.colors.error + '30' }]}>
+                            <MaterialCommunityIcons name="alert-circle" size={18} color={theme.colors.error} style={{ marginRight: 8 }} />
+                            <Text style={[styles.inlineNoticeText, { color: theme.colors.text }]}>
+                              <Text style={{ fontWeight: 'bold' }}>MOT Expired:</Text> {selectedVehicle.registrationNumber} certificate has expired. Book the earliest available slot as soon as possible.
                             </Text>
                           </View>
                         ) : null
@@ -1206,7 +1242,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     a.registrationNumber?.toUpperCase() === selectedVehicle.registrationNumber?.toUpperCase() && 
                     a.status === 'Approved'
                   );
-                  const isVehicleEligible = selectedVehicle && (daysLeft <= 30) && !isPendingApproval && !isRejected && !hasPendingBooking && !hasApprovedBooking;
+                  const isVehicleEligible = selectedVehicle && !isPendingApproval && !isRejected && !hasPendingBooking && !hasApprovedBooking;
 
                   let buttonLabel = `Confirm MOT Booking • £${selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '45.00'}`;
                   if (!selectedVehicle) buttonLabel = 'Select a Vehicle';
@@ -1214,7 +1250,6 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   else if (isRejected) buttonLabel = 'Registration Rejected';
                   else if (hasPendingBooking) buttonLabel = 'Booking Already Pending';
                   else if (hasApprovedBooking) buttonLabel = 'Vehicle Already Booked';
-                  else if (daysLeft > 30) buttonLabel = 'Not Due Yet (Ineligible)';
                   else if (!selectedTime) buttonLabel = 'Select a Test Slot';
 
                   const canSubmit = isVehicleEligible && selectedDate && selectedTime && !submittingBooking;

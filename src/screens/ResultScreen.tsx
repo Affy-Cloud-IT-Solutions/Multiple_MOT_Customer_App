@@ -95,7 +95,19 @@ export default function ResultScreen({ route, navigation }: any) {
 
           <Text style={[styles.expiryText, { color: theme.colors.text }]}>
             {isPass ? 'Expiry Date:' : 'Status Detail:'}{' '}
-            <Text style={{ fontWeight: 'bold' }}>{vehicle.expiryDate}</Text>
+            <Text style={{ fontWeight: 'bold' }}>
+              {vehicle.expiryDate}
+              {isPass && vehicle.expiryDate ? (() => {
+                const d = new Date(vehicle.expiryDate);
+                if (!isNaN(d.getTime())) {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const diff = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  return ` (${diff >= 0 ? `${diff} days left` : `${Math.abs(diff)} days ago`})`;
+                }
+                return '';
+              })() : ''}
+            </Text>
           </Text>
         </View>
       </View>

@@ -14,6 +14,8 @@ export interface Customer {
   createdDate: string;
   garageId?: string;
   garageIds?: string[];
+  garageConsent?: boolean;
+  garageConsentDate?: string;
 }
 
 export interface Vehicle {

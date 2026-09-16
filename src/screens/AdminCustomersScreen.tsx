@@ -925,9 +925,15 @@ export default function AdminCustomersScreen({ navigation }: any) {
                                   <Text style={[styles.vehicleMakeText, { color: theme.colors.text }]}>
                                     {v.make} {v.model}
                                   </Text>
-                                   <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
-                                     {v.year} • MOT: {formatShortDate(v.motExpiryDate)}
-                                   </Text>
+                                    <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                                      {v.year} • MOT: {formatShortDate(v.motExpiryDate)} {v.motExpiryDate ? (() => {
+                                        const d = new Date(v.motExpiryDate);
+                                        const today = new Date();
+                                        today.setHours(0, 0, 0, 0);
+                                        const diff = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                                        return `(${diff >= 0 ? `${diff} days left` : `${Math.abs(diff)} days ago`})`;
+                                      })() : ''}
+                                    </Text>
                                 </View>
                               </View>
 

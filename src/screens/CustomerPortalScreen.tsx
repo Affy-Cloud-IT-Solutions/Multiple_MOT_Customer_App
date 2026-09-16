@@ -680,6 +680,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 const expiryDateObj = v.motExpiryDate ? new Date(v.motExpiryDate) : null;
                 const isExpired = expiryDateObj && !isNaN(expiryDateObj.getTime()) ? expiryDateObj < new Date() : false;
                 const motIconColor = isExpired ? theme.colors.error : theme.colors.success;
+                const daysLeft = getDaysUntilExpiry(v.motExpiryDate);
 
                 return (
                   <View key={v.id} style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
@@ -784,7 +785,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         />
                         <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>MOT Expiry: </Text>
                         <Text style={{ color: isExpired ? theme.colors.error : theme.colors.text, fontWeight: 'bold', fontSize: 13 }}>
-                          {formatShortDate(v.motExpiryDate)}
+                          {formatShortDate(v.motExpiryDate)} {v.motExpiryDate ? `(${daysLeft >= 0 ? `${daysLeft} days left` : `${Math.abs(daysLeft)} days ago`})` : ''}
                         </Text>
                         {isExpired && (
                           <View style={[styles.miniStatusBadge, { backgroundColor: theme.colors.error + '15', marginLeft: 8 }]}>
@@ -975,84 +976,59 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           )}
                         </TouchableOpacity>
 
-                        {(() => {
-                          const daysLeft = getDaysUntilExpiry(v.motExpiryDate);
-                          const isEligible = daysLeft <= 30;
-
-                          if (isBooked) {
-                            return (
-                              <TouchableOpacity
-                                onPress={() => {
-                                  if (isEligible) {
-                                    navigation.navigate('Booking', { vehicle: v, isReschedule: true });
-                                  } else {
-                                    Alert.alert(
-                                      'Reschedule Restriction (DVSA Rule)',
-                                      `Under DVSA regulations, MOT appointments can only be booked or rescheduled within 30 days of the vehicle's MOT expiry date.\n\n${v.registrationNumber} has ${daysLeft} days remaining until expiry (${formatShortDate(v.motExpiryDate)}). Rescheduling will become available once the vehicle is within 30 days of its expiry date.`
-                                    );
-                                  }
-                                }}
-                                disabled={loadingAction !== null}
-                                style={[
-                                  styles.actionBtn, 
-                                  styles.bookBtn, 
-                                  { 
-                                    backgroundColor: isEligible ? theme.colors.warning : theme.colors.placeholder + '25',
-                                    elevation: 0,
-                                  }
-                                ]}
-                              >
-                                <View style={styles.actionBtnContent}>
-                                  <MaterialCommunityIcons 
-                                    name={isEligible ? "calendar-edit" : "clock-alert-outline"} 
-                                    size={16} 
-                                    color={isEligible ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder} 
-                                    style={{ marginRight: 4 }} 
-                                  />
-                                  <Text style={[styles.actionBtnText, { color: isEligible ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder }]}>
-                                    {isEligible ? 'Reschedule' : 'Not Due Yet'}
-                                  </Text>
-                                </View>
-                              </TouchableOpacity>
-                            );
-                          }
-
-                          return (
-                            <TouchableOpacity
-                              onPress={() => {
-                                if (isEligible) {
-                                  handleBookMOT(v);
-                                } else {
-                                  Alert.alert(
-                                    'Booking Restriction (DVSA Rule)',
-                                    `Under DVSA regulations, you can only book an MOT test when your vehicle is within 30 days of its expiry date.\n\n${v.registrationNumber} has ${daysLeft} days remaining until expiry (${formatShortDate(v.motExpiryDate)}). Booking will become available once the vehicle is within 30 days of its expiry date.`
-                                  );
-                                }
-                              }}
-                              disabled={loadingAction !== null}
-                              style={[
-                                styles.actionBtn, 
-                                styles.bookBtn, 
-                                { 
-                                  backgroundColor: isEligible ? theme.colors.secondary : theme.colors.placeholder + '25',
-                                  elevation: 0,
-                                }
-                              ]}
-                            >
-                              <View style={styles.actionBtnContent}>
-                                <MaterialCommunityIcons 
-                                  name={isEligible ? "calendar-plus" : "clock-alert-outline"} 
-                                  size={16} 
-                                  color={isEligible ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder} 
-                                  style={{ marginRight: 4 }} 
-                                />
-                                <Text style={[styles.actionBtnText, { color: isEligible ? (theme.dark ? theme.colors.background : '#FFFFFF') : theme.colors.placeholder }]}>
-                                  {isEligible ? 'Book MOT' : 'Not Due Yet'}
-                                </Text>
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })()}
+                        {isBooked ? (
+                          <TouchableOpacity
+                            onPress={() => {
+                              navigation.navigate('Booking', { vehicle: v, isReschedule: true });
+                            }}
+                            disabled={loadingAction !== null}
+                            style={[
+                              styles.actionBtn, 
+                              styles.bookBtn, 
+                              { 
+                                backgroundColor: theme.colors.warning,
+                                elevation: 1,
+                              }
+                            ]}
+                          >
+                            <View style={styles.actionBtnContent}>
+                              <MaterialCommunityIcons 
+                                name="calendar-edit" 
+                                size={16} 
+                                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+                                style={{ marginRight: 4 }} 
+                              />
+                              <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
+                                Reschedule
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            onPress={() => handleBookMOT(v)}
+                            disabled={loadingAction !== null}
+                            style={[
+                              styles.actionBtn, 
+                              styles.bookBtn, 
+                              { 
+                                backgroundColor: theme.colors.secondary,
+                                elevation: 1,
+                              }
+                            ]}
+                          >
+                            <View style={styles.actionBtnContent}>
+                              <MaterialCommunityIcons 
+                                name="calendar-plus" 
+                                size={16} 
+                                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+                                style={{ marginRight: 4 }} 
+                              />
+                              <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
+                                Book MOT
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     )}
                   </View>
@@ -1192,7 +1168,12 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <MaterialCommunityIcons name="calendar-range" size={13} color={theme.colors.placeholder} style={{ marginRight: 5 }} />
                             <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
-                              {v.motExpiryDate ? `MOT Expiry: ${new Date(v.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No MOT Expiry on record'}
+                              {v.motExpiryDate ? (() => {
+                                const daysLeft = getDaysUntilExpiry(v.motExpiryDate);
+                                const dateFormatted = new Date(v.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                                const daysStr = daysLeft >= 0 ? `${daysLeft} days left` : `${Math.abs(daysLeft)} days ago`;
+                                return `MOT Expiry: ${dateFormatted} (${daysStr})`;
+                              })() : 'No MOT Expiry on record'}
                             </Text>
                           </View>
                           

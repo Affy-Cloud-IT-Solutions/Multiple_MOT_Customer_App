@@ -234,7 +234,13 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
                         {v.year} • {v.make} {v.model}
                       </Text>
                       <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginTop: 4 }}>
-                        MOT Expiry: {new Date(v.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        MOT Expiry: {new Date(v.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} {v.motExpiryDate ? (() => {
+                          const d = new Date(v.motExpiryDate);
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          const diff = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                          return `(${diff >= 0 ? `${diff} days left` : `${Math.abs(diff)} days ago`})`;
+                        })() : ''}
                       </Text>
                       {v.lastServiceDate && (
                         <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginTop: 2 }}>

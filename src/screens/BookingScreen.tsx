@@ -163,8 +163,26 @@ export default function BookingScreen({ route, navigation }: any) {
     // Past days
     if (date < currentToday) return false;
     
-    // Sundays
+    // Sundays (Garages closed)
     if (date.getDay() === 0) return false;
+
+    // DVSA 30-day rule check
+    if (selectedVehicle?.motExpiryDate) {
+      const expDate = new Date(selectedVehicle.motExpiryDate);
+      expDate.setHours(0, 0, 0, 0);
+      const daysLeft = Math.ceil((expDate.getTime() - currentToday.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysLeft > 30) {
+        // Only allow dates within the 30-day window leading up to expiry
+        const windowStart = new Date(expDate);
+        windowStart.setDate(windowStart.getDate() - 30);
+        windowStart.setHours(0, 0, 0, 0);
+
+        if (date < windowStart || date > expDate) {
+          return false;
+        }
+      }
+    }
     
     return true;
   };
@@ -213,6 +231,32 @@ export default function BookingScreen({ route, navigation }: any) {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Sync date view to the 30-day window when vehicle changes
+  useEffect(() => {
+    if (selectedVehicle?.motExpiryDate) {
+      const expDate = new Date(selectedVehicle.motExpiryDate);
+      expDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysLeft = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysLeft > 30) {
+        const windowStart = new Date(expDate);
+        windowStart.setDate(windowStart.getDate() - 30);
+        if (windowStart.getDay() === 0) {
+          windowStart.setDate(windowStart.getDate() + 1);
+        }
+        setSelectedDate(formatLocalDate(windowStart));
+        setCurrentViewDate(new Date(windowStart.getFullYear(), windowStart.getMonth(), 1));
+      } else {
+        const todayISO = getTodayISOString();
+        setSelectedDate(todayISO);
+        setCurrentViewDate(new Date());
+      }
+    }
+  }, [selectedVehicle]);
+
 
   // Fetch live 45-minute slots for the selected garage and date
   const fetchGarageSlots = React.useCallback(async () => {
@@ -306,13 +350,29 @@ export default function BookingScreen({ route, navigation }: any) {
       return;
     }
 
-    const daysLeft = getDaysUntilExpiry(selectedVehicle.motExpiryDate);
-    if (daysLeft > 30) {
-      Alert.alert(
-        isReschedule ? 'Reschedule Restriction (DVSA Rule)' : 'Booking Restriction (DVSA Rule)',
-        `Under DVSA regulations, you can only ${isReschedule ? 'reschedule' : 'book'} an MOT test when your vehicle is within 30 days of its expiry date. This vehicle is not due yet (${daysLeft} days remaining).`
-      );
-      return;
+    // If vehicle is in pre-booking mode (>30 days away), ensure selected date is within the 30-day window before expiry
+    if (selectedVehicle?.motExpiryDate) {
+      const expDate = new Date(selectedVehicle.motExpiryDate);
+      expDate.setHours(0, 0, 0, 0);
+      const currentToday = new Date();
+      currentToday.setHours(0, 0, 0, 0);
+      const daysLeft = Math.ceil((expDate.getTime() - currentToday.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysLeft > 30) {
+        const windowStart = new Date(expDate);
+        windowStart.setDate(windowStart.getDate() - 30);
+        windowStart.setHours(0, 0, 0, 0);
+        const selD = new Date(selectedDate);
+        selD.setHours(0, 0, 0, 0);
+
+        if (selD < windowStart || selD > expDate) {
+          Alert.alert(
+            'DVSA 30-Day Renewal Window',
+            `Under DVSA regulations, you can pre-book MOT slots within the 30-day window before expiry (${selectedVehicle.motExpiryDate?.substring(0, 10)}).\nPlease choose an appointment date between ${windowStart.toISOString().substring(0, 10)} and ${selectedVehicle.motExpiryDate?.substring(0, 10)}.`
+          );
+          return;
+        }
+      }
     }
 
     if (!selectedGarage) {
@@ -417,25 +477,40 @@ export default function BookingScreen({ route, navigation }: any) {
                 <Text style={[styles.vehicleMakeModel, { color: theme.colors.text }]}>
                   {selectedVehicle?.make} {selectedVehicle?.model}
                 </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                  <MaterialCommunityIcons name="information-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
-                  <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder }]}>
-                    Rescheduling appointment for this vehicle
-                  </Text>
-                </View>
+                {selectedVehicle?.motExpiryDate ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <MaterialCommunityIcons name="calendar-clock" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                    <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder }]}>
+                      MOT Expiry: {new Date(selectedVehicle.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} ({(() => {
+                        const daysLeft = getDaysUntilExpiry(selectedVehicle.motExpiryDate);
+                        return daysLeft >= 0 ? `${daysLeft} days left` : `${Math.abs(daysLeft)} days ago`;
+                      })()})
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <MaterialCommunityIcons name="information-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                    <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder }]}>
+                      Rescheduling appointment for this vehicle
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
 
-            {/* Ineligible / Not Due Yet Notice */}
+            {/* 30-Day Renewal Window Active Notice */}
             {selectedVehicle && getDaysUntilExpiry(selectedVehicle.motExpiryDate) > 30 && (
-              <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.error + '12', borderColor: theme.colors.error, marginTop: 12 }]}>
-                <MaterialCommunityIcons name="clock-alert-outline" size={20} color={theme.colors.error} style={{ marginRight: 8 }} />
+              <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.secondary + '12', borderColor: theme.colors.secondary, marginTop: 12 }]}>
+                <MaterialCommunityIcons name="calendar-clock" size={20} color={theme.colors.secondary} style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.error, fontWeight: 'bold', fontSize: 13 }}>
-                    MOT Not Due Yet
+                  <Text style={{ color: theme.colors.secondary, fontWeight: 'bold', fontSize: 13 }}>
+                    Official DVSA 30-Day Renewal Window Active
                   </Text>
                   <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text, marginTop: 2 }]}>
-                    Under DVSA regulations, MOT tests can only be booked or rescheduled within 30 days of expiry. {selectedVehicle?.registrationNumber} has {getDaysUntilExpiry(selectedVehicle.motExpiryDate)} days remaining.
+                    {selectedVehicle?.registrationNumber} MOT Expiry is {new Date(selectedVehicle.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} ({(() => {
+                      const daysLeft = getDaysUntilExpiry(selectedVehicle.motExpiryDate);
+                      return daysLeft >= 0 ? `${daysLeft} days left` : `${Math.abs(daysLeft)} days ago`;
+                    })()}). You can pre-book your test slot within the last 30 days of MOT expiry to preserve your renewal anniversary.
                   </Text>
                 </View>
               </View>
@@ -483,9 +558,12 @@ export default function BookingScreen({ route, navigation }: any) {
                     {selectedVehicle?.make} {selectedVehicle?.model}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                    <MaterialCommunityIcons name="check-circle" size={13} color={theme.colors.success} style={{ marginRight: 4 }} />
+                    <MaterialCommunityIcons name="calendar-clock" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
                     <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder, fontSize: 11 }]}>
-                      Selected vehicle for MOT booking
+                      MOT Expiry: {selectedVehicle?.motExpiryDate ? `${new Date(selectedVehicle.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} (${(() => {
+                        const daysLeft = getDaysUntilExpiry(selectedVehicle.motExpiryDate);
+                        return daysLeft >= 0 ? `${daysLeft} days left` : `${Math.abs(daysLeft)} days ago`;
+                      })()})` : 'N/A'}
                     </Text>
                   </View>
                 </View>
@@ -501,6 +579,7 @@ export default function BookingScreen({ route, navigation }: any) {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
                 {activeCustomerVehicles.map(v => {
                   const isSelected = selectedVehicle && (v.registrationNumber === selectedVehicle.registrationNumber);
+                  const daysLeft = getDaysUntilExpiry(v.motExpiryDate);
                   return (
                     <TouchableOpacity
                       key={v.id || v.registrationNumber}
@@ -512,24 +591,31 @@ export default function BookingScreen({ route, navigation }: any) {
                           borderColor: isSelected 
                             ? (theme.dark ? theme.colors.secondary : theme.colors.primary) 
                             : theme.colors.border,
-                          borderWidth: isSelected ? 2 : 1.5
+                          borderWidth: isSelected ? 2 : 1.5,
+                          paddingVertical: 10,
+                          paddingHorizontal: 12
                         }
                       ]}
                     >
                       <View style={[styles.plate, { marginRight: 8, height: 30, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }]}>
                         <Text style={[styles.plateText, { fontSize: 11 }]}>{v.registrationNumber}</Text>
                       </View>
-                      <View style={{ flex: 1 }}>
+                      <View style={{ flex: 1, marginRight: 4 }}>
                         <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 13, fontWeight: 'bold' }]} numberOfLines={1}>
                           {v.make} {v.model}
                         </Text>
+                        {v.motExpiryDate && (
+                          <Text style={{ fontSize: 10, color: theme.colors.placeholder, marginTop: 1 }} numberOfLines={1}>
+                            MOT: {new Date(v.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ({daysLeft >= 0 ? `${daysLeft}d left` : `${Math.abs(daysLeft)}d ago`})
+                          </Text>
+                        )}
                       </View>
                       {isSelected && (
                         <MaterialCommunityIcons 
                           name="check-circle" 
                           size={18} 
                           color={theme.dark ? theme.colors.secondary : theme.colors.primary} 
-                          style={{ marginLeft: 6 }} 
+                          style={{ marginLeft: 4 }} 
                         />
                       )}
                     </TouchableOpacity>
@@ -803,44 +889,33 @@ export default function BookingScreen({ route, navigation }: any) {
 
         {/* Action Buttons */}
         <View style={styles.actionContainer}>
-          {(() => {
-            const daysLeft = selectedVehicle ? getDaysUntilExpiry(selectedVehicle.motExpiryDate) : -1;
-            const isVehicleEligible = selectedVehicle ? (daysLeft <= 30) : true;
-
-            return (
-              <TouchableOpacity
-                onPress={handleConfirmBooking}
-                disabled={loading || !isVehicleEligible}
-                style={[
-                  styles.submitBtn, 
-                  { 
-                    backgroundColor: !isVehicleEligible 
-                      ? theme.colors.placeholder + '40' 
-                      : (isReschedule ? theme.colors.warning : theme.colors.secondary),
-                    elevation: !isVehicleEligible ? 0 : 1,
-                  }
-                ]}
-              >
-                {loading ? (
-                  <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
-                ) : (
-                  <View style={styles.btnContent}>
-                    <MaterialCommunityIcons 
-                      name={!isVehicleEligible ? "clock-alert-outline" : "calendar-check"} 
-                      size={20} 
-                      color={theme.dark ? theme.colors.background : '#FFFFFF'} 
-                      style={{ marginRight: 8 }} 
-                    />
-                    <Text style={[styles.submitBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
-                      {!isVehicleEligible 
-                        ? 'Not Due Yet (Ineligible)' 
-                        : (isReschedule ? 'Confirm Rescheduling' : 'Confirm Appointment Booking')}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })()}
+          <TouchableOpacity
+            onPress={handleConfirmBooking}
+            disabled={loading}
+            style={[
+              styles.submitBtn, 
+              { 
+                backgroundColor: isReschedule ? theme.colors.warning : theme.colors.secondary,
+                elevation: 1,
+              }
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
+            ) : (
+              <View style={styles.btnContent}>
+                <MaterialCommunityIcons 
+                  name="calendar-check" 
+                  size={20} 
+                  color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+                  style={{ marginRight: 8 }} 
+                />
+                <Text style={[styles.submitBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
+                  {isReschedule ? 'Confirm Rescheduling' : 'Confirm Appointment Booking'}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>

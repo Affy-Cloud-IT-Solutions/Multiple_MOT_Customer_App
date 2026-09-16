@@ -344,6 +344,13 @@ export default function ProfileScreen({ navigation }: any) {
             iconColor={theme.colors.success}
             theme={theme}
           />
+          <InfoRow
+            icon="shield-check"
+            label="Garage Communications"
+            value={customer.garageConsent ? 'Authorized & Consented' : 'Standard'}
+            iconColor={customer.garageConsent ? theme.colors.success : theme.colors.placeholder}
+            theme={theme}
+          />
           {customer.address && (
             <InfoRow
               icon="map-marker"

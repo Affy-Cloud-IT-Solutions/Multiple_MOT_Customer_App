@@ -212,7 +212,16 @@ export default function MotHistoryScreen({ route, navigation }: any) {
                           <View style={styles.statItem}>
                             <Text style={[styles.statLabel, { color: theme.colors.placeholder }]}>Expiry Date</Text>
                             <Text style={[styles.statValue, { color: theme.colors.text, fontWeight: 'bold' }]}>
-                              {formatDate(test.expiryDate)}
+                              {formatDate(test.expiryDate)} {test.expiryDate ? (() => {
+                                const d = new Date(test.expiryDate);
+                                if (!isNaN(d.getTime())) {
+                                  const today = new Date();
+                                  today.setHours(0, 0, 0, 0);
+                                  const diff = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                                  return `(${diff >= 0 ? `${diff} days left` : `${Math.abs(diff)} days ago`})`;
+                                }
+                                return '';
+                              })() : ''}
                             </Text>
                           </View>
                         )}

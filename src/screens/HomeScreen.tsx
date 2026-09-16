@@ -513,6 +513,23 @@ export default function HomeScreen({ navigation }: any) {
                               Checked on {item.testDate}
                             </Text>
                           </View>
+                          {item.expiryDate && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                              <MaterialCommunityIcons name="calendar-check" size={12} color={theme.colors.secondary} style={{ marginRight: 4 }} />
+                              <Text style={[styles.vehicleCheckDate, { color: theme.colors.text, fontSize: 11 }]}>
+                                MOT Expiry: {item.expiryDate} {(() => {
+                                  const d = new Date(item.expiryDate);
+                                  if (!isNaN(d.getTime())) {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    const diff = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                                    return `(${diff >= 0 ? `${diff} days left` : `${Math.abs(diff)} days ago`})`;
+                                  }
+                                  return '';
+                                })()}
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       </View>
                       <View
