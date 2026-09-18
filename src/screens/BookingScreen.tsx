@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function BookingScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, addAlert, addAudit, user, token } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addAudit, user, token } = useAppValues();
 
   // Find active customer
   const customerId = user?.customerId || 'c1';
@@ -46,25 +46,68 @@ export default function BookingScreen({ route, navigation }: any) {
     route?.params?.vehicle || activeCustomerVehicles[0] || null
   );
 
+  // Active booking alert if rescheduling
+  const activeBookingAlert = React.useMemo(() => {
+    if (!isReschedule || !selectedVehicle?.registrationNumber) return null;
+    return alerts.find(a => 
+      a.type === 'BOOKED' && 
+      a.registrationNumber?.toUpperCase() === selectedVehicle?.registrationNumber?.toUpperCase() &&
+      (a.status === 'Pending' || a.status === 'Approved')
+    ) || null;
+  }, [isReschedule, selectedVehicle?.registrationNumber, alerts]);
+
+  const alertAny = activeBookingAlert as any;
+  const targetGarageId = route?.params?.garageId || 
+    (typeof alertAny?.garageId === 'object' ? (alertAny?.garageId?._id || alertAny?.garageId?.id) : alertAny?.garageId) || 
+    alertAny?.garage?._id || 
+    alertAny?.garage?.id || 
+    null;
+
+  const targetGarageName = route?.params?.garageName || 
+    alertAny?.garageName || 
+    alertAny?.stationName || 
+    (typeof alertAny?.garageId === 'object' ? alertAny?.garageId?.name : null) || 
+    alertAny?.garage?.name || 
+    '';
+
+  // Existing booked details if rescheduling
+  const bookedDateRaw = route?.params?.bookedDate || alertAny?.date;
+  const bookedDateFormatted = React.useMemo(() => {
+    if (!bookedDateRaw) return null;
+    const d = new Date(bookedDateRaw);
+    if (isNaN(d.getTime())) return null;
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, [bookedDateRaw]);
+
+  const bookedSlotTime = route?.params?.slotTime || 
+    alertAny?.slotTime || 
+    (alertAny?.makeModel && alertAny.makeModel.includes(' - Slot: ') ? alertAny.makeModel.split(' - Slot: ')[1] : null) || 
+    null;
+
+  const bookedSlotNumber = route?.params?.slotNumber || alertAny?.slotNumber || null;
+
   // Garages list & selected garage state
   const [garages, setGarages] = useState<any[]>([]);
   const [loadingGarages, setLoadingGarages] = useState(false);
   const [selectedGarage, setSelectedGarage] = useState<any>(
-    isReschedule && route?.params?.garageId
-      ? { id: route.params.garageId, name: route.params.garageName }
+    isReschedule
+      ? (targetGarageId || targetGarageName ? { id: targetGarageId, _id: targetGarageId, name: targetGarageName || 'Garage' } : null)
       : null
   );
 
   // Selected service state
   const [selectedService, setSelectedService] = useState<any>({
-    name: route?.params?.serviceName || 'MOT Test',
-    price: route?.params?.price || 45.00,
-    duration: route?.params?.duration || 45
+    name: route?.params?.serviceName || alertAny?.serviceName || 'MOT Test',
+    price: route?.params?.price !== undefined ? route.params.price : (alertAny?.price !== undefined ? alertAny.price : 45.00),
+    duration: route?.params?.duration || alertAny?.duration || 45
   });
 
   // Fetch garages list
   useEffect(() => {
-    if (isReschedule) return;
+    let isMounted = true;
     const fetchGarages = async () => {
       setLoadingGarages(true);
       try {
@@ -73,44 +116,74 @@ export default function BookingScreen({ route, navigation }: any) {
         });
         if (response.ok) {
           const data = await response.json();
+          if (!isMounted) return;
           setGarages(data);
           
-          // Pre-select garage if passed in params
-          const initialGarageId = route?.params?.garageId;
-          if (initialGarageId) {
-            const found = data.find((g: any) => String(g.id) === String(initialGarageId) || String(g._id) === String(initialGarageId));
+          if (isReschedule) {
+            // Find the booked garage
+            let found = null;
+            if (targetGarageId) {
+              found = data.find((g: any) => String(g.id || g._id) === String(targetGarageId));
+            }
+            if (!found && targetGarageName) {
+              found = data.find((g: any) => g.name?.toLowerCase().trim() === targetGarageName?.toLowerCase().trim());
+            }
             if (found) {
               setSelectedGarage(found);
+            } else if (targetGarageId) {
+              setSelectedGarage({ id: targetGarageId, _id: targetGarageId, name: targetGarageName || 'Booked Garage' });
+            } else if (data.length > 0) {
+              setSelectedGarage(data[0]);
+            }
+          } else {
+            // Normal booking mode
+            const initialGarageId = route?.params?.garageId;
+            if (initialGarageId) {
+              const found = data.find((g: any) => String(g.id || g._id) === String(initialGarageId));
+              if (found) setSelectedGarage(found);
+            } else if (data.length > 0 && !selectedGarage) {
+              setSelectedGarage(data[0]);
             }
           }
         }
       } catch (err) {
         console.error('Error fetching garages in BookingScreen:', err);
       } finally {
-        setLoadingGarages(false);
+        if (isMounted) setLoadingGarages(false);
       }
     };
     fetchGarages();
-  }, [route?.params?.garageId, isReschedule, token]);
+    return () => { isMounted = false; };
+  }, [targetGarageId, targetGarageName, isReschedule, token]);
 
-  // Fetch selected garage services to load MOT dynamically
+  // Fetch selected garage services to load MOT dynamically and full garage info
   useEffect(() => {
-    if (!selectedGarage || isReschedule) return;
+    const gId = selectedGarage?.id || selectedGarage?._id || targetGarageId;
+    if (!gId) return;
     
+    let isMounted = true;
     const fetchGarageDetails = async () => {
       try {
-        const response = await fetch(`${BASE_URL}/garages/${selectedGarage.id || selectedGarage._id}`, {
+        const response = await fetch(`${BASE_URL}/garages/${gId}`, {
           headers: token ? { 'Authorization': `Bearer ${token}` } : {}
         });
         if (response.ok) {
           const data = await response.json();
+          if (!isMounted || !data) return;
+          
+          setSelectedGarage((prev: any) => ({
+            ...(prev || {}),
+            ...data,
+            id: data.id || data._id || gId,
+            _id: data._id || data.id || gId,
+            name: data.name || data.garageName || prev?.name || targetGarageName || 'Garage',
+            address: data.address || prev?.address || '',
+          }));
+
           if (data.services && data.services.length > 0) {
-            // Find MOT service or default to first
-            const motSvc = data.services.find((s: any) => s.name.toUpperCase().includes('MOT'));
-            if (motSvc) {
+            const motSvc = data.services.find((s: any) => s.name?.toUpperCase().includes('MOT'));
+            if (motSvc && !route?.params?.serviceName && !activeBookingAlert?.serviceName) {
               setSelectedService(motSvc);
-            } else {
-              setSelectedService(data.services[0]);
             }
           }
         }
@@ -119,7 +192,8 @@ export default function BookingScreen({ route, navigation }: any) {
       }
     };
     fetchGarageDetails();
-  }, [selectedGarage, isReschedule, token]);
+    return () => { isMounted = false; };
+  }, [selectedGarage?.id, selectedGarage?._id, targetGarageId, token]);
 
   const customer = customers.find((c) => 
     selectedVehicle && selectedVehicle.customerId && (
@@ -134,8 +208,16 @@ export default function BookingScreen({ route, navigation }: any) {
     mobile: '',
   };
 
+  const initialViewDate = React.useMemo(() => {
+    if (isReschedule && bookedDateRaw) {
+      const bDate = new Date(bookedDateRaw);
+      if (!isNaN(bDate.getTime())) return bDate;
+    }
+    return new Date();
+  }, [isReschedule, bookedDateRaw]);
+
   // Date and Time options for slot selection
-  const [currentViewDate, setCurrentViewDate] = useState(new Date());
+  const [currentViewDate, setCurrentViewDate] = useState(initialViewDate);
 
   const getDaysInMonth = (year: number, month: number) => {
     const date = new Date(year, month, 1);
@@ -224,16 +306,31 @@ export default function BookingScreen({ route, navigation }: any) {
     return formatLocalDate(d);
   };
 
-  const [selectedDate, setSelectedDate] = useState(getTodayISOString());
-  const [selectedTime, setSelectedTime] = useState('');
+  const initialSelectedDate = isReschedule && bookedDateFormatted ? bookedDateFormatted : getTodayISOString();
+  const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
+  const [selectedTime, setSelectedTime] = useState(isReschedule && bookedSlotTime ? bookedSlotTime : '');
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
   const [garageSlots, setGarageSlots] = useState<any[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Sync date view to the 30-day window when vehicle changes
+  // Sync date view when rescheduling or when vehicle changes
   useEffect(() => {
+    if (isReschedule) {
+      if (bookedDateFormatted && bookedDateRaw) {
+        const bDate = new Date(bookedDateRaw);
+        if (!isNaN(bDate.getTime())) {
+          setSelectedDate(bookedDateFormatted);
+          setCurrentViewDate(new Date(bDate.getFullYear(), bDate.getMonth(), 1));
+          if (bookedSlotTime) {
+            setSelectedTime(bookedSlotTime);
+          }
+        }
+      }
+      return;
+    }
+
     if (selectedVehicle?.motExpiryDate) {
       const expDate = new Date(selectedVehicle.motExpiryDate);
       expDate.setHours(0, 0, 0, 0);
@@ -255,7 +352,7 @@ export default function BookingScreen({ route, navigation }: any) {
         setCurrentViewDate(new Date());
       }
     }
-  }, [selectedVehicle]);
+  }, [selectedVehicle, isReschedule, bookedDateFormatted, bookedDateRaw, bookedSlotTime]);
 
 
   // Fetch live 45-minute slots for the selected garage and date
@@ -434,8 +531,10 @@ export default function BookingScreen({ route, navigation }: any) {
       try {
         if (route?.params?.sourceScreen) {
           navigation.navigate(route.params.sourceScreen, route.params.sourceScreenParams || {});
+        } else if (navigation.canGoBack()) {
+          navigation.goBack();
         } else {
-          navigation.navigate('CustomerPortal', { customerId: customer.id });
+          navigation.navigate('Main', { screen: 'My Portal' });
         }
       } catch (navErr) {
         console.warn('Navigation redirect failed, falling back to goBack:', navErr);
@@ -519,25 +618,73 @@ export default function BookingScreen({ route, navigation }: any) {
             {/* Locked Garage & Service Info for Rescheduling */}
             <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 12 }]}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 4 }}>
-                  Selected Garage & Service
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                    Booked Garage (Rescheduling)
+                  </Text>
+                  <View style={{ backgroundColor: theme.colors.warning + '25', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                    <Text style={{ color: theme.colors.warning, fontSize: 10, fontWeight: 'bold' }}>LOCKED</Text>
+                  </View>
+                </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                   <View style={[styles.selectedGarageIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
-                    <MaterialCommunityIcons name="store" size={18} color={theme.colors.secondary} />
+                    <MaterialCommunityIcons name="store" size={20} color={theme.colors.secondary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 14, marginBottom: 0 }]}>
-                      {selectedGarage?.name}
+                    <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 15, fontWeight: 'bold', marginBottom: 2 }]}>
+                      {selectedGarage?.name || targetGarageName || 'Garage'}
                     </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    {selectedGarage?.address ? (
+                      <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginBottom: 4 }} numberOfLines={1}>
+                        {selectedGarage.address}{selectedGarage.city ? `, ${selectedGarage.city}` : ''}
+                      </Text>
+                    ) : null}
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <MaterialCommunityIcons name="wrench-clock" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
                       <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder }]}>
-                        {selectedService.name} (£{selectedService.price.toFixed(2)}) • {selectedService.duration}m
+                        {selectedService.name} (£{Number(selectedService.price || 45).toFixed(2)}) • {selectedService.duration || 45}m
                       </Text>
                     </View>
                   </View>
                 </View>
+
+                {/* Currently Booked Date & Slot Box */}
+                {(bookedDateRaw || bookedSlotTime) && (
+                  <View style={[styles.currentBookingBox, { backgroundColor: theme.colors.warning + '12', borderColor: theme.colors.warning + '35' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <MaterialCommunityIcons name="calendar-clock" size={16} color={theme.colors.warning} style={{ marginRight: 6 }} />
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.warning }}>
+                        Current Booked Appointment
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+                      {bookedDateRaw && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
+                          <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginRight: 4 }}>Date:</Text>
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text }}>
+                            {new Date(bookedDateRaw).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </Text>
+                        </View>
+                      )}
+                      {bookedSlotTime && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
+                          <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginRight: 4 }}>Time Slot:</Text>
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text }}>
+                            {bookedSlotTime}
+                          </Text>
+                        </View>
+                      )}
+                      {bookedSlotNumber ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginRight: 4 }}>Slot No:</Text>
+                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text }}>
+                            #{bookedSlotNumber}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                )}
               </View>
             </View>
           </>
@@ -750,6 +897,7 @@ export default function BookingScreen({ route, navigation }: any) {
               const isoString = formatLocalDate(day);
               const isSelected = selectedDate === isoString;
               const selectable = isDateSelectable(day);
+              const isBookedOriginalDate = isReschedule && bookedDateFormatted === isoString;
               
               const todayObj = new Date();
               const isToday = day.getDate() === todayObj.getDate() && 
@@ -764,7 +912,8 @@ export default function BookingScreen({ route, navigation }: any) {
                   style={[
                     styles.dayCell,
                     isSelected && { backgroundColor: theme.colors.secondary, borderRadius: 18 },
-                    isToday && !isSelected && { borderWidth: 1, borderColor: theme.colors.secondary, borderRadius: 18 }
+                    !isSelected && isBookedOriginalDate && { borderWidth: 1.5, borderColor: theme.colors.warning, backgroundColor: theme.colors.warning + '18', borderRadius: 18 },
+                    isToday && !isSelected && !isBookedOriginalDate && { borderWidth: 1, borderColor: theme.colors.secondary, borderRadius: 18 }
                   ]}
                 >
                   <Text
@@ -772,11 +921,15 @@ export default function BookingScreen({ route, navigation }: any) {
                       styles.dayCellText,
                       { color: theme.colors.text },
                       isSelected && { color: '#FFFFFF', fontWeight: 'bold' },
+                      !isSelected && isBookedOriginalDate && { color: theme.colors.warning, fontWeight: 'bold' },
                       !selectable && { color: theme.colors.placeholder + '40' }
                     ]}
                   >
                     {day.getDate()}
                   </Text>
+                  {isBookedOriginalDate && !isSelected && (
+                    <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: theme.colors.warning, marginTop: 1 }} />
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -1152,5 +1305,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     marginRight: 10,
     width: 220,
+  },
+  currentBookingBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
   },
 });

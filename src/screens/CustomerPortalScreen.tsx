@@ -985,7 +985,32 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         {isBooked ? (
                           <TouchableOpacity
                             onPress={() => {
-                              navigation.navigate('Booking', { vehicle: v, isReschedule: true });
+                              const alertAny = bookingAlert as any;
+                              const garageId = typeof alertAny?.garageId === 'object' 
+                                ? (alertAny?.garageId?._id || alertAny?.garageId?.id)
+                                : (alertAny?.garageId || alertAny?.garage?._id || alertAny?.garage?.id);
+
+                              const garageName = alertAny?.garageName || 
+                                alertAny?.stationName || 
+                                (typeof alertAny?.garageId === 'object' ? alertAny?.garageId?.name : null) || 
+                                alertAny?.garage?.name;
+
+                              const slotTimeStr = alertAny?.slotTime || 
+                                (alertAny?.makeModel && alertAny.makeModel.includes(' - Slot: ') ? alertAny.makeModel.split(' - Slot: ')[1] : null);
+
+                              navigation.navigate('Booking', { 
+                                vehicle: v, 
+                                isReschedule: true,
+                                garageId,
+                                garageName,
+                                bookedDate: alertAny?.date,
+                                slotTime: slotTimeStr,
+                                slotNumber: alertAny?.slotNumber,
+                                serviceName: alertAny?.serviceName,
+                                price: alertAny?.price,
+                                duration: alertAny?.duration,
+                                previousAlertId: alertAny?.id || alertAny?._id,
+                              });
                             }}
                             disabled={loadingAction !== null}
                             style={[
