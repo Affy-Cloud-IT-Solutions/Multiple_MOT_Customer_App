@@ -260,7 +260,13 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       return { items, hasMore };
     }
   };
-  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'motHistory' | 'profile'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'motHistory' | 'profile'>(route?.params?.initialTab || 'home');
+
+  useEffect(() => {
+    if (route?.params?.initialTab) {
+      setActiveTab(route.params.initialTab);
+    }
+  }, [route?.params?.initialTab]);
 
   const getBookingSlot = (makeModel: string) => {
     const parts = makeModel.split(' - Slot: ');
