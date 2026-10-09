@@ -315,9 +315,14 @@ export default function GarageListScreen({ route, navigation }: any) {
             </View>
 
             <View style={{ gap: 6, alignItems: 'flex-end' }}>
-              <View style={[styles.bookPill, { backgroundColor: theme.colors.primary }]}>
-                <Text style={styles.bookPillText}>Book MOT</Text>
-              </View>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('GarageDetail', { garageId: item.id || item._id, vehicle: route.params?.vehicle })}
+                style={[styles.bookPill, { backgroundColor: theme.colors.primary }]}
+              >
+                <Text style={styles.bookPillText}>Select Service</Text>
+                <MaterialCommunityIcons name="chevron-right" size={13} color="#FFFFFF" />
+              </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => openGarageDirections(item)}
                 style={[styles.directionsBtn, { borderColor: theme.colors.border }]}
@@ -827,9 +832,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   bookPill: {
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 6,
+    gap: 2,
   },
   bookPillText: {
     color: '#FFFFFF',

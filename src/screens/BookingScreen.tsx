@@ -824,26 +824,81 @@ export default function BookingScreen({ route, navigation }: any) {
               </ScrollView>
             )}
 
-            {/* Selected Service details */}
+            {/* 3. Service Package Selector */}
             {selectedGarage && (
-              <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginBottom: 12 }]}>
+              <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginBottom: 14 }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 4 }}>
-                    Automated Service Package
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                    <View style={[styles.selectedGarageIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
-                      <MaterialCommunityIcons name="wrench-clock" size={16} color={theme.colors.secondary} />
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                      Selected Service Package
+                    </Text>
+                    {selectedService?.category && (
+                      <View style={{ backgroundColor: theme.colors.primary + '15', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: theme.colors.primary }}>
+                          {selectedService.category}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                    <View style={[styles.selectedGarageIconCircle, { backgroundColor: theme.colors.secondary + '15', marginTop: 2 }]}>
+                      <MaterialCommunityIcons name="wrench-clock" size={18} color={theme.colors.secondary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 13 }]}>
+                      <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 14, fontWeight: 'bold' }]}>
                         {selectedService.name}
                       </Text>
                       <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 2 }}>
-                        Price: £{selectedService.price.toFixed(2)} • Duration: {selectedService.duration} mins
+                        Standard Rate: <Text style={{ fontWeight: 'bold', color: theme.colors.primary }}>£{Number(selectedService.price || 0).toFixed(2)}</Text> • Duration: {selectedService.duration || 45} mins
                       </Text>
+                      {selectedService.description ? (
+                        <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 3, fontStyle: 'italic' }} numberOfLines={2}>
+                          {selectedService.description}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
+
+                  {/* Horizontal list of other garage services */}
+                  {selectedGarage.services && selectedGarage.services.filter((s: any) => s.isActive !== false).length > 1 && (
+                    <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
+                      <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6 }}>
+                        Other Services at {selectedGarage.name}:
+                      </Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                        {selectedGarage.services
+                          .filter((s: any) => s.isActive !== false)
+                          .map((svc: any) => {
+                            const isChosen = selectedService?.name === svc.name;
+                            return (
+                              <TouchableOpacity
+                                key={svc._id || svc.id || svc.name}
+                                onPress={() => setSelectedService(svc)}
+                                style={[
+                                  {
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 6,
+                                    borderRadius: 6,
+                                    borderWidth: 1,
+                                    backgroundColor: isChosen ? theme.colors.primary : theme.colors.background,
+                                    borderColor: isChosen ? theme.colors.primary : theme.colors.border,
+                                  }
+                                ]}
+                              >
+                                <Text style={{
+                                  fontSize: 11,
+                                  color: isChosen ? '#FFFFFF' : theme.colors.text,
+                                  fontWeight: isChosen ? '700' : '500'
+                                }}>
+                                  {svc.name} • £{Number(svc.price || 0).toFixed(0)}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                      </ScrollView>
+                    </View>
+                  )}
                 </View>
               </View>
             )}

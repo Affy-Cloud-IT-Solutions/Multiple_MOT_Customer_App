@@ -461,6 +461,85 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     return dateStr;
   };
 
+  // Helper for category badge icons and colors
+  const getCategoryIcon = (category: string = '', name: string = '') => {
+    const c = (category + ' ' + name).toLowerCase();
+    if (c.includes('mot')) return 'shield-check';
+    if (c.includes('tyre') || c.includes('wheel') || c.includes('tracking')) return 'tire';
+    if (c.includes('brake') || c.includes('pad') || c.includes('disc')) return 'car-brake-alert';
+    if (c.includes('diag') || c.includes('scan') || c.includes('code') || c.includes('engine management')) return 'laptop-account';
+    if (c.includes('air con') || c.includes('ac ') || c.includes('regas') || c.includes('climate')) return 'snowflake';
+    if (c.includes('oil') || c.includes('filter') || c.includes('fluid')) return 'oil';
+    if (c.includes('exhaust') || c.includes('dpf') || c.includes('emission')) return 'car-windshield';
+    if (c.includes('repair') || c.includes('clutch') || c.includes('engine') || c.includes('suspension')) return 'wrench';
+    return 'car-wrench';
+  };
+
+  const getCategoryTheme = (category: string = '', name: string = '') => {
+    const c = (category + ' ' + name).toLowerCase();
+    if (c.includes('mot')) return { bg: '#10B98115', text: '#10B981', border: '#10B98140' };
+    if (c.includes('brake')) return { bg: '#EF444415', text: '#EF4444', border: '#EF444440' };
+    if (c.includes('diag')) return { bg: '#8B5CF615', text: '#8B5CF6', border: '#8B5CF640' };
+    if (c.includes('air con') || c.includes('ac')) return { bg: '#06B6D415', text: '#06B6D4', border: '#06B6D440' };
+    if (c.includes('tyre') || c.includes('wheel')) return { bg: '#F59E0B15', text: '#F59E0B', border: '#F59E0B40' };
+    if (c.includes('repair')) return { bg: '#EC489915', text: '#EC4899', border: '#EC489940' };
+    return { bg: theme.colors.secondary + '15', text: theme.colors.secondary, border: theme.colors.secondary + '40' };
+  };
+
+  // State for services category filtering & search
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState<string>('All');
+  const [serviceSearchText, setServiceSearchText] = useState<string>('');
+
+  // Extract all active garage services
+  const allActiveServices = useMemo(() => {
+    if (!garage?.services || !Array.isArray(garage.services) || garage.services.length === 0) {
+      return [
+        {
+          _id: 'default-mot',
+          id: 'default-mot',
+          name: 'MOT Test (Class 4)',
+          category: 'MOT',
+          duration: 45,
+          price: 45.00,
+          description: 'Official DVSA MOT annual safety inspection for passenger vehicles (Class 4).',
+          availability: garage?.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+          isActive: true
+        }
+      ];
+    }
+    const active = garage.services.filter((s: any) => s.isActive !== false);
+    return active.length > 0 ? active : garage.services;
+  }, [garage?.services, garage?.workingDays]);
+
+  // Unique categories list
+  const availableCategories = useMemo(() => {
+    const cats = new Set<string>();
+    allActiveServices.forEach((s: any) => {
+      if (s.category && s.category.trim()) {
+        cats.add(s.category.trim());
+      } else {
+        cats.add('Servicing');
+      }
+    });
+    return ['All', ...Array.from(cats)];
+  }, [allActiveServices]);
+
+  // Filtered services by category & search query
+  const displayServices = useMemo(() => {
+    return allActiveServices.filter((s: any) => {
+      const sCat = (s.category || 'Servicing').trim();
+      const matchCat = selectedServiceCategory === 'All' || sCat.toLowerCase() === selectedServiceCategory.toLowerCase();
+      
+      const q = serviceSearchText.trim().toLowerCase();
+      const matchQuery = !q || 
+        (s.name && s.name.toLowerCase().includes(q)) ||
+        (s.description && s.description.toLowerCase().includes(q)) ||
+        (s.category && s.category.toLowerCase().includes(q));
+      
+      return matchCat && matchQuery;
+    });
+  }, [allActiveServices, selectedServiceCategory, serviceSearchText]);
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
@@ -483,22 +562,6 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       </View>
     );
   }
-
-  // Filter: ONLY MOT service allowed
-  const motServices = (garage.services || []).filter((service: any) => {
-    const name = (service.name || '').toUpperCase();
-    return name.includes('MOT');
-  });
-
-  const displayServices = motServices.length > 0 ? motServices : [
-    {
-      _id: 'default-mot',
-      name: 'MOT Test (Class 4)',
-      duration: 45,
-      price: 45.00,
-      availability: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-    }
-  ];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -655,7 +718,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
 
-          {/* Facility & Workshop Photos Gallery (5 Images) */}
+          {/* Facility & Workshop Photos Gallery */}
           {garage.images && garage.images.length > 1 && (
             <View style={[styles.sectionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -688,47 +751,167 @@ export default function GarageDetailScreen({ route, navigation }: any) {
             </View>
           )}
 
-          {/* Available MOT Testing Service Only */}
+          {/* Garage Services & Pricing Catalog */}
           <View style={styles.servicesSection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 10 }]}>
-              MOT Testing Service
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <View>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 2 }]}>
+                  Services & Pricing
+                </Text>
+                <Text style={{ fontSize: 12, color: theme.colors.placeholder }}>
+                  {allActiveServices.length} {allActiveServices.length === 1 ? 'service' : 'services'} available to book
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.primary + '15', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                <MaterialCommunityIcons name="shield-check" size={14} color={theme.colors.primary} style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>DVSA Certified</Text>
+              </View>
+            </View>
 
-            {displayServices.map((service: any) => (
-              <View 
-                key={service._id || service.name} 
-                style={[styles.serviceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            {/* Category Filter Tabs */}
+            {availableCategories.length > 1 && (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                style={{ marginVertical: 8 }}
+                contentContainerStyle={{ gap: 8 }}
               >
-                <View style={[styles.serviceIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
-                  <MaterialCommunityIcons name="car-wrench" size={24} color={theme.colors.secondary} />
-                </View>
-                <View style={styles.serviceInfo}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.serviceName, { color: theme.colors.text }]}>{service.name}</Text>
-                    <View style={[styles.motBadge, { backgroundColor: theme.colors.primary + '15' }]}>
-                      <Text style={[styles.motBadgeText, { color: theme.colors.primary }]}>Certified</Text>
+                {availableCategories.map((cat) => {
+                  const isSelected = selectedServiceCategory === cat;
+                  return (
+                    <TouchableOpacity
+                      key={cat}
+                      onPress={() => setSelectedServiceCategory(cat)}
+                      style={[
+                        styles.categoryPill,
+                        {
+                          backgroundColor: isSelected ? theme.colors.primary : theme.colors.card,
+                          borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                        }
+                      ]}
+                    >
+                      <Text style={[
+                        styles.categoryPillText,
+                        { color: isSelected ? '#FFFFFF' : theme.colors.text, fontWeight: isSelected ? '700' : '600' }
+                      ]}>
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Search Input for Services if 3+ services */}
+            {allActiveServices.length > 3 && (
+              <View style={[styles.serviceSearchBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="magnify" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+                <TextInput
+                  value={serviceSearchText}
+                  onChangeText={setServiceSearchText}
+                  placeholder="Search services (e.g. Brake, Service, MOT, AC)..."
+                  placeholderTextColor={theme.colors.placeholder}
+                  style={[styles.serviceSearchInput, { color: theme.colors.text }]}
+                />
+                {serviceSearchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setServiceSearchText('')}>
+                    <MaterialCommunityIcons name="close-circle" size={16} color={theme.colors.placeholder} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Services Cards List */}
+            {displayServices.length === 0 ? (
+              <View style={[styles.serviceEmptyBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="wrench-outline" size={28} color={theme.colors.placeholder} />
+                <Text style={[styles.serviceEmptyText, { color: theme.colors.placeholder }]}>
+                  No services matching "{serviceSearchText}".
+                </Text>
+              </View>
+            ) : (
+              displayServices.map((service: any) => {
+                const catTheme = getCategoryTheme(service.category, service.name);
+                const catIcon = getCategoryIcon(service.category, service.name);
+                const isMot = (service.category || '').toLowerCase().includes('mot') || (service.name || '').toLowerCase().includes('mot');
+
+                return (
+                  <View 
+                    key={service._id || service.id || service.name} 
+                    style={[styles.serviceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                  >
+                    {/* Top Row: Icon, Name & Category Badge */}
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                      <View style={[styles.serviceIconCircle, { backgroundColor: catTheme.bg }]}>
+                        <MaterialCommunityIcons name={catIcon} size={22} color={catTheme.text} />
+                      </View>
+                      
+                      <View style={styles.serviceInfo}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                          <Text style={[styles.serviceName, { color: theme.colors.text }]}>
+                            {service.name}
+                          </Text>
+                          <View style={[styles.categoryBadge, { backgroundColor: catTheme.bg, borderColor: catTheme.border }]}>
+                            <Text style={[styles.categoryBadgeText, { color: catTheme.text }]}>
+                              {service.category || (isMot ? 'MOT' : 'Servicing')}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Timing / Duration */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 10 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <MaterialCommunityIcons name="clock-time-four-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                            <Text style={[styles.serviceMeta, { color: theme.colors.placeholder }]}>
+                              {service.duration || 45} mins
+                            </Text>
+                          </View>
+
+                          {service.availability && Array.isArray(service.availability) && service.availability.length > 0 && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <MaterialCommunityIcons name="calendar-check-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                              <Text style={[styles.serviceMeta, { color: theme.colors.placeholder }]}>
+                                {service.availability.length === 7 
+                                  ? 'All Week' 
+                                  : `${service.availability.length} Days/wk`}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* Description */}
+                        {service.description ? (
+                          <Text style={[styles.serviceDescText, { color: theme.colors.placeholder }]} numberOfLines={3}>
+                            {service.description}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+
+                    {/* Bottom Action Row: Pricing & Book Button */}
+                    <View style={[styles.serviceCardBottomRow, { borderTopColor: theme.colors.border + '50' }]}>
+                      <View>
+                        <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase' }}>
+                          Standard Rate
+                        </Text>
+                        <Text style={[styles.servicePriceText, { color: theme.colors.text }]}>
+                          £{service.price ? Number(service.price).toFixed(2) : '0.00'}
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={[styles.bookBtn, { backgroundColor: theme.colors.primary }]}
+                        onPress={() => handleOpenBookingModal(service)}
+                        activeOpacity={0.8}
+                      >
+                        <MaterialCommunityIcons name="calendar-plus" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                        <Text style={styles.bookBtnText}>Book Service</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                    <MaterialCommunityIcons name="timer-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
-                    <Text style={[styles.serviceMeta, { color: theme.colors.placeholder }]}>
-                      {service.duration || 45} mins test
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.serviceRight}>
-                  <Text style={[styles.servicePrice, { color: theme.colors.text }]}>
-                    £{service.price ? Number(service.price).toFixed(2) : '45.00'}
-                  </Text>
-                  <TouchableOpacity
-                    style={[styles.bookBtn, { backgroundColor: theme.colors.primary }]}
-                    onPress={() => handleOpenBookingModal(service)}
-                  >
-                    <Text style={styles.bookBtnText}>Book MOT</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
+                );
+              })
+            )}
           </View>
         </View>
       </ScrollView>
@@ -749,10 +932,10 @@ export default function GarageDetailScreen({ route, navigation }: any) {
             <View style={[styles.modalHeader, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.modalHeaderTitle, { color: theme.colors.text }]}>
-                  Book Certified MOT Slot
+                  Book Appointment
                 </Text>
                 <Text style={[styles.modalHeaderSubtitle, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                  {garage.name} • Certified Class 4 Bay
+                  {garage.name} • {selectedMotService?.name || 'Automotive Service'}
                 </Text>
               </View>
               <TouchableOpacity
@@ -770,10 +953,10 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   <MaterialCommunityIcons name="check-bold" size={40} color="#FFFFFF" />
                 </View>
                 <Text style={[styles.successTitle, { color: theme.colors.text }]}>
-                  MOT Booking Requested!
+                  Booking Request Sent!
                 </Text>
                 <Text style={[styles.successSubtitle, { color: theme.colors.placeholder }]}>
-                  Your appointment request has been submitted to {garage.name}. Garage technicians will confirm your MOT slot.
+                  Your appointment request for {selectedMotService?.name || 'service'} has been submitted to {garage.name}. Garage staff will review and confirm your slot.
                 </Text>
 
                 <View style={[styles.summaryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, width: '100%', marginVertical: 20 }]}>
@@ -788,15 +971,21 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{garage.name}</Text>
                   </View>
                   <View style={styles.summaryRow}>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Service:</Text>
+                    <Text style={[styles.summaryValue, { color: theme.colors.text, fontWeight: 'bold' }]}>
+                      {selectedMotService?.name || 'MOT Test'} ({selectedMotService?.category || 'Servicing'})
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
                     <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Date & Time:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.primary, fontWeight: 'bold' }]}>
                       {formatDisplayDate(selectedDate)} at {selectedTime}
                     </Text>
                   </View>
                   <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
-                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Test Fee:</Text>
-                    <Text style={[styles.summaryValue, { color: theme.colors.text, fontWeight: 'bold' }]}>
-                      £{selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '45.00'}
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Service Rate:</Text>
+                    <Text style={[styles.summaryValue, { color: theme.colors.primary, fontWeight: 'bold' }]}>
+                      £{selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '0.00'}
                     </Text>
                   </View>
                 </View>
@@ -824,6 +1013,109 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 contentContainerStyle={styles.modalScrollContent} 
                 keyboardShouldPersistTaps="handled"
               >
+                {/* 0. Selected Service Package Preview & Quick Switcher */}
+                <View style={styles.flowSection}>
+                  <View style={styles.flowSectionHeader}>
+                    <MaterialCommunityIcons name="wrench-clock" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                    <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
+                      Selected Service Package
+                    </Text>
+                  </View>
+
+                  {/* Active Selected Service Card */}
+                  <View style={[
+                    styles.selectedServiceBanner,
+                    { 
+                      backgroundColor: theme.colors.card, 
+                      borderColor: theme.colors.primary,
+                      borderWidth: 1.5 
+                    }
+                  ]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                          <Text style={[styles.serviceName, { color: theme.colors.text, fontSize: 15 }]}>
+                            {selectedMotService?.name || 'Service Package'}
+                          </Text>
+                          <View style={[
+                            styles.categoryBadge, 
+                            { 
+                              backgroundColor: getCategoryTheme(selectedMotService?.category, selectedMotService?.name).bg,
+                              borderColor: getCategoryTheme(selectedMotService?.category, selectedMotService?.name).border
+                            }
+                          ]}>
+                            <Text style={[
+                              styles.categoryBadgeText, 
+                              { color: getCategoryTheme(selectedMotService?.category, selectedMotService?.name).text }
+                            ]}>
+                              {selectedMotService?.category || 'Servicing'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {selectedMotService?.description ? (
+                          <Text style={[styles.serviceDescText, { color: theme.colors.placeholder, marginTop: 4 }]} numberOfLines={2}>
+                            {selectedMotService.description}
+                          </Text>
+                        ) : null}
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 10 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <MaterialCommunityIcons name="clock-time-four-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                            <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: '600' }}>
+                              {selectedMotService?.duration || 45} mins
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase' }}>
+                          Fee
+                        </Text>
+                        <Text style={[styles.servicePriceText, { color: theme.colors.primary, fontSize: 18 }]}>
+                          £{selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '0.00'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Quick Switch Service Chips if multiple services */}
+                    {allActiveServices.length > 1 && (
+                      <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
+                        <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6 }}>
+                          Switch Service for {garage.name}:
+                        </Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                          {allActiveServices.map((svc: any) => {
+                            const isChosen = (selectedMotService?._id && svc._id && selectedMotService._id === svc._id) ||
+                              (selectedMotService?.name && svc.name && selectedMotService.name === svc.name);
+                            return (
+                              <TouchableOpacity
+                                key={svc._id || svc.id || svc.name}
+                                onPress={() => setSelectedMotService(svc)}
+                                style={[
+                                  styles.serviceSwitchChip,
+                                  {
+                                    backgroundColor: isChosen ? theme.colors.primary : theme.colors.background,
+                                    borderColor: isChosen ? theme.colors.primary : theme.colors.border,
+                                  }
+                                ]}
+                              >
+                                <Text style={[
+                                  styles.serviceSwitchChipText,
+                                  { color: isChosen ? '#FFFFFF' : theme.colors.text, fontWeight: isChosen ? '700' : '500' }
+                                ]}>
+                                  {svc.name} • £{svc.price ? Number(svc.price).toFixed(0) : '0'}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
                 {/* 1. Vehicle Selection Section */}
                 <View style={styles.flowSection}>
                   <View style={styles.flowSectionHeader}>
@@ -833,7 +1125,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     </Text>
                   </View>
                   <Text style={[styles.flowSectionSubtitle, { color: theme.colors.placeholder }]}>
-                    Choose which registered vehicle is attending the MOT test
+                    Choose which registered vehicle is attending the appointment
                   </Text>
 
                   {/* DVSA Pre-Booking & Renewal Window Notice */}
@@ -1190,18 +1482,25 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 {/* 4. Booking Summary Card */}
                 <View style={[styles.summaryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                   <Text style={[styles.summaryCardTitle, { color: theme.colors.text }]}>
-                    MOT Booking Summary
+                    Booking Appointment Summary
                   </Text>
 
                   <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Test Center:</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Garage / Station:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{garage.name}</Text>
                   </View>
 
                   <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Service:</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Service Package:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.text, fontWeight: 'bold' }]}>
-                      {selectedMotService?.name || 'MOT Test (Class 4 Bay)'}
+                      {selectedMotService?.name || 'MOT Test'} ({selectedMotService?.category || 'Servicing'})
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryRow}>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Estimated Duration:</Text>
+                    <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+                      {selectedMotService?.duration || 45} mins
                     </Text>
                   </View>
 
@@ -1220,9 +1519,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   </View>
 
                   <View style={[styles.summaryRow, { borderBottomWidth: 0, paddingTop: 10 }]}>
-                    <Text style={[styles.summaryTotalLabel, { color: theme.colors.text }]}>Total Fee:</Text>
+                    <Text style={[styles.summaryTotalLabel, { color: theme.colors.text }]}>Service Fee:</Text>
                     <Text style={[styles.summaryTotalPrice, { color: theme.colors.primary }]}>
-                      £{selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '45.00'}
+                      £{selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '0.00'}
                     </Text>
                   </View>
                 </View>
@@ -1244,13 +1543,13 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   );
                   const isVehicleEligible = selectedVehicle && !isPendingApproval && !isRejected && !hasPendingBooking && !hasApprovedBooking;
 
-                  let buttonLabel = `Confirm MOT Booking • £${selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '45.00'}`;
+                  let buttonLabel = `Confirm Booking • £${selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '0.00'}`;
                   if (!selectedVehicle) buttonLabel = 'Select a Vehicle';
                   else if (isPendingApproval) buttonLabel = 'Registration Pending Approval';
                   else if (isRejected) buttonLabel = 'Registration Rejected';
                   else if (hasPendingBooking) buttonLabel = 'Booking Already Pending';
                   else if (hasApprovedBooking) buttonLabel = 'Vehicle Already Booked';
-                  else if (!selectedTime) buttonLabel = 'Select a Test Slot';
+                  else if (!selectedTime) buttonLabel = 'Select an Available Slot';
 
                   const canSubmit = isVehicleEligible && selectedDate && selectedTime && !submittingBooking;
 
@@ -1394,14 +1693,49 @@ const styles = StyleSheet.create({
   servicesSection: {
     marginTop: 4,
   },
+  categoryPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  categoryPillText: {
+    fontSize: 12,
+  },
+  serviceSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  serviceSearchInput: {
+    flex: 1,
+    fontSize: 12,
+    padding: 0,
+  },
+  serviceEmptyBox: {
+    padding: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 12,
+  },
+  serviceEmptyText: {
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+  },
   serviceCard: {
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1409,54 +1743,77 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   serviceIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
   serviceInfo: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: 4,
   },
   serviceName: {
     fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 3,
   },
-  motBadge: {
-    marginLeft: 6,
+  categoryBadge: {
     paddingHorizontal: 6,
     paddingVertical: 1.5,
     borderRadius: 4,
+    borderWidth: 1,
   },
-  motBadgeText: {
+  categoryBadgeText: {
     fontSize: 9,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   serviceMeta: {
     fontSize: 11,
   },
-  serviceRight: {
-    alignItems: 'flex-end',
-    gap: 6,
+  serviceDescText: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 4,
   },
-  servicePrice: {
-    fontSize: 15,
-    fontWeight: 'bold',
+  serviceCardBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 0.5,
+  },
+  servicePriceText: {
+    fontSize: 16,
+    fontWeight: '900',
   },
   bookBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: 6,
     justifyContent: 'center',
-    alignItems: 'center',
   },
   bookBtnText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 12,
+  },
+  selectedServiceBanner: {
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 6,
+  },
+  serviceSwitchChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  serviceSwitchChipText: {
+    fontSize: 11,
   },
   retryButton: {
     marginTop: 12,
