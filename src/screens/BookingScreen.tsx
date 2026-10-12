@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function BookingScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addAudit, user, token } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addAudit, user, token, cancelBooking } = useAppValues();
 
   // Find active customer
   const customerId = user?.customerId || 'c1';
@@ -907,10 +907,62 @@ export default function BookingScreen({ route, navigation }: any) {
 
         {isReschedule && (
           <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.warning + '15', borderColor: theme.colors.warning }]}>
-            <MaterialCommunityIcons name="alert-circle-outline" size={20} color={theme.colors.warning} style={{ marginRight: 8 }} />
-            <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text }]}>
-              You are rescheduling your existing MOT booking. The new date and slot will replace your current reservation upon confirmation.
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={20} color={theme.colors.warning} style={{ marginRight: 8, marginTop: 2 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text }]}>
+                  You are rescheduling your existing MOT booking. The new date and slot will replace your current reservation upon confirmation.
+                </Text>
+                {activeBookingAlert && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      const reg = selectedVehicle?.registrationNumber || 'Vehicle';
+                      Alert.alert(
+                        'Cancel Booking?',
+                        `Are you sure you want to cancel your current booking for ${reg} instead of rescheduling?`,
+                        [
+                          { text: 'Keep Booking', style: 'cancel' },
+                          {
+                            text: 'Yes, Cancel Booking',
+                            style: 'destructive',
+                            onPress: async () => {
+                              try {
+                                setLoading(true);
+                                await cancelBooking(activeBookingAlert.id || (activeBookingAlert as any)._id, 'Cancelled via booking screen');
+                                Alert.alert('Booking Cancelled', 'Your booking has been cancelled successfully.', [
+                                  { text: 'OK', onPress: () => navigation.goBack() }
+                                ]);
+                              } catch (err: any) {
+                                Alert.alert('Cancellation Failed', err?.message || 'Could not cancel booking.');
+                              } finally {
+                                setLoading(false);
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      marginTop: 8,
+                      alignSelf: 'flex-start',
+                      paddingVertical: 5,
+                      paddingHorizontal: 10,
+                      borderRadius: 6,
+                      backgroundColor: theme.colors.error + '15',
+                      borderWidth: 1,
+                      borderColor: theme.colors.error,
+                    }}
+                  >
+                    <MaterialCommunityIcons name="calendar-remove" size={14} color={theme.colors.error} style={{ marginRight: 4 }} />
+                    <Text style={{ fontSize: 11.5, fontWeight: 'bold', color: theme.colors.error }}>
+                      Or Cancel Booking Completely
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           </View>
         )}
 

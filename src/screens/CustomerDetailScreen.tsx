@@ -275,6 +275,7 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
                 const isPending = b.status === 'Pending';
                 const isApproved = b.status === 'Approved';
                 const isRejected = b.status === 'Rejected';
+                const isCancelled = b.status === 'Cancelled';
 
                 let statusText = 'Acknowledged';
                 let statusColor = theme.colors.placeholder;
@@ -290,6 +291,10 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
                   statusBg = theme.colors.success + '15';
                 } else if (isRejected) {
                   statusText = 'Rejected';
+                  statusColor = theme.colors.error;
+                  statusBg = theme.colors.error + '15';
+                } else if (isCancelled) {
+                  statusText = 'Cancelled';
                   statusColor = theme.colors.error;
                   statusBg = theme.colors.error + '15';
                 }
@@ -323,6 +328,13 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
                         <View style={[styles.rejectionReasonBox, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error }]}>
                           <Text style={{ fontSize: 11, color: theme.colors.error, fontWeight: 'bold' }}>Rejection Reason:</Text>
                           <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>{b.rejectionReason}</Text>
+                        </View>
+                      )}
+
+                      {isCancelled && (
+                        <View style={[styles.rejectionReasonBox, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error }]}>
+                          <Text style={{ fontSize: 11, color: theme.colors.error, fontWeight: 'bold' }}>Booking Cancelled:</Text>
+                          <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>{b.cancellationReason || 'Cancelled by customer.'}</Text>
                         </View>
                       )}
 

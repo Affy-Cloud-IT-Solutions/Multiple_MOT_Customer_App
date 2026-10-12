@@ -28,7 +28,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function CustomerPortalScreen({ route, navigation }: any) {
   const { isDarkMode, theme, toggleTheme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, lookupVehicle, refreshData, setToken, setUser, token, user, acknowledgeAlert } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, lookupVehicle, refreshData, setToken, setUser, token, user, acknowledgeAlert, cancelBooking } = useAppValues();
 
   // Find active customer
   const customerId = route?.params?.customerId || user?.customerId || 'c1';
@@ -347,6 +347,43 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
             }, 1200);
           },
         },
+      ]
+    );
+  };
+
+  const handleCancelBooking = (bookingItem: any) => {
+    if (!bookingItem) return;
+    const bookingId = bookingItem.id || bookingItem._id;
+    const reg = bookingItem.registrationNumber || 'Vehicle';
+    const dateFormatted = bookingItem.date 
+      ? new Date(bookingItem.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) 
+      : 'Selected Date';
+    const slotFormatted = getBookingSlot(bookingItem.makeModel);
+
+    Alert.alert(
+      'Cancel Booking?',
+      `Are you sure you want to cancel your booking for ${reg} on ${dateFormatted} at ${slotFormatted}?\n\nThis will immediately free up the slot and inform the garage.`,
+      [
+        { text: 'Keep Booking', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Booking',
+          style: 'destructive',
+          onPress: async () => {
+            const actionKey = `cancel_${bookingId}`;
+            setLoadingAction(actionKey);
+            try {
+              await cancelBooking(bookingId, 'Cancelled by customer via mobile app');
+              Alert.alert(
+                'Booking Cancelled',
+                `Your booking for ${reg} on ${dateFormatted} at ${slotFormatted} has been cancelled successfully.\n\nConfirmation emails have been sent to you and the garage.`
+              );
+            } catch (err: any) {
+              Alert.alert('Cancellation Failed', err?.message || 'Could not cancel booking. Please try again.');
+            } finally {
+              setLoadingAction(null);
+            }
+          }
+        }
       ]
     );
   };
@@ -888,6 +925,31 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                                 </TouchableOpacity>
                               </View>
                             )}
+
+                            <TouchableOpacity
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                marginTop: 10,
+                                paddingVertical: 8,
+                                borderRadius: 6,
+                                borderWidth: 1,
+                                borderColor: theme.colors.error,
+                                backgroundColor: theme.colors.error + '10'
+                              }}
+                              onPress={() => handleCancelBooking(bookingAlert)}
+                              disabled={loadingAction !== null}
+                            >
+                              {loadingAction === `cancel_${bookingAlert.id || (bookingAlert as any)._id}` ? (
+                                <ActivityIndicator size="small" color={theme.colors.error} />
+                              ) : (
+                                <>
+                                  <MaterialCommunityIcons name="calendar-remove" size={15} color={theme.colors.error} style={{ marginRight: 6 }} />
+                                  <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.error }}>Cancel This Booking</Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
                           </View>
                         );
                       })()}
@@ -957,13 +1019,36 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>{v.rejectionReason}</Text>
                           </View>
                         ) : null}
-                      </View>
-                    ) : bookingAlert && bookingAlert.status === 'Pending' ? (
-                      <View style={[styles.pendingApprovalBox, { backgroundColor: theme.colors.warning + '10', borderColor: theme.colors.warning + '30' }]}>
-                        <MaterialCommunityIcons name="clock-outline" size={16} color={theme.colors.warning} style={{ marginRight: 6 }} />
-                        <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: 'bold', flex: 1 }}>
-                          Awaiting MOT booking approval from garage staff. Rescheduling/Cancellation will be enabled once confirmed.
-                        </Text>
+                      </View>                    ) : bookingAlert && bookingAlert.status === 'Pending' ? (
+                      <View style={{ padding: 8 }}>
+                        <View style={[styles.pendingApprovalBox, { backgroundColor: theme.colors.warning + '10', borderColor: theme.colors.warning + '30', marginBottom: 8 }]}>
+                          <MaterialCommunityIcons name="clock-outline" size={16} color={theme.colors.warning} style={{ marginRight: 6 }} />
+                          <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: 'bold', flex: 1 }}>
+                            Awaiting MOT booking approval from garage staff.
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => handleCancelBooking(bookingAlert)}
+                          disabled={loadingAction !== null}
+                          style={[
+                            styles.actionBtn, 
+                            { 
+                              borderColor: theme.colors.error,
+                              borderWidth: 1,
+                              backgroundColor: theme.colors.error + '10',
+                              height: 32,
+                            }
+                          ]}
+                        >
+                          {loadingAction === `cancel_${bookingAlert.id || (bookingAlert as any)._id}` ? (
+                            <ActivityIndicator size="small" color={theme.colors.error} />
+                          ) : (
+                            <View style={styles.actionBtnContent}>
+                              <MaterialCommunityIcons name="calendar-remove" size={15} color={theme.colors.error} style={{ marginRight: 4 }} />
+                              <Text style={[styles.actionBtnText, { color: theme.colors.error }]}>Cancel Booking Request</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
                       </View>
                     ) : (
                       <View style={styles.actionRow}>
@@ -983,57 +1068,81 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         </TouchableOpacity>
 
                         {isBooked ? (
-                          <TouchableOpacity
-                            onPress={() => {
-                              const alertAny = bookingAlert as any;
-                              const garageId = typeof alertAny?.garageId === 'object' 
-                                ? (alertAny?.garageId?._id || alertAny?.garageId?.id)
-                                : (alertAny?.garageId || alertAny?.garage?._id || alertAny?.garage?.id);
+                          <>
+                            <TouchableOpacity
+                              onPress={() => handleCancelBooking(bookingAlert)}
+                              disabled={loadingAction !== null}
+                              style={[
+                                styles.actionBtn, 
+                                { 
+                                  borderColor: theme.colors.error,
+                                  borderWidth: 1,
+                                  backgroundColor: theme.colors.error + '10',
+                                }
+                              ]}
+                            >
+                              {loadingAction === `cancel_${bookingAlert.id || (bookingAlert as any)._id}` ? (
+                                <ActivityIndicator size="small" color={theme.colors.error} />
+                              ) : (
+                                <View style={styles.actionBtnContent}>
+                                  <MaterialCommunityIcons name="calendar-remove" size={14} color={theme.colors.error} style={{ marginRight: 3 }} />
+                                  <Text style={[styles.actionBtnText, { color: theme.colors.error }]}>Cancel</Text>
+                                </View>
+                              )}
+                            </TouchableOpacity>
 
-                              const garageName = alertAny?.garageName || 
-                                alertAny?.stationName || 
-                                (typeof alertAny?.garageId === 'object' ? alertAny?.garageId?.name : null) || 
-                                alertAny?.garage?.name;
+                            <TouchableOpacity
+                              onPress={() => {
+                                const alertAny = bookingAlert as any;
+                                const garageId = typeof alertAny?.garageId === 'object' 
+                                  ? (alertAny?.garageId?._id || alertAny?.garageId?.id)
+                                  : (alertAny?.garageId || alertAny?.garage?._id || alertAny?.garage?.id);
 
-                              const slotTimeStr = alertAny?.slotTime || 
-                                (alertAny?.makeModel && alertAny.makeModel.includes(' - Slot: ') ? alertAny.makeModel.split(' - Slot: ')[1] : null);
+                                const garageName = alertAny?.garageName || 
+                                  alertAny?.stationName || 
+                                  (typeof alertAny?.garageId === 'object' ? alertAny?.garageId?.name : null) || 
+                                  alertAny?.garage?.name;
 
-                              navigation.navigate('Booking', { 
-                                vehicle: v, 
-                                isReschedule: true,
-                                garageId,
-                                garageName,
-                                bookedDate: alertAny?.date,
-                                slotTime: slotTimeStr,
-                                slotNumber: alertAny?.slotNumber,
-                                serviceName: alertAny?.serviceName,
-                                price: alertAny?.price,
-                                duration: alertAny?.duration,
-                                previousAlertId: alertAny?.id || alertAny?._id,
-                              });
-                            }}
-                            disabled={loadingAction !== null}
-                            style={[
-                              styles.actionBtn, 
-                              styles.bookBtn, 
-                              { 
-                                backgroundColor: theme.colors.warning,
-                                elevation: 1,
-                              }
-                            ]}
-                          >
-                            <View style={styles.actionBtnContent}>
-                              <MaterialCommunityIcons 
-                                name="calendar-edit" 
-                                size={16} 
-                                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
-                                style={{ marginRight: 4 }} 
-                              />
-                              <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
-                                Reschedule
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
+                                const slotTimeStr = alertAny?.slotTime || 
+                                  (alertAny?.makeModel && alertAny.makeModel.includes(' - Slot: ') ? alertAny.makeModel.split(' - Slot: ')[1] : null);
+
+                                navigation.navigate('Booking', { 
+                                  vehicle: v, 
+                                  isReschedule: true,
+                                  garageId,
+                                  garageName,
+                                  bookedDate: alertAny?.date,
+                                  slotTime: slotTimeStr,
+                                  slotNumber: alertAny?.slotNumber,
+                                  serviceName: alertAny?.serviceName,
+                                  price: alertAny?.price,
+                                  duration: alertAny?.duration,
+                                  previousAlertId: alertAny?.id || alertAny?._id,
+                                });
+                              }}
+                              disabled={loadingAction !== null}
+                              style={[
+                                styles.actionBtn, 
+                                styles.bookBtn, 
+                                { 
+                                  backgroundColor: theme.colors.warning,
+                                  elevation: 1,
+                                }
+                              ]}
+                            >
+                              <View style={styles.actionBtnContent}>
+                                <MaterialCommunityIcons 
+                                  name="calendar-edit" 
+                                  size={16} 
+                                  color={theme.dark ? theme.colors.background : '#FFFFFF'} 
+                                  style={{ marginRight: 4 }} 
+                                />
+                                <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
+                                  Reschedule
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          </>
                         ) : (
                           <TouchableOpacity
                             onPress={() => handleBookMOT(v)}
@@ -1253,6 +1362,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                   const isPending = item.status === 'Pending';
                   const isApproved = item.status === 'Approved';
                   const isRejected = item.status === 'Rejected';
+                  const isCancelled = item.status === 'Cancelled';
 
                   let statusText = 'Completed';
                   let statusColor = theme.colors.placeholder;
@@ -1268,6 +1378,10 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                     statusBg = theme.colors.success + '15';
                   } else if (isRejected) {
                     statusText = 'Rejected';
+                    statusColor = theme.colors.error;
+                    statusBg = theme.colors.error + '15';
+                  } else if (isCancelled) {
+                    statusText = 'Cancelled';
                     statusColor = theme.colors.error;
                     statusBg = theme.colors.error + '15';
                   }
@@ -1293,7 +1407,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         </TouchableOpacity>
                         <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor + '40', flexDirection: 'row', alignItems: 'center', borderWidth: 0.5 }]}>
                           <MaterialCommunityIcons 
-                            name={isPending ? 'clock-outline' : isApproved ? 'check-circle' : isRejected ? 'close-circle' : 'checkbox-marked-circle'} 
+                            name={isPending ? 'clock-outline' : isApproved ? 'check-circle' : isRejected ? 'close-circle' : isCancelled ? 'calendar-remove' : 'checkbox-marked-circle'} 
                             size={12} 
                             color={statusColor} 
                             style={{ marginRight: 4 }} 
@@ -1378,6 +1492,15 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             <Text style={{ fontSize: 11, color: theme.colors.error, fontWeight: 'bold' }}>Rejection Reason:</Text>
                             <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>
                               {item.rejectionReason || 'No reason provided.'}
+                            </Text>
+                          </View>
+                        )}
+
+                        {isCancelled && (
+                          <View style={[styles.rejectionReasonBox, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error, marginTop: 6 }]}>
+                            <Text style={{ fontSize: 11, color: theme.colors.error, fontWeight: 'bold' }}>Cancellation Reason:</Text>
+                            <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>
+                              {item.cancellationReason || 'Cancelled by customer.'}
                             </Text>
                           </View>
                         )}
