@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { validateMotExpiryDate } from '../utils/validationUtils';
 import { openGarageDirections } from '../utils/mapUtils';
 import Toast from 'react-native-toast-message';
+import CustomerHeader from '../components/CustomerHeader';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -459,7 +460,34 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-
+      {/* Customer Header with Great UI */}
+      <CustomerHeader
+        title="My Vehicles"
+        subtitle="Registered Cars & MOT Reminders"
+        iconName="car-multiple"
+        iconColor={theme.colors.secondary}
+        iconBg={theme.colors.secondary + '15'}
+        rightAction={
+          <TouchableOpacity
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setShowAddForm(!showAddForm);
+            }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: theme.colors.secondary,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 8,
+            }}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons name={showAddForm ? 'close' : 'plus'} size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+            <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' }}>{showAddForm ? 'Close' : 'Add Vehicle'}</Text>
+          </TouchableOpacity>
+        }
+      />
 
       {/* Top Segmented Tab Switcher */}
       <View style={[styles.segmentContainer, { borderBottomColor: theme.colors.border, backgroundColor: theme.colors.card }]}>
@@ -570,7 +598,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         setRegNo(txt.toUpperCase());
                         if (lookupSuccessInfo) setLookupSuccessInfo(null);
                       }}
-                      placeholder="ENTER REG (E.G. AB18 CDE)"
+                      placeholder="eg AB19 CDE"
                       placeholderTextColor="#777777"
                       autoCapitalize="characters"
                       maxLength={9}

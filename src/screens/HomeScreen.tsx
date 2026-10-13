@@ -11,12 +11,14 @@ import {
   TouchableOpacity,
   Text,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestUserLiveLocation, isWithinUKBoundary, Coordinates } from '../utils/mapUtils';
+import CustomerHeader from '../components/CustomerHeader';
 
 const mapBackendVehicleToFrontend = (v: any) => {
   const isPass = v.motStatus === 'Valid' || v.status === 'PASS' || v.status === 'Active';
@@ -83,14 +85,111 @@ const mapBackendVehicleToFrontend = (v: any) => {
   };
 };
 
+const BOOKABLE_SERVICES = [
+  {
+    id: 'mot_class_4',
+    title: 'MOT Test',
+    subtitle: 'Class 4 inspection',
+    icon: 'shield-check',
+    iconBg: '#10B98115',
+    iconColor: '#10B981',
+    searchQuery: 'MOT',
+  },
+  {
+    id: 'full_service',
+    title: 'Full Service',
+    subtitle: '50+ point check',
+    icon: 'car-cog',
+    iconBg: '#1677FF15',
+    iconColor: '#1677FF',
+    searchQuery: 'Full Service',
+  },
+  {
+    id: 'interim_service',
+    title: 'Interim Service',
+    subtitle: 'Oil & filter refresh',
+    icon: 'oil',
+    iconBg: '#8B5CF615',
+    iconColor: '#8B5CF6',
+    searchQuery: 'Interim Service',
+  },
+  {
+    id: 'brakes',
+    title: 'Brakes & Discs',
+    subtitle: 'Pads & discs check',
+    icon: 'car-brake-alert',
+    iconBg: '#EF444415',
+    iconColor: '#EF4444',
+    searchQuery: 'Brake',
+  },
+  {
+    id: 'tyres',
+    title: 'Tyres & Tracking',
+    subtitle: 'Fitting & laser tracking',
+    icon: 'tire',
+    iconBg: '#F59E0B15',
+    iconColor: '#F59E0B',
+    searchQuery: 'Tyre',
+  },
+  {
+    id: 'diagnostics',
+    title: 'Diagnostics Scan',
+    subtitle: 'ECU fault code check',
+    icon: 'engine',
+    iconBg: '#06B6D415',
+    iconColor: '#06B6D4',
+    searchQuery: 'Diagnostic',
+  },
+  {
+    id: 'air_con',
+    title: 'Air Con Regas',
+    subtitle: 'Refrigerant recharge',
+    icon: 'snowflake',
+    iconBg: '#3B82F615',
+    iconColor: '#3B82F6',
+    searchQuery: 'Air Conditioning',
+  },
+  {
+    id: 'repairs',
+    title: 'General Repairs',
+    subtitle: 'Clutch, exhaust & fixes',
+    icon: 'wrench',
+    iconBg: '#EC489915',
+    iconColor: '#EC4899',
+    searchQuery: 'Repair',
+  },
+];
+
 export default function HomeScreen({ navigation }: any) {
   const { theme } = useAppTheme();
   const { token, vehicles, refreshData, lookupVehicle, user } = useAppValues();
   const [regNumber, setRegNumber] = useState('');
   const [garageSearchText, setGarageSearchText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
   const [userCoords, setUserCoords] = useState<Coordinates | null>(null);
+
+  const handleRefreshAndReset = async () => {
+    setRefreshing(true);
+    // Reset all search inputs on pull to reload
+    setRegNumber('');
+    setGarageSearchText('');
+    try {
+      if (token) {
+        await refreshData();
+      }
+      await loadSearchHistory();
+      const coords = await requestUserLiveLocation();
+      if (coords) {
+        setUserCoords(coords);
+      }
+    } catch (e) {
+      console.error('Home refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const loadSearchHistory = async () => {
     try {
@@ -191,55 +290,59 @@ export default function HomeScreen({ navigation }: any) {
     navigation.navigate('Garages', { searchQuery: query });
   };
 
-  // Compute Dashboard vehicle stats for logged-in user
+  const handleSelectService = (service: typeof BOOKABLE_SERVICES[0]) => {
+    navigation.navigate('Garages', {
+      serviceFilter: service.searchQuery,
+      searchQuery: service.searchQuery,
+      serviceTitle: service.title,
+    });
+  };
+
   const userVehicles = vehicles || [];
-  const dueSoonVehicles = userVehicles.filter(v => {
-    if (!v.motExpiryDate) return false;
-    const d = new Date(v.motExpiryDate);
-    if (isNaN(d.getTime())) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diff = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return diff <= 30;
-  });
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-    >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent} 
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* 1. Top Dashboard Greeting & DVSA Network Badge */}
-        <View style={styles.topDashboardRow}>
-          <View style={{ flex: 1 }}>
-            <View style={[styles.dvsaNetworkPill, { backgroundColor: theme.colors.secondary + '15', borderColor: theme.colors.secondary + '30' }]}>
-              <MaterialCommunityIcons name="shield-check" size={13} color={theme.colors.secondary} style={{ marginRight: 4 }} />
-              <Text style={[styles.dvsaNetworkPillText, { color: theme.colors.secondary }]}>
-                DVSA APPROVED MOT NETWORK
-              </Text>
-            </View>
-            <Text style={[styles.dashboardGreeting, { color: theme.colors.text }]}>
-              {user?.name ? `Hi, ${user.name}` : 'UK MOT Dashboard'}
-            </Text>
-          </View>
-
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* Customer Header with Great UI */}
+      <CustomerHeader
+        title={user?.name ? `Hi, ${user.name.split(' ')[0]}` : 'MOT Search'}
+        subtitle="UK Vehicle Check & Garage Network"
+        iconName="magnify"
+        iconColor={theme.colors.secondary}
+        iconBg={theme.colors.secondary + '15'}
+        rightAction={
           <TouchableOpacity
             onPress={() => navigation.navigate(token ? 'Profile' : 'Login')}
             style={[styles.topProfileBtn, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <MaterialCommunityIcons 
               name={token ? 'account-check' : 'account-circle-outline'} 
-              size={22} 
+              size={20} 
               color={theme.colors.secondary} 
             />
           </TouchableOpacity>
-        </View>
+        }
+      />
 
-        {/* 2. Live Location & Region Status Banner */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent} 
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefreshAndReset}
+              colors={[theme.colors.secondary, theme.colors.primary]}
+              tintColor={theme.colors.secondary}
+            />
+          }
+        >
+
+        {/* 1. Live Location & Region Status Banner */}
         {userCoords && (() => {
           const isUK = isWithinUKBoundary(userCoords);
           return (
@@ -258,73 +361,221 @@ export default function HomeScreen({ navigation }: any) {
               <Text
                 style={[
                   styles.locationStatusText,
-                  { color: isUK ? '#059669' : '#DC2626' },
+                  { color: isUK ? '#059669' : '#2563EB' },
                 ]}
                 numberOfLines={1}
               >
-                {isUK
-                  ? `Service Active • ${userCoords.label || 'United Kingdom'}`
-                  : `Outside UK Coverage • ${userCoords.label || 'Global'}`}
+                {`📍 Live Location • ${userCoords.label || userCoords.cityName || 'Current Area'}`}
               </Text>
-              <View style={[styles.locationBadge, { backgroundColor: isUK ? '#10B98120' : '#EF444420' }]}>
-                <Text style={[styles.locationBadgeText, { color: isUK ? '#059669' : '#DC2626' }]}>
-                  {isUK ? 'Garages Near Me' : 'Check Area'}
+              <View style={[styles.locationBadge, { backgroundColor: isUK ? '#10B98120' : '#3B82F620' }]}>
+                <Text style={[styles.locationBadgeText, { color: isUK ? '#059669' : '#2563EB' }]}>
+                  Garages Near Me
                 </Text>
                 <MaterialCommunityIcons
                   name="chevron-right"
                   size={14}
-                  color={isUK ? '#059669' : '#DC2626'}
+                  color={isUK ? '#059669' : '#2563EB'}
                 />
               </View>
             </TouchableOpacity>
           );
         })()}
 
-        {/* 3. Logged-in Driver Quick Watchlist / Metrics Bar */}
-        {token && userVehicles.length > 0 && (
+        {/* 2. Instant Vehicle MOT Lookup Card (Fast registration plate lookup) */}
+        <View style={[styles.heroSearchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.cardHeaderIconWrap, { backgroundColor: theme.colors.secondary + '15' }]}>
+              <MaterialCommunityIcons name="card-search-outline" size={20} color={theme.colors.secondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardHeaderTitle, { color: theme.colors.text }]}>
+                Instant Vehicle MOT Lookup
+              </Text>
+              <Text style={[styles.cardHeaderSub, { color: theme.colors.placeholder }]}>
+                Live DVSA registry data & MOT history
+              </Text>
+            </View>
+          </View>
+
+          {/* Authentic UK Registration Plate Input */}
+          <View style={styles.plateWrapper}>
+            <View style={styles.plateShadowBase}>
+              <View style={styles.ukPlateStrip}>
+                <Text style={styles.ukFlagSymbol}>🇬🇧</Text>
+                <Text style={styles.ukPlateStripText}>UK</Text>
+              </View>
+              <TextInput
+                value={regNumber}
+                onChangeText={(txt) => setRegNumber(txt.toUpperCase())}
+                placeholder="eg AB19 CDE"
+                placeholderTextColor="#6B7280"
+                style={styles.plateInput}
+                autoCapitalize="characters"
+                maxLength={8}
+                autoCorrect={false}
+                returnKeyType="search"
+                onSubmitEditing={() => handleCheckMOT()}
+              />
+              {regNumber.length > 0 && (
+                <TouchableOpacity onPress={() => setRegNumber('')} style={styles.plateClearBtn}>
+                  <MaterialCommunityIcons name="close-circle" size={20} color="#374151" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Quick Demo Registration Chips */}
+          <View style={styles.quickTagsContainer}>
+            <Text style={[styles.quickTagsLabel, { color: theme.colors.placeholder }]}>Examples:</Text>
+            {['AB18 CDE', 'LD65 XYZ', 'MH07 KKK'].map((sample) => (
+              <TouchableOpacity
+                key={sample}
+                onPress={() => {
+                  setRegNumber(sample);
+                  handleCheckMOT(sample);
+                }}
+                style={[styles.sampleChip, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+              >
+                <Text style={[styles.sampleChipText, { color: theme.colors.text }]}>{sample}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Lookup Button */}
           <TouchableOpacity
-            style={[styles.motSummaryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            onPress={() => handleCheckMOT()}
+            disabled={loading}
             activeOpacity={0.85}
-            onPress={() => navigation.navigate('My Portal')}
+            style={[
+              styles.primarySearchBtn,
+              { backgroundColor: theme.colors.secondary, opacity: loading ? 0.75 : 1 },
+            ]}
           >
-            <View style={styles.motSummaryHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <MaterialCommunityIcons name="car-speed-limiter" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
-                <Text style={[styles.motSummaryTitle, { color: theme.colors.text }]}>
-                  My Fleet & MOT Status
-                </Text>
+            {loading ? (
+              <View style={styles.btnLoadingRow}>
+                <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 8 }} />
+                <Text style={styles.primarySearchBtnText}>Connecting to DVLA Database...</Text>
               </View>
-              <View style={[styles.fleetCountBadge, { backgroundColor: theme.colors.secondary + '18' }]}>
-                <Text style={[styles.fleetCountText, { color: theme.colors.secondary }]}>
-                  {userVehicles.length} {userVehicles.length === 1 ? 'Vehicle' : 'Vehicles'}
-                </Text>
+            ) : (
+              <View style={styles.btnContentRow}>
+                <MaterialCommunityIcons name="magnify" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.primarySearchBtnText}>Check MOT Expiry & Details</Text>
               </View>
-            </View>
-
-            <View style={styles.motMetricsRow}>
-              <View style={styles.metricCol}>
-                <Text style={[styles.metricNumber, { color: theme.colors.text }]}>{userVehicles.length}</Text>
-                <Text style={[styles.metricLabel, { color: theme.colors.placeholder }]}>Registered</Text>
-              </View>
-              <View style={[styles.metricDivider, { backgroundColor: theme.colors.border }]} />
-              <View style={styles.metricCol}>
-                <Text style={[styles.metricNumber, { color: dueSoonVehicles.length > 0 ? '#F59E0B' : '#10B981' }]}>
-                  {dueSoonVehicles.length}
-                </Text>
-                <Text style={[styles.metricLabel, { color: theme.colors.placeholder }]}>Due ≤30 Days</Text>
-              </View>
-              <View style={[styles.metricDivider, { backgroundColor: theme.colors.border }]} />
-              <View style={styles.metricCol}>
-                <Text style={[styles.metricNumber, { color: '#10B981' }]}>
-                  {userVehicles.length - dueSoonVehicles.length}
-                </Text>
-                <Text style={[styles.metricLabel, { color: theme.colors.placeholder }]}>MOT Valid</Text>
-              </View>
-            </View>
+            )}
           </TouchableOpacity>
-        )}
+        </View>
 
-        {/* 4. Core Service Hub Grid (4 Action Boxes) */}
+        {/* 3. Book a Service Catalog (Enlarged Icons & Clickable Flow) */}
+        <View style={styles.servicesSectionWrap}>
+          <View style={styles.servicesSectionHeader}>
+            <View style={styles.servicesHeaderTitleRow}>
+              <Text style={[styles.servicesSectionTitle, { color: theme.colors.text }]}>
+                Select a Service
+              </Text>
+              <View style={[styles.tapHintBadge, { backgroundColor: theme.colors.primary + '12' }]}>
+                <MaterialCommunityIcons name="cursor-default-click-outline" size={12} color={theme.colors.primary} style={{ marginRight: 4 }} />
+                <Text style={[styles.tapHintText, { color: theme.colors.primary }]}>Tap to Book</Text>
+              </View>
+            </View>
+            <Text style={[styles.servicesSectionSub, { color: theme.colors.placeholder }]}>
+              Swipe & tap a service to find verified garages
+            </Text>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.servicesHorizontalScroll}
+          >
+            {BOOKABLE_SERVICES.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.horizontalServiceItem}
+                activeOpacity={0.65}
+                onPress={() => handleSelectService(item)}
+              >
+                <View style={[styles.enlargedIconCircle, { backgroundColor: item.iconBg, borderColor: item.iconColor + '35' }]}>
+                  <MaterialCommunityIcons name={item.icon} size={28} color={item.iconColor} />
+                  <View style={[styles.iconActionBadge, { backgroundColor: item.iconColor, borderColor: theme.colors.background }]}>
+                    <MaterialCommunityIcons name="arrow-right" size={10} color="#FFFFFF" />
+                  </View>
+                </View>
+
+                <Text style={[styles.horizontalServiceTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={[styles.horizontalServiceSubtitle, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                  {item.subtitle}
+                </Text>
+
+                <View style={[styles.selectPill, { backgroundColor: item.iconBg, borderColor: item.iconColor + '30' }]}>
+                  <Text style={[styles.selectPillText, { color: item.iconColor }]}>Select</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={11} color={item.iconColor} />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* 4. Garage Finder Quick Search Bar */}
+        <View style={[styles.garageSearchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.cardHeaderIconWrap, { backgroundColor: '#10B98115' }]}>
+              <MaterialCommunityIcons name="map-search-outline" size={20} color="#10B981" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardHeaderTitle, { color: theme.colors.text }]}>
+                Find Local MOT Test Centres
+              </Text>
+              <Text style={[styles.cardHeaderSub, { color: theme.colors.placeholder }]}>
+                Search by garage name, town, or UK postcode
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.garageSearchInputWrapper, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+            <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} style={{ marginRight: 8 }} />
+            <TextInput
+              value={garageSearchText}
+              onChangeText={setGarageSearchText}
+              placeholder="e.g. Apex Autos, Manchester, M1..."
+              placeholderTextColor={theme.colors.placeholder}
+              style={[styles.garageSearchInput, { color: theme.colors.text }]}
+              returnKeyType="search"
+              onSubmitEditing={handleSearchGarages}
+            />
+            {garageSearchText.length > 0 && (
+              <TouchableOpacity onPress={() => setGarageSearchText('')} style={{ padding: 4, marginRight: 4 }}>
+                <MaterialCommunityIcons name="close-circle" size={18} color={theme.colors.placeholder} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.garageBtnRow}>
+            <TouchableOpacity
+              onPress={handleSearchGarages}
+              activeOpacity={0.8}
+              style={[styles.garagePrimaryBtn, { backgroundColor: theme.colors.secondary }]}
+            >
+              <MaterialCommunityIcons name="magnify" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.garagePrimaryBtnText}>Search Garages</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                Keyboard.dismiss();
+                navigation.navigate('Garages', { nearMe: true });
+              }}
+              activeOpacity={0.8}
+              style={styles.garageNearMeBtn}
+            >
+              <MaterialCommunityIcons name="crosshairs-gps" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.garageNearMeBtnText}>Near Me</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 5. Core Navigation Hub Grid (4 Action Boxes) */}
         <View style={styles.quickGrid}>
           {/* Card 1: Book MOT Slot */}
           <TouchableOpacity
@@ -446,213 +697,6 @@ export default function HomeScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* 5. Instant Vehicle MOT Lookup Card */}
-        <View style={[styles.heroSearchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <View style={styles.cardHeaderRow}>
-            <View style={[styles.cardHeaderIconWrap, { backgroundColor: theme.colors.secondary + '15' }]}>
-              <MaterialCommunityIcons name="card-search-outline" size={20} color={theme.colors.secondary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardHeaderTitle, { color: theme.colors.text }]}>
-                Instant Vehicle MOT Lookup
-              </Text>
-              <Text style={[styles.cardHeaderSub, { color: theme.colors.placeholder }]}>
-                Live DVSA registry data & MOT history
-              </Text>
-            </View>
-          </View>
-
-          {/* Authentic UK Registration Plate Input */}
-          <View style={styles.plateWrapper}>
-            <View style={styles.plateShadowBase}>
-              <View style={styles.ukPlateStrip}>
-                <Text style={styles.ukFlagSymbol}>🇬🇧</Text>
-                <Text style={styles.ukPlateStripText}>UK</Text>
-              </View>
-              <TextInput
-                value={regNumber}
-                onChangeText={(txt) => setRegNumber(txt.toUpperCase())}
-                placeholder="ENTER REG (e.g. AB18 CDE)"
-                placeholderTextColor="#6B7280"
-                style={styles.plateInput}
-                autoCapitalize="characters"
-                maxLength={8}
-                autoCorrect={false}
-                returnKeyType="search"
-                onSubmitEditing={() => handleCheckMOT()}
-              />
-              {regNumber.length > 0 && (
-                <TouchableOpacity onPress={() => setRegNumber('')} style={styles.plateClearBtn}>
-                  <MaterialCommunityIcons name="close-circle" size={20} color="#374151" />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {/* Quick Demo Registration Chips */}
-          <View style={styles.quickTagsContainer}>
-            <Text style={[styles.quickTagsLabel, { color: theme.colors.placeholder }]}>Examples:</Text>
-            {['AB18 CDE', 'LD65 XYZ', 'MH07 KKK'].map((sample) => (
-              <TouchableOpacity
-                key={sample}
-                onPress={() => {
-                  setRegNumber(sample);
-                  handleCheckMOT(sample);
-                }}
-                style={[styles.sampleChip, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-              >
-                <Text style={[styles.sampleChipText, { color: theme.colors.text }]}>{sample}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Lookup Button */}
-          <TouchableOpacity
-            onPress={() => handleCheckMOT()}
-            disabled={loading}
-            activeOpacity={0.85}
-            style={[
-              styles.primarySearchBtn,
-              { backgroundColor: theme.colors.secondary, opacity: loading ? 0.75 : 1 },
-            ]}
-          >
-            {loading ? (
-              <View style={styles.btnLoadingRow}>
-                <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 8 }} />
-                <Text style={styles.primarySearchBtnText}>Connecting to DVLA Database...</Text>
-              </View>
-            ) : (
-              <View style={styles.btnContentRow}>
-                <MaterialCommunityIcons name="magnify" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.primarySearchBtnText}>Check MOT Expiry & Details</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* 6. Garage Finder Quick Search Bar */}
-        <View style={[styles.garageSearchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <View style={styles.cardHeaderRow}>
-            <View style={[styles.cardHeaderIconWrap, { backgroundColor: '#10B98115' }]}>
-              <MaterialCommunityIcons name="map-search-outline" size={20} color="#10B981" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardHeaderTitle, { color: theme.colors.text }]}>
-                Find Local MOT Test Centres
-              </Text>
-              <Text style={[styles.cardHeaderSub, { color: theme.colors.placeholder }]}>
-                Search by garage name, city, or UK postcode
-              </Text>
-            </View>
-          </View>
-
-          <View style={[styles.garageSearchInputWrapper, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-            <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} style={{ marginRight: 8 }} />
-            <TextInput
-              value={garageSearchText}
-              onChangeText={setGarageSearchText}
-              placeholder="e.g. Apex Autos, Manchester, M1..."
-              placeholderTextColor={theme.colors.placeholder}
-              style={[styles.garageSearchInput, { color: theme.colors.text }]}
-              returnKeyType="search"
-              onSubmitEditing={handleSearchGarages}
-            />
-            {garageSearchText.length > 0 && (
-              <TouchableOpacity onPress={() => setGarageSearchText('')} style={{ padding: 4, marginRight: 4 }}>
-                <MaterialCommunityIcons name="close-circle" size={18} color={theme.colors.placeholder} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.garageBtnRow}>
-            <TouchableOpacity
-              onPress={handleSearchGarages}
-              activeOpacity={0.8}
-              style={[styles.garagePrimaryBtn, { backgroundColor: theme.colors.primary }]}
-            >
-              <MaterialCommunityIcons name="magnify" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.garagePrimaryBtnText}>Search Garages</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                Keyboard.dismiss();
-                navigation.navigate('Garages', { nearMe: true });
-              }}
-              activeOpacity={0.8}
-              style={styles.garageNearMeBtn}
-            >
-              <MaterialCommunityIcons name="crosshairs-gps" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.garageNearMeBtnText}>Near Me</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* 7. How Smart MOT Works Stepper */}
-        <View style={[styles.stepperContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <Text style={[styles.stepperMainTitle, { color: theme.colors.text }]}>
-            How MOT Booking Works
-          </Text>
-          <Text style={[styles.stepperMainSub, { color: theme.colors.placeholder }]}>
-            Simple 3-step process compliant with official DVSA rules
-          </Text>
-
-          <View style={styles.stepsTimeline}>
-            {/* Step 1 */}
-            <View style={styles.stepItemRow}>
-              <View style={styles.stepIndicatorCol}>
-                <View style={[styles.stepCircleBadge, { backgroundColor: theme.colors.secondary }]}>
-                  <Text style={styles.stepNumberText}>1</Text>
-                </View>
-                <View style={[styles.stepLineConnector, { backgroundColor: theme.colors.border }]} />
-              </View>
-              <View style={styles.stepContentCol}>
-                <Text style={[styles.stepContentTitle, { color: theme.colors.text }]}>
-                  Register Vehicle & Lookup Expiry
-                </Text>
-                <Text style={[styles.stepContentDesc, { color: theme.colors.placeholder }]}>
-                  Add registration to receive automated 45, 30, 15, and 7-day early expiry notifications.
-                </Text>
-              </View>
-            </View>
-
-            {/* Step 2 */}
-            <View style={styles.stepItemRow}>
-              <View style={styles.stepIndicatorCol}>
-                <View style={[styles.stepCircleBadge, { backgroundColor: '#8B5CF6' }]}>
-                  <Text style={styles.stepNumberText}>2</Text>
-                </View>
-                <View style={[styles.stepLineConnector, { backgroundColor: theme.colors.border }]} />
-              </View>
-              <View style={styles.stepContentCol}>
-                <Text style={[styles.stepContentTitle, { color: theme.colors.text }]}>
-                  Choose Certified Local Garage
-                </Text>
-                <Text style={[styles.stepContentDesc, { color: theme.colors.placeholder }]}>
-                  Compare verified DVSA test fees, customer review ratings, and garage proximity.
-                </Text>
-              </View>
-            </View>
-
-            {/* Step 3 */}
-            <View style={[styles.stepItemRow, { marginBottom: 0 }]}>
-              <View style={styles.stepIndicatorCol}>
-                <View style={[styles.stepCircleBadge, { backgroundColor: '#10B981' }]}>
-                  <Text style={styles.stepNumberText}>3</Text>
-                </View>
-              </View>
-              <View style={styles.stepContentCol}>
-                <Text style={[styles.stepContentTitle, { color: theme.colors.text }]}>
-                  Book Official 30-Day Window Slot
-                </Text>
-                <Text style={[styles.stepContentDesc, { color: theme.colors.placeholder }]}>
-                  Reserve slots within 30 days of expiry to preserve your current MOT anniversary date.
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
         {/* 8. Recent Search History */}
         {token && (
           <View style={styles.recentSectionWrap}>
@@ -664,7 +708,7 @@ export default function HomeScreen({ navigation }: any) {
                 </Text>
               </View>
               {searchHistory.length > 0 && (
-                <TouchableOpacity onPress={() => navigation.navigate('History')}>
+                <TouchableOpacity onPress={() => navigation.navigate('Bookings')}>
                   <Text style={[styles.viewAllText, { color: theme.colors.secondary }]}>View All ({searchHistory.length})</Text>
                 </TouchableOpacity>
               )}
@@ -767,6 +811,7 @@ export default function HomeScreen({ navigation }: any) {
         <View style={{ height: 24 }} />
       </ScrollView>
     </KeyboardAvoidingView>
+  </View>
   );
 }
 
@@ -1143,66 +1188,90 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  stepperContainer: {
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    marginBottom: 14,
+  servicesSectionWrap: {
+    marginBottom: 16,
   },
-  stepperMainTitle: {
-    fontSize: 15,
-    fontWeight: '800',
+  servicesSectionHeader: {
+    marginBottom: 12,
   },
-  stepperMainSub: {
-    fontSize: 11,
-    marginTop: 2,
-    marginBottom: 14,
-  },
-  stepsTimeline: {
-    marginTop: 4,
-  },
-  stepItemRow: {
+  servicesHeaderTitleRow: {
     flexDirection: 'row',
-    marginBottom: 14,
-  },
-  stepIndicatorCol: {
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'space-between',
   },
-  stepCircleBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  servicesSectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  tapHintBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  tapHintText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  servicesSectionSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  servicesHorizontalScroll: {
+    paddingRight: 8,
+    gap: 14,
+    paddingVertical: 4,
+  },
+  horizontalServiceItem: {
+    width: 88,
+    alignItems: 'center',
+  },
+  enlargedIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1.5,
+    position: 'relative',
   },
-  stepNumberText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
+  iconActionBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
   },
-  stepLineConnector: {
-    width: 2,
-    flex: 1,
-    marginTop: 4,
-  },
-  stepContentCol: {
-    flex: 1,
-    paddingTop: 1,
-  },
-  stepContentTitle: {
-    fontSize: 13,
+  horizontalServiceTitle: {
+    fontSize: 12.5,
     fontWeight: '700',
+    textAlign: 'center',
     marginBottom: 2,
   },
-  stepContentDesc: {
-    fontSize: 11,
-    lineHeight: 15,
+  horizontalServiceSubtitle: {
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  selectPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 5,
+  },
+  selectPillText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    marginRight: 1,
   },
   recentSectionWrap: {
     marginBottom: 10,

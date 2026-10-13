@@ -110,6 +110,19 @@ export default function MotHistoryScreen({ route, navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* Top Header Bar */}
+      <View style={[styles.topNavRow, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.navBackBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.navTitle, { color: theme.colors.text }]}>MOT History</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         
         {/* Vehicle Header info */}
@@ -514,5 +527,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 8,
     fontWeight: 'bold',
-  }
+  },
+  topNavRow: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+  },
+  navBackBtn: {
+    padding: 6,
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });

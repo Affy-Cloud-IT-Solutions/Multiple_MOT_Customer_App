@@ -27,15 +27,6 @@ export interface Coordinates {
   isWithinUK?: boolean;
 }
 
-// Default Fallback UK Location (London Central)
-export const DEFAULT_UK_LOCATION: Coordinates = {
-  latitude: 51.5074,
-  longitude: -0.1278,
-  label: 'London Central (UK)',
-  cityName: 'London',
-  countryName: 'United Kingdom',
-  isWithinUK: true,
-};
 
 // Preset UK Locations for Quick Selection & Testing
 export const UK_PRESET_LOCATIONS: Record<string, Coordinates> = {
@@ -188,136 +179,182 @@ export const getCoordinatesFromLocationQuery = async (query: string): Promise<Co
 };
 
 /**
- * Live GPS / Hardware Location Requester with native permission & boundary checking
+ * Fast IP-based Live Geolocation (determines real city and coordinates)
  */
-export const requestUserLiveLocation = async (): Promise<Coordinates> => {
+export const fetchLiveIpLocation = async (): Promise<Coordinates | null> => {
+  // 1. Try ipwho.is
   try {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Location Permission',
-            message: 'Multiple MOT needs your location to check service availability and find registered garages near you.',
-            buttonNeutral: 'Ask Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'Allow',
-          }
-        );
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          return {
-            ...DEFAULT_UK_LOCATION,
-            label: 'Location Denied (London Demo)',
-          };
-        }
-      } catch (pErr) {
-        // Permission prompt failed
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch('https://ipwho.is/', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success !== false && data.latitude && data.longitude) {
+        const lat = Number(data.latitude);
+        const lon = Number(data.longitude);
+        const city = data.city || data.region || 'Current Area';
+        const country = data.country || '';
+        const region = data.region ? `${data.region}, ` : '';
+        const label = country ? `${city}, ${region}${country}` : city;
+        const coords: Coordinates = {
+          latitude: lat,
+          longitude: lon,
+          cityName: city,
+          countryName: country,
+          label,
+        };
+        coords.isWithinUK = isWithinUKBoundary(coords);
+        return coords;
       }
     }
+  } catch (e) {
+    console.log('ipwho.is error:', e);
+  }
 
-    // Use native @react-native-community/geolocation if available and linked
-    let nativeCoords: { latitude: number; longitude: number } | null = null;
-    if (SafeGeolocation && typeof SafeGeolocation.getCurrentPosition === 'function') {
-      nativeCoords = await new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
-        try {
-          SafeGeolocation.getCurrentPosition(
-            (pos: any) => {
-              if (pos && pos.coords) {
-                resolve({
-                  latitude: pos.coords.latitude,
-                  longitude: pos.coords.longitude,
-                });
-              } else {
-                resolve(null);
-              }
-            },
-            (err: any) => {
-              console.log('Native GPS error, falling back:', err?.message);
-              resolve(null);
-            },
-            { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
-          );
-        } catch (geoErr) {
-          resolve(null);
-        }
-      });
+  // 2. Try freeipapi.com
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch('https://freeipapi.com/api/json', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.latitude && data.longitude) {
+        const lat = Number(data.latitude);
+        const lon = Number(data.longitude);
+        const city = data.cityName || 'Current Area';
+        const country = data.countryName || '';
+        const region = data.regionName ? `${data.regionName}, ` : '';
+        const label = country ? `${city}, ${region}${country}` : city;
+        const coords: Coordinates = {
+          latitude: lat,
+          longitude: lon,
+          cityName: city,
+          countryName: country,
+          label,
+        };
+        coords.isWithinUK = isWithinUKBoundary(coords);
+        return coords;
+      }
     }
+  } catch (e) {
+    console.log('freeipapi error:', e);
+  }
 
-    if (nativeCoords) {
-      const isUk = isWithinUKBoundary(nativeCoords);
-      const geoInfo = await reverseGeocodeCoords(nativeCoords.latitude, nativeCoords.longitude);
+  // 3. Try ipapi.co
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.latitude && data.longitude) {
+        const lat = Number(data.latitude);
+        const lon = Number(data.longitude);
+        const city = data.city || 'Current Area';
+        const country = data.country_name || '';
+        const region = data.region ? `${data.region}, ` : '';
+        const label = country ? `${city}, ${region}${country}` : city;
+        const coords: Coordinates = {
+          latitude: lat,
+          longitude: lon,
+          cityName: city,
+          countryName: country,
+          label,
+        };
+        coords.isWithinUK = isWithinUKBoundary(coords);
+        return coords;
+      }
+    }
+  } catch (e) {
+    console.log('ipapi.co error:', e);
+  }
 
+  return null;
+};
+
+/**
+ * Live Location Requester (Fast GPS with concurrent IP fallback)
+ */
+export const requestUserLiveLocation = async (): Promise<Coordinates | null> => {
+  // Start IP resolution concurrently so user never waits more than 1-2s
+  const ipPromise = fetchLiveIpLocation();
+
+  let hasPermission = false;
+  if (Platform.OS === 'android') {
+    try {
+      const fineGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+      const coarseGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION);
+
+      if (fineGranted || coarseGranted) {
+        hasPermission = true;
+      } else {
+        const statuses = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        ]);
+        hasPermission =
+          statuses[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED ||
+          statuses[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+      }
+    } catch (pErr) {
+      console.log('Location permission error:', pErr);
+    }
+  } else {
+    hasPermission = true;
+  }
+
+  // 1. Try Native Device GPS if permission granted, with a strict 2.5s timeout
+  if (hasPermission && SafeGeolocation && typeof SafeGeolocation.getCurrentPosition === 'function') {
+    const gpsCoords = await new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
+      let settled = false;
+      const done = (coords: any) => {
+        if (!settled) {
+          settled = true;
+          resolve(coords);
+        }
+      };
+
+      try {
+        SafeGeolocation.getCurrentPosition(
+          (pos: any) => {
+            if (pos?.coords) {
+              done({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+              });
+            } else {
+              done(null);
+            }
+          },
+          () => done(null),
+          { enableHighAccuracy: false, timeout: 2500, maximumAge: 30000 }
+        );
+      } catch {
+        done(null);
+      }
+
+      setTimeout(() => done(null), 2500);
+    });
+
+    if (gpsCoords && !isNaN(gpsCoords.latitude) && !isNaN(gpsCoords.longitude)) {
+      const geoInfo = await reverseGeocodeCoords(gpsCoords.latitude, gpsCoords.longitude);
+      const isUk = isWithinUKBoundary(gpsCoords);
       return {
-        latitude: nativeCoords.latitude,
-        longitude: nativeCoords.longitude,
+        latitude: gpsCoords.latitude,
+        longitude: gpsCoords.longitude,
         cityName: geoInfo.cityName,
         countryName: geoInfo.countryName,
         label: geoInfo.label,
         isWithinUK: isUk,
       };
     }
-
-    // Primary IP-based Geolocation fallback if GPS hardware is not connected or in emulator
-    try {
-      const ipRes = await fetch('https://ipwho.is/');
-      if (ipRes.ok) {
-        const ipData = await ipRes.json();
-        if (ipData.success !== false && ipData.latitude && ipData.longitude) {
-          const lat = Number(ipData.latitude);
-          const lon = Number(ipData.longitude);
-          const city = ipData.city || 'Local Area';
-          const country = ipData.country || '';
-          const label = country ? `${city}, ${country}` : city;
-          const coords = {
-            latitude: lat,
-            longitude: lon,
-            cityName: city,
-            countryName: country,
-            label,
-          };
-          return {
-            ...coords,
-            isWithinUK: isWithinUKBoundary(coords),
-          };
-        }
-      }
-    } catch (ipErr) {
-      console.log('ipwho.is lookup failed:', ipErr);
-    }
-
-    // Secondary IP fallback
-    try {
-      const secRes = await fetch('https://freeipapi.com/api/json');
-      if (secRes.ok) {
-        const secData = await secRes.json();
-        if (secData.latitude && secData.longitude) {
-          const lat = Number(secData.latitude);
-          const lon = Number(secData.longitude);
-          const city = secData.cityName || 'Local Area';
-          const country = secData.countryName || '';
-          const label = country ? `${city}, ${country}` : city;
-          const coords = {
-            latitude: lat,
-            longitude: lon,
-            cityName: city,
-            countryName: country,
-            label,
-          };
-          return {
-            ...coords,
-            isWithinUK: isWithinUKBoundary(coords),
-          };
-        }
-      }
-    } catch (secErr) {
-      console.log('Secondary IP lookup failed:', secErr);
-    }
-
-    // Default UK London fallback if all networks are offline
-    return DEFAULT_UK_LOCATION;
-  } catch (e) {
-    return DEFAULT_UK_LOCATION;
   }
+
+  // 2. If GPS did not return a fix within 2.5s (or disabled/emulator), use the resolved live IP location
+  return await ipPromise;
 };
 
 /**

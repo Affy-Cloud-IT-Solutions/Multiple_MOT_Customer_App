@@ -34,6 +34,7 @@ export interface Vehicle {
 
 export interface AlertNotification {
   id: string;
+  _id?: string;
   type: 'NEW_VEHICLE' | 'SOLD' | 'BOOKED';
   customerName: string;
   customerId: string;

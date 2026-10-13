@@ -21,6 +21,7 @@ import {
   validatePassword,
 } from '../utils/validationUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import CustomerHeader from '../components/CustomerHeader';
 
 const { width } = Dimensions.get('window');
 
@@ -190,11 +191,34 @@ export default function ProfileScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      {/* Customer Header with Great UI */}
+      <CustomerHeader
+        title="My Profile"
+        subtitle="Account Settings & Preferences"
+        iconName="account-circle-outline"
+        iconColor={theme.colors.secondary}
+        iconBg={theme.colors.secondary + '15'}
+        rightAction={
+          <TouchableOpacity
+            onPress={toggleTheme}
+            style={[styles.themeToggleBtn, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <MaterialCommunityIcons
+              name={isDarkMode ? 'weather-sunny' : 'weather-night'}
+              size={18}
+              color={theme.colors.secondary}
+            />
+          </TouchableOpacity>
+        }
+      />
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Profile Header */}
       <View
         style={[
@@ -532,6 +556,7 @@ export default function ProfileScreen({ navigation }: any) {
         MOT Reminder System • Version 1.0.0
       </Text>
     </ScrollView>
+  </View>
   );
 }
 
@@ -1017,5 +1042,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginBottom: 20,
     letterSpacing: 0.3,
+  },
+  themeToggleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -13,6 +13,7 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
@@ -85,6 +86,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isInfoModalVisible, setIsInfoModalVisible] = useState(false);
 
   const fetchGarageDetails = async () => {
     setLoading(true);
@@ -467,7 +469,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     if (c.includes('mot')) return 'shield-check';
     if (c.includes('tyre') || c.includes('wheel') || c.includes('tracking')) return 'tire';
     if (c.includes('brake') || c.includes('pad') || c.includes('disc')) return 'car-brake-alert';
-    if (c.includes('diag') || c.includes('scan') || c.includes('code') || c.includes('engine management')) return 'laptop-account';
+    if (c.includes('diag') || c.includes('scan') || c.includes('code') || c.includes('engine management')) return 'engine';
     if (c.includes('air con') || c.includes('ac ') || c.includes('regas') || c.includes('climate')) return 'snowflake';
     if (c.includes('oil') || c.includes('filter') || c.includes('fluid')) return 'oil';
     if (c.includes('exhaust') || c.includes('dpf') || c.includes('emission')) return 'car-windshield';
@@ -488,7 +490,15 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
   // State for services category filtering & search
   const [selectedServiceCategory, setSelectedServiceCategory] = useState<string>('All');
-  const [serviceSearchText, setServiceSearchText] = useState<string>('');
+  const [serviceSearchText, setServiceSearchText] = useState<string>(route?.params?.serviceName || route?.params?.searchQuery || '');
+
+  useEffect(() => {
+    if (route?.params?.serviceName) {
+      setServiceSearchText(route.params.serviceName);
+    } else if (route?.params?.searchQuery) {
+      setServiceSearchText(route.params.searchQuery);
+    }
+  }, [route?.params?.serviceName, route?.params?.searchQuery]);
 
   // Extract all active garage services
   const allActiveServices = useMemo(() => {
@@ -542,31 +552,74 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={{ marginTop: 12, color: theme.colors.text }}>Loading garage details...</Text>
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.topHeaderBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.topHeaderTitle, { color: theme.colors.text }]} numberOfLines={1}>Loading Garage...</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ marginTop: 12, color: theme.colors.text }}>Loading garage details...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (error || !garage) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
-        <MaterialCommunityIcons name="alert-circle-outline" size={48} color={theme.colors.error} />
-        <Text style={{ marginTop: 12, fontSize: 16, color: theme.colors.text, textAlign: 'center' }}>
-          {error || 'Garage details not found.'}
-        </Text>
-        <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={fetchGarageDetails}>
-          <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Retry</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.topHeaderBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.topHeaderTitle, { color: theme.colors.text }]} numberOfLines={1}>Garage Details</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color={theme.colors.error} />
+          <Text style={{ marginTop: 12, fontSize: 16, color: theme.colors.text, textAlign: 'center' }}>
+            {error || 'Garage details not found.'}
+          </Text>
+          <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={fetchGarageDetails}>
+            <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* 1. Top Header Bar: Garage Name as title & Info Icon */}
+      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.card }}>
+        <View style={[styles.topHeaderBar, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.headerBackBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          <Text style={[styles.topHeaderTitle, { color: theme.colors.text }]} numberOfLines={1}>
+            {garage?.name || 'Garage Profile'}
+          </Text>
+
+          <TouchableOpacity
+            onPress={() => setIsInfoModalVisible(true)}
+            style={styles.headerInfoBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialCommunityIcons name="information-outline" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Horizontal Garage Images Showcase */}
+        {/* 2. Horizontal Garage Images Showcase (after title) */}
         {garage.images && garage.images.length > 0 ? (
           <View style={styles.carouselContainer}>
             <ScrollView
@@ -605,9 +658,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
           />
         )}
 
-        {/* Horizontal Padded Content Container */}
+        {/* 3. Horizontal Padded Content Container */}
         <View style={styles.contentContainer}>
-          {/* Banner Logo Section */}
+          {/* Garage Name & Logo Card */}
           <View style={[styles.headerCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <View style={styles.headerRow}>
               <GarageLogo 
@@ -644,114 +697,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 </View>
               </View>
             </View>
-
-            <Text style={[styles.description, { color: theme.colors.text }]}>
-              {garage.description || 'Welcome to our garage checkups. We offer reliable, fast, and approved MOT testing and vehicle diagnostics.'}
-            </Text>
           </View>
 
-          {/* Location & Details */}
-          <View style={[styles.sectionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 0 }]}>Garage Information</Text>
-              <TouchableOpacity
-                onPress={() => openGarageDirections({
-                  name: garage.name,
-                  address: garage.address,
-                  city: garage.city,
-                  postcode: garage.postcode,
-                  latitude: garage.latitude || (garage.location && garage.location.coordinates ? garage.location.coordinates[1] : null),
-                  longitude: garage.longitude || (garage.location && garage.location.coordinates ? garage.location.coordinates[0] : null),
-                })}
-                style={[styles.smallDirectionsBtn, { backgroundColor: theme.colors.primary + '15', borderColor: theme.colors.primary + '40' }]}
-              >
-                <MaterialCommunityIcons name="navigation-variant" size={14} color={theme.colors.primary} style={{ marginRight: 4 }} />
-                <Text style={[styles.smallDirectionsBtnText, { color: theme.colors.primary }]}>Directions</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.infoItem}>
-              <MaterialCommunityIcons name="map-marker" size={18} color={theme.colors.secondary} style={styles.infoIcon} />
-              <Text style={[styles.infoText, { color: theme.colors.text, flex: 1 }]}>
-                {garage.address}{garage.city ? `, ${garage.city}` : ''} {garage.postcode || ''}
-              </Text>
-            </View>
-
-            {garage.phone ? (
-              <View style={styles.infoItem}>
-                <MaterialCommunityIcons name="phone-outline" size={18} color={theme.colors.secondary} style={styles.infoIcon} />
-                <Text style={[styles.infoText, { color: theme.colors.text }]}>
-                  {garage.phone}
-                </Text>
-              </View>
-            ) : null}
-
-            <View style={styles.infoItem}>
-              <MaterialCommunityIcons name="clock-outline" size={18} color={theme.colors.secondary} style={styles.infoIcon} />
-              <Text style={[styles.infoText, { color: theme.colors.text }]}>
-                {garage.openingTime || '08:00'} - {garage.closingTime || '18:00'}
-              </Text>
-            </View>
-
-            <View style={styles.infoItem}>
-              <MaterialCommunityIcons name="calendar-range" size={18} color={theme.colors.secondary} style={styles.infoIcon} />
-              <Text style={[styles.infoText, { color: theme.colors.text }]}>
-                Open Days: {garage.workingDays ? garage.workingDays.join(', ') : 'Mon - Fri'}
-              </Text>
-            </View>
-
-            {/* Prominent Full Width Get Directions Button */}
-            <TouchableOpacity
-              style={[styles.fullDirectionsBtn, { backgroundColor: theme.colors.primary }]}
-              onPress={() => openGarageDirections({
-                name: garage.name,
-                address: garage.address,
-                city: garage.city,
-                postcode: garage.postcode,
-                latitude: garage.latitude || (garage.location && garage.location.coordinates ? garage.location.coordinates[1] : null),
-                longitude: garage.longitude || (garage.location && garage.location.coordinates ? garage.location.coordinates[0] : null),
-              })}
-              activeOpacity={0.8}
-            >
-              <MaterialCommunityIcons name="directions" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.fullDirectionsBtnText}>Get Directions to Garage</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Facility & Workshop Photos Gallery */}
-          {garage.images && garage.images.length > 1 && (
-            <View style={[styles.sectionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <MaterialCommunityIcons name="image-multiple-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 0 }]}>
-                    Garage Facility Photos
-                  </Text>
-                </View>
-                <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
-                  {garage.images.length} photos
-                </Text>
-              </View>
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {garage.images.map((imgUrl: string, idx: number) => (
-                  <TouchableOpacity
-                    key={`thumb-${imgUrl}-${idx}`}
-                    onPress={() => setActiveImageIndex(idx)}
-                    activeOpacity={0.8}
-                    style={[
-                      styles.galleryThumbContainer,
-                      { borderColor: activeImageIndex === idx ? theme.colors.primary : theme.colors.border, borderWidth: activeImageIndex === idx ? 2 : 1 }
-                    ]}
-                  >
-                    <Image source={{ uri: imgUrl }} style={styles.galleryThumb} />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {/* Garage Services & Pricing Catalog */}
+          {/* 4. Garage Services & Pricing Catalog - SHOW IMMEDIATELY AFTER NAME & IMAGE */}
           <View style={styles.servicesSection}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <View>
@@ -915,6 +863,158 @@ export default function GarageDetailScreen({ route, navigation }: any) {
           </View>
         </View>
       </ScrollView>
+
+      {/* Garage Info Modal */}
+      <Modal
+        visible={isInfoModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsInfoModalVisible(false)}
+      >
+        <View style={styles.infoModalOverlay}>
+          <View style={[styles.infoModalContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            {/* Modal Header */}
+            <View style={[styles.infoModalHeader, { borderBottomColor: theme.colors.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <MaterialCommunityIcons name="information" size={22} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                <Text style={[styles.infoModalTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                  Garage Information
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsInfoModalVisible(false)}
+                style={[styles.infoModalCloseBtn, { backgroundColor: theme.colors.background }]}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialCommunityIcons name="close" size={20} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.infoModalBody}>
+              {/* Garage Quick Summary */}
+              <View style={styles.infoModalSummaryRow}>
+                <GarageLogo
+                  uri={garage.logoUrl}
+                  name={garage.name}
+                  style={styles.infoModalLogo}
+                  theme={theme}
+                />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[styles.infoModalGarageName, { color: theme.colors.text }]}>
+                    {garage.name}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                    <MaterialCommunityIcons name="star" size={16} color="#F59E0B" />
+                    <Text style={[styles.ratingText, { color: theme.colors.text, marginLeft: 4 }]}>
+                      {garage.rating ? garage.rating.toFixed(1) : '4.5'}
+                    </Text>
+                    {garage.city ? (
+                      <Text style={{ color: theme.colors.placeholder, marginLeft: 8, fontSize: 12 }}>
+                        • {garage.city}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {garage.vtsNumber ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                      <MaterialCommunityIcons name="shield-check" size={13} color="#10B981" style={{ marginRight: 4 }} />
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981' }}>
+                        DVLA VTS: {garage.vtsNumber}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+
+              {/* Description */}
+              {garage.description ? (
+                <View style={[styles.infoModalBlock, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                  <Text style={[styles.infoModalBlockTitle, { color: theme.colors.placeholder }]}>ABOUT</Text>
+                  <Text style={[styles.infoModalDesc, { color: theme.colors.text }]}>
+                    {garage.description}
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Address / Location */}
+              <View style={[styles.infoModalBlock, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <Text style={[styles.infoModalBlockTitle, { color: theme.colors.placeholder }]}>ADDRESS</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 }}>
+                  <MaterialCommunityIcons name="map-marker" size={18} color={theme.colors.secondary} style={{ marginRight: 8, marginTop: 2 }} />
+                  <Text style={[styles.infoModalText, { color: theme.colors.text, flex: 1 }]}>
+                    {garage.address}{garage.city ? `, ${garage.city}` : ''} {garage.postcode || ''}
+                  </Text>
+                </View>
+
+                {/* Get Directions Button */}
+                <TouchableOpacity
+                  style={[styles.infoDirectionsBtn, { backgroundColor: theme.colors.primary }]}
+                  onPress={() => {
+                    openGarageDirections({
+                      name: garage.name,
+                      address: garage.address,
+                      city: garage.city,
+                      postcode: garage.postcode,
+                      latitude: garage.latitude || (garage.location?.coordinates ? garage.location.coordinates[1] : null),
+                      longitude: garage.longitude || (garage.location?.coordinates ? garage.location.coordinates[0] : null),
+                    });
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons name="directions" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.infoDirectionsBtnText}>Get Directions</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Contact Telephone */}
+              {garage.phone ? (
+                <View style={[styles.infoModalBlock, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                  <Text style={[styles.infoModalBlockTitle, { color: theme.colors.placeholder }]}>CONTACT TELEPHONE</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <MaterialCommunityIcons name="phone-outline" size={18} color={theme.colors.secondary} style={{ marginRight: 8 }} />
+                      <Text style={[styles.infoModalText, { color: theme.colors.text }]}>
+                        {garage.phone}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => Linking.openURL(`tel:${garage.phone}`)}
+                      style={[styles.callBtn, { backgroundColor: theme.colors.secondary + '15', borderColor: theme.colors.secondary + '40' }]}
+                    >
+                      <MaterialCommunityIcons name="phone" size={14} color={theme.colors.secondary} style={{ marginRight: 4 }} />
+                      <Text style={[styles.callBtnText, { color: theme.colors.secondary }]}>Call</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Opening Hours & Working Days */}
+              <View style={[styles.infoModalBlock, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <Text style={[styles.infoModalBlockTitle, { color: theme.colors.placeholder }]}>OPERATING HOURS</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                  <MaterialCommunityIcons name="clock-outline" size={18} color={theme.colors.secondary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.infoModalText, { color: theme.colors.text }]}>
+                    {garage.openingTime || '08:00'} - {garage.closingTime || '18:00'}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                  <MaterialCommunityIcons name="calendar-range" size={18} color={theme.colors.secondary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.infoModalText, { color: theme.colors.text }]}>
+                    {garage.workingDays ? garage.workingDays.join(', ') : 'Monday - Friday'}
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={() => setIsInfoModalVisible(false)}
+              style={[styles.infoModalDoneBtn, { backgroundColor: theme.colors.primary }]}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.infoModalDoneBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Complete MOT Booking Flow Modal */}
       <Modal
@@ -2220,6 +2320,154 @@ const styles = StyleSheet.create({
   fullDirectionsBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: 'bold',
+  },
+  topHeaderBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+  },
+  headerBackBtn: {
+    padding: 6,
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topHeaderTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginHorizontal: 8,
+  },
+  headerInfoBtn: {
+    padding: 6,
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewInfoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  viewInfoPillText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  infoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  infoModalContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+  },
+  infoModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  infoModalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  infoModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoModalBody: {
+    padding: 16,
+    gap: 12,
+  },
+  infoModalSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  infoModalLogo: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+  },
+  infoModalGarageName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  infoModalBlock: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  infoModalBlockTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  infoModalText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  infoModalDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  infoDirectionsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  infoDirectionsBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  callBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  callBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  infoModalDoneBtn: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  infoModalDoneBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: 'bold',
   },
 });

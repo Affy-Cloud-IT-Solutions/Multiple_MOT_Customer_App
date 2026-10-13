@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import HomeScreen from '../screens/HomeScreen';
 import GarageListScreen from '../screens/GarageListScreen';
-import HistoryScreen from '../screens/HistoryScreen';
+import BookingsScreen from '../screens/BookingsScreen';
 import CustomerPortalScreen from '../screens/CustomerPortalScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { useAppTheme } from '../context/ThemeContext';
@@ -16,6 +16,7 @@ export default function MainTabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
+        headerShown: false,
         tabBarIcon: ({ color, size, focused }) => {
           let iconName = 'magnify';
 
@@ -23,8 +24,8 @@ export default function MainTabNavigator() {
             iconName = focused ? 'magnify' : 'magnify';
           } else if (route.name === 'Garages') {
             iconName = focused ? 'store' : 'store-outline';
-          } else if (route.name === 'History') {
-            iconName = focused ? 'history' : 'history';
+          } else if (route.name === 'Bookings' || route.name === 'History') {
+            iconName = focused ? 'calendar-clock' : 'calendar-clock-outline';
           } else if (route.name === 'My Portal') {
             iconName = focused ? 'car-cog' : 'car';
           } else if (route.name === 'Profile') {
@@ -64,27 +65,27 @@ export default function MainTabNavigator() {
       <Tab.Screen 
         name="Home" 
         component={HomeScreen} 
-        options={{ title: 'Home' }} 
+        options={{ title: 'Search', tabBarLabel: 'Search', headerShown: false }} 
       />
       <Tab.Screen 
         name="Garages" 
         component={GarageListScreen} 
-        options={{ title: 'Find Garages' }} 
+        options={{ title: 'Garages', tabBarLabel: 'Garages', headerShown: false }} 
       />
       <Tab.Screen 
-        name="History" 
-        component={HistoryScreen} 
-        options={{ title: 'Recent Checks' }} 
+        name="Bookings" 
+        component={BookingsScreen} 
+        options={{ title: 'Bookings', tabBarLabel: 'Bookings', headerShown: false }} 
       />
       <Tab.Screen 
         name="My Portal" 
         component={CustomerPortalScreen} 
-        options={{ title: 'My Vehicles & Bookings' }} 
+        options={{ title: 'Vehicles', tabBarLabel: 'Vehicles', headerShown: false }} 
       />
       <Tab.Screen 
         name="Profile" 
         component={ProfileScreen} 
-        options={{ title: 'Settings' }} 
+        options={{ title: 'Profile', tabBarLabel: 'Profile', headerShown: false }} 
       />
     </Tab.Navigator>
   );

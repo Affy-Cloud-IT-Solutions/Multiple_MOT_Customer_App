@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,9 +45,24 @@ export default function ResultScreen({ route, navigation }: any) {
 
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Header Plate */}
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.card }}>
+        <View style={[styles.topNavRow, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.navBackBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.navTitle, { color: theme.colors.text }]}>MOT Check Results</Text>
+          <View style={{ width: 40 }} />
+        </View>
+      </SafeAreaView>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Header Plate */}
+        <View style={styles.header}>
         <View style={styles.plateContainer}>
           <View style={styles.ukStrip}>
             <Text style={styles.ukText}>UK</Text>
@@ -207,6 +223,7 @@ export default function ResultScreen({ route, navigation }: any) {
         )}
       </View>
     </ScrollView>
+  </View>
   );
 }
 
@@ -362,5 +379,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  topNavRow: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+  },
+  navBackBtn: {
+    padding: 6,
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
 });

@@ -13,6 +13,7 @@ import GarageListScreen from '../screens/GarageListScreen';
 import GarageDetailScreen from '../screens/GarageDetailScreen';
 import ResultScreen from '../screens/ResultScreen';
 import MotHistoryScreen from '../screens/MotHistoryScreen';
+import BookingsScreen from '../screens/BookingsScreen';
 import { useAppTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator();
@@ -24,6 +25,7 @@ export default function RootNavigator() {
     <Stack.Navigator
       initialRouteName="Main"
       screenOptions={{
+        headerShown: false,
         headerStyle: {
           backgroundColor: theme.colors.card,
         },
@@ -82,22 +84,32 @@ export default function RootNavigator() {
       <Stack.Screen
         name="GarageList"
         component={GarageListScreen}
-        options={{ headerShown: true, title: 'Garages' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="GarageDetail"
         component={GarageDetailScreen}
-        options={{ headerShown: true, title: 'Garage Profile' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="Result"
         component={ResultScreen}
-        options={{ title: 'MOT Check Results' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="MotHistory"
         component={MotHistoryScreen}
-        options={{ title: 'MOT History' }}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Bookings"
+        component={BookingsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="History"
+        component={BookingsScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );
