@@ -21,6 +21,7 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { openGarageDirections } from '../utils/mapUtils';
+import { isServiceMatch } from '../components/FilterServiceBottomSheet';
 
 const GarageLogo = ({ uri, name, style, theme }: any) => {
   const [error, setError] = useState(false);
@@ -85,8 +86,32 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isInfoModalVisible, setIsInfoModalVisible] = useState(false);
+  const [isGalleryModalVisible, setIsGalleryModalVisible] = useState(false);
+  const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
+
+  // All photos associated with the garage for info & full gallery modal
+  const displayGarageImages = useMemo(() => {
+    if (!garage) return [];
+    const list: string[] = [];
+    if (Array.isArray(garage.images)) {
+      garage.images.forEach((img: any) => {
+        if (typeof img === 'string' && img.trim() && !list.includes(img.trim())) {
+          list.push(img.trim());
+        }
+      });
+    }
+    if (garage.coverImage && typeof garage.coverImage === 'string' && garage.coverImage.trim() && !list.includes(garage.coverImage.trim())) {
+      list.unshift(garage.coverImage.trim());
+    }
+    if (garage.logoUrl && typeof garage.logoUrl === 'string' && garage.logoUrl.trim() && !list.includes(garage.logoUrl.trim())) {
+      list.push(garage.logoUrl.trim());
+    }
+    if (list.length === 0) {
+      list.push('https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=800&fit=crop');
+    }
+    return list;
+  }, [garage]);
 
   const fetchGarageDetails = async () => {
     setLoading(true);
@@ -541,7 +566,16 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       const matchCat = selectedServiceCategory === 'All' || sCat.toLowerCase() === selectedServiceCategory.toLowerCase();
       
       const q = serviceSearchText.trim().toLowerCase();
-      const matchQuery = !q || 
+      if (!q) return matchCat;
+
+      const isMotSearch = /\bmot\b/i.test(q);
+      const isMotService = /\bmot\b/i.test(s.name || '') || /\bmot\b/i.test(sCat);
+      if (isMotSearch && isMotService) {
+        return matchCat;
+      }
+
+      const matchQuery =
+        isServiceMatch(s, q) ||
         (s.name && s.name.toLowerCase().includes(q)) ||
         (s.description && s.description.toLowerCase().includes(q)) ||
         (s.category && s.category.toLowerCase().includes(q));
@@ -619,87 +653,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       </SafeAreaView>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* 2. Horizontal Garage Images Showcase (after title) */}
-        {garage.images && garage.images.length > 0 ? (
-          <View style={styles.carouselContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              pagingEnabled
-              onMomentumScrollEnd={(e) => {
-                const offset = e.nativeEvent.contentOffset.x;
-                const idx = Math.round(offset / screenWidth);
-                setActiveImageIndex(idx);
-              }}
-              style={styles.imagesCarousel}
-            >
-              {garage.images.map((imgUrl: string, idx: number) => (
-                <GarageCarouselImage 
-                  key={`${imgUrl}-${idx}`} 
-                  uri={imgUrl} 
-                  style={[styles.carouselImage, { width: screenWidth }]} 
-                  width={screenWidth}
-                />
-              ))}
-            </ScrollView>
-
-            <View style={styles.carouselBadge}>
-              <MaterialCommunityIcons name="camera" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
-              <Text style={styles.carouselBadgeText}>
-                {activeImageIndex + 1} / {garage.images.length}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <GarageCarouselImage
-            uri='https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=600&h=300&fit=crop'
-            style={[styles.heroImage, { width: screenWidth }]}
-            width={screenWidth}
-          />
-        )}
-
-        {/* 3. Horizontal Padded Content Container */}
+        {/* Horizontal Padded Content Container */}
         <View style={styles.contentContainer}>
-          {/* Garage Name & Logo Card */}
-          <View style={[styles.headerCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <View style={styles.headerRow}>
-              <GarageLogo 
-                uri={garage.logoUrl} 
-                name={garage.name} 
-                style={styles.logo} 
-                theme={theme} 
-              />
-              <View style={styles.headerInfo}>
-                <Text style={[styles.garageName, { color: theme.colors.text }]}>{garage.name}</Text>
-                <View style={styles.ratingRow}>
-                  <MaterialCommunityIcons name="star" size={16} color="#F59E0B" />
-                  <Text style={[styles.ratingText, { color: theme.colors.text }]}>
-                    {garage.rating ? garage.rating.toFixed(1) : '4.5'}
-                  </Text>
-                  {garage.city ? (
-                    <>
-                      <Text style={{ color: theme.colors.placeholder, marginLeft: 8 }}>•</Text>
-                      <Text style={{ color: theme.colors.placeholder, marginLeft: 8, fontSize: 12 }}>
-                        {garage.city}
-                      </Text>
-                    </>
-                  ) : null}
-                </View>
-
-                {/* DVLA MOT Authorised Station Badge */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B98115', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: '#10B98140' }}>
-                    <MaterialCommunityIcons name="shield-check" size={12} color="#10B981" style={{ marginRight: 4 }} />
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#10B981' }}>
-                      DVLA MOT Authorised {garage.vtsNumber ? `• ${garage.vtsNumber}` : ''}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* 4. Garage Services & Pricing Catalog - SHOW IMMEDIATELY AFTER NAME & IMAGE */}
+          {/* Garage Services & Pricing Catalog - Starts directly with Services & Pricing */}
           <View style={styles.servicesSection}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <View>
@@ -891,18 +847,47 @@ export default function GarageDetailScreen({ route, navigation }: any) {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.infoModalBody}>
-              {/* Garage Quick Summary */}
+              {/* Garage Quick Summary - Click image to view all photos */}
               <View style={styles.infoModalSummaryRow}>
-                <GarageLogo
-                  uri={garage.logoUrl}
-                  name={garage.name}
-                  style={styles.infoModalLogo}
-                  theme={theme}
-                />
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setSelectedGalleryIndex(0);
+                    setIsGalleryModalVisible(true);
+                  }}
+                  style={styles.infoModalLogoTouch}
+                >
+                  <GarageLogo
+                    uri={garage.logoUrl || (garage.images && garage.images.length > 0 ? garage.images[0] : null)}
+                    name={garage.name}
+                    style={styles.infoModalLogo}
+                    theme={theme}
+                  />
+                  <View style={styles.photoCountBadge}>
+                    <MaterialCommunityIcons name="camera" size={11} color="#FFFFFF" />
+                    <Text style={styles.photoCountBadgeText}>
+                      {displayGarageImages.length}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={[styles.infoModalGarageName, { color: theme.colors.text }]}>
                     {garage.name}
                   </Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setSelectedGalleryIndex(0);
+                      setIsGalleryModalVisible(true);
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}
+                  >
+                    <MaterialCommunityIcons name="image-multiple-outline" size={13} color={theme.colors.primary} />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary, marginLeft: 3 }}>
+                      {displayGarageImages.length > 1 ? `View all ${displayGarageImages.length} photos` : 'View photo'}
+                    </Text>
+                  </TouchableOpacity>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                     <MaterialCommunityIcons name="star" size={16} color="#F59E0B" />
                     <Text style={[styles.ratingText, { color: theme.colors.text, marginLeft: 4 }]}>
@@ -924,6 +909,46 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   ) : null}
                 </View>
               </View>
+
+              {/* Photos Preview strip in Info Modal */}
+              {displayGarageImages.length > 0 && (
+                <View style={[styles.infoModalBlock, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={[styles.infoModalBlockTitle, { color: theme.colors.placeholder }]}>
+                      GARAGE PHOTOS ({displayGarageImages.length})
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedGalleryIndex(0);
+                        setIsGalleryModalVisible(true);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>
+                        See All
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    {displayGarageImages.map((imgUri, idx) => (
+                      <TouchableOpacity
+                        key={`thumb-preview-${idx}`}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setSelectedGalleryIndex(idx);
+                          setIsGalleryModalVisible(true);
+                        }}
+                        style={styles.infoThumbWrap}
+                      >
+                        <Image source={{ uri: imgUri }} style={styles.infoThumbImg} resizeMode="cover" />
+                        <View style={styles.infoThumbOverlay}>
+                          <Text style={styles.infoThumbOverlayText}>{idx + 1}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
 
               {/* Description */}
               {garage.description ? (
@@ -1014,6 +1039,107 @@ export default function GarageDetailScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* Full-Screen All Images Gallery Modal */}
+      <Modal
+        visible={isGalleryModalVisible}
+        animationType="fade"
+        transparent={false}
+        onRequestClose={() => setIsGalleryModalVisible(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#0B0F19' }}>
+          {/* Top Bar with title, index counter, and close button */}
+          <View style={styles.galleryTopBar}>
+            <TouchableOpacity
+              onPress={() => setIsGalleryModalVisible(false)}
+              style={styles.galleryCloseBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <View style={styles.galleryCounterPill}>
+              <MaterialCommunityIcons name="camera" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.galleryCounterText}>
+                {selectedGalleryIndex + 1} / {displayGarageImages.length}
+              </Text>
+            </View>
+
+            <View style={{ width: 40 }} />
+          </View>
+
+          {/* Main Large Image Display with Left / Right Navigation */}
+          <View style={styles.galleryMainImageContainer}>
+            <Image
+              source={{ uri: displayGarageImages[selectedGalleryIndex] }}
+              style={styles.galleryMainImage}
+              resizeMode="contain"
+            />
+
+            {/* Left Nav Arrow */}
+            {selectedGalleryIndex > 0 && (
+              <TouchableOpacity
+                onPress={() => setSelectedGalleryIndex(prev => Math.max(0, prev - 1))}
+                style={[styles.galleryNavArrow, styles.galleryNavArrowLeft]}
+                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="chevron-left" size={32} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+
+            {/* Right Nav Arrow */}
+            {selectedGalleryIndex < displayGarageImages.length - 1 && (
+              <TouchableOpacity
+                onPress={() => setSelectedGalleryIndex(prev => Math.min(displayGarageImages.length - 1, prev + 1))}
+                style={[styles.galleryNavArrow, styles.galleryNavArrowRight]}
+                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="chevron-right" size={32} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Garage Name Caption */}
+          <View style={styles.galleryCaptionBar}>
+            <Text style={styles.galleryGarageTitle} numberOfLines={1}>
+              {garage?.name || 'Garage Photos'}
+            </Text>
+            <Text style={styles.galleryGarageSubtitle} numberOfLines={1}>
+              {garage?.address ? `${garage.address}${garage.city ? `, ${garage.city}` : ''}` : 'Workshop & Facilities'}
+            </Text>
+          </View>
+
+          {/* Bottom Thumbnails Strip */}
+          {displayGarageImages.length > 1 && (
+            <View style={styles.galleryThumbnailContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.galleryThumbnailScroll}
+              >
+                {displayGarageImages.map((thumbUri, idx) => {
+                  const isActive = idx === selectedGalleryIndex;
+                  return (
+                    <TouchableOpacity
+                      key={`gallery-strip-${idx}`}
+                      onPress={() => setSelectedGalleryIndex(idx)}
+                      activeOpacity={0.8}
+                      style={[
+                        styles.galleryStripThumbTouch,
+                        isActive && styles.galleryStripThumbActive,
+                      ]}
+                    >
+                      <Image source={{ uri: thumbUri }} style={styles.galleryStripThumbImg} resizeMode="cover" />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+        </SafeAreaView>
       </Modal>
 
       {/* Complete MOT Booking Flow Modal */}
@@ -2469,5 +2595,146 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  infoModalLogoTouch: {
+    position: 'relative',
+  },
+  photoCountBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    backgroundColor: '#0F172A',
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  photoCountBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  infoThumbWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  infoThumbImg: {
+    width: '100%',
+    height: '100%',
+  },
+  infoThumbOverlay: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  infoThumbOverlayText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  galleryTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  galleryCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryCounterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  galleryCounterText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  galleryMainImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  galleryMainImage: {
+    width: '100%',
+    height: '100%',
+  },
+  galleryNavArrow: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryNavArrowLeft: {
+    left: 12,
+  },
+  galleryNavArrowRight: {
+    right: 12,
+  },
+  galleryCaptionBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  galleryGarageTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  galleryGarageSubtitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  galleryThumbnailContainer: {
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+  },
+  galleryThumbnailScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  galleryStripThumbTouch: {
+    width: 54,
+    height: 54,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  galleryStripThumbActive: {
+    borderColor: '#3B82F6',
+  },
+  galleryStripThumbImg: {
+    width: '100%',
+    height: '100%',
   },
 });

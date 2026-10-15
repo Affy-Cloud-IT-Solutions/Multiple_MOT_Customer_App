@@ -200,27 +200,26 @@ export default function ResultScreen({ route, navigation }: any) {
 
       {/* MOT History Button */}
       <View style={styles.buttonContainer}>
-        {vehicle.motTests && vehicle.motTests.length > 0 && (
-          <TouchableOpacity
-            onPress={() => navigation.navigate('MotHistory', { vehicleData: vehicle })}
-            style={[
-              styles.saveButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
-          >
-            <View style={styles.saveButtonContent}>
-              <MaterialCommunityIcons 
-                name="history" 
-                size={20} 
-                color="#FFFFFF" 
-                style={{ marginRight: 8 }} 
-              />
-              <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
-                View Full MOT History
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          onPress={() => navigation.navigate('MotHistory', { vehicleData: vehicle, registration: vehicle.registration })}
+          style={[
+            styles.saveButton,
+            { backgroundColor: theme.colors.secondary },
+          ]}
+          activeOpacity={0.85}
+        >
+          <View style={styles.saveButtonContent}>
+            <MaterialCommunityIcons 
+              name="history" 
+              size={20} 
+              color="#FFFFFF" 
+              style={{ marginRight: 8 }} 
+            />
+            <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
+              View Full MOT History & Test Records
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   </View>

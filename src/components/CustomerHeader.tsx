@@ -13,6 +13,7 @@ export interface CustomerHeaderProps {
   showBack?: boolean;
   onBack?: () => void;
   rightAction?: React.ReactNode;
+  customLeft?: React.ReactNode;
 }
 
 export default function CustomerHeader({
@@ -24,6 +25,7 @@ export default function CustomerHeader({
   showBack,
   onBack,
   rightAction,
+  customLeft,
 }: CustomerHeaderProps) {
   const { theme } = useAppTheme();
 
@@ -44,22 +46,28 @@ export default function CustomerHeader({
             </TouchableOpacity>
           )}
 
-          {iconName && (
+          {customLeft ? (
+            customLeft
+          ) : iconName ? (
             <View style={[styles.iconWrap, { backgroundColor: activeIconBg }]}>
               <MaterialCommunityIcons name={iconName} size={20} color={activeIconColor} />
             </View>
-          )}
+          ) : null}
 
-          <View style={styles.titleColumn}>
-            <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>
-              {title}
-            </Text>
-            {subtitle ? (
-              <Text style={[styles.subtitle, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                {subtitle}
-              </Text>
-            ) : null}
-          </View>
+          {(title || subtitle) ? (
+            <View style={styles.titleColumn}>
+              {title ? (
+                <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>
+                  {title}
+                </Text>
+              ) : null}
+              {subtitle ? (
+                <Text style={[styles.subtitle, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
 
         {rightAction ? <View style={styles.rightContent}>{rightAction}</View> : null}

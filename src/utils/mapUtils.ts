@@ -25,19 +25,208 @@ export interface Coordinates {
   cityName?: string;
   countryName?: string;
   isWithinUK?: boolean;
+  address?: string;
+  suburb?: string;
+  road?: string;
+  postcode?: string;
 }
 
-
-// Preset UK Locations for Quick Selection & Testing
-export const UK_PRESET_LOCATIONS: Record<string, Coordinates> = {
-  'London Central': { latitude: 51.5074, longitude: -0.1278, label: 'Central London (SW1A)', cityName: 'London', countryName: 'United Kingdom', isWithinUK: true },
-  'London North': { latitude: 51.5414, longitude: -0.1444, label: 'Camden / North London (NW1)', cityName: 'London', countryName: 'United Kingdom', isWithinUK: true },
-  'London South': { latitude: 51.4816, longitude: -0.0910, label: 'Southwark / London (SE1)', cityName: 'London', countryName: 'United Kingdom', isWithinUK: true },
-  'Manchester': { latitude: 53.4808, longitude: -2.2426, label: 'Manchester City Centre (M1)', cityName: 'Manchester', countryName: 'United Kingdom', isWithinUK: true },
-  'Birmingham': { latitude: 52.4862, longitude: -1.8904, label: 'Birmingham Centre (B3)', cityName: 'Birmingham', countryName: 'United Kingdom', isWithinUK: true },
-  'Leeds': { latitude: 53.7968, longitude: -1.5489, label: 'Leeds City Centre (LS1)', cityName: 'Leeds', countryName: 'United Kingdom', isWithinUK: true },
-  'Bristol': { latitude: 51.4545, longitude: -2.5979, label: 'Bristol Centre (BS1)', cityName: 'Bristol', countryName: 'United Kingdom', isWithinUK: true },
+/**
+ * Returns a concise, user-friendly, precise location display string
+ */
+export const formatPreciseLocation = (coords: Coordinates | null | undefined): string => {
+  if (!coords) return 'Select Location';
+  if (coords.address && coords.address.trim()) {
+    return coords.address.trim();
+  }
+  if (coords.label && coords.label.trim()) {
+    const parts = coords.label.split(',').map((s) => s.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return parts.slice(0, 2).join(', ');
+    }
+    return coords.label.trim();
+  }
+  return coords.cityName || 'United Kingdom';
 };
+
+// Preset UK Locations with Precise Addresses, Streets & Postcodes
+export const UK_PRESET_LOCATIONS: Record<string, Coordinates> = {
+  'London Central': {
+    latitude: 51.5074,
+    longitude: -0.1278,
+    label: 'Trafalgar Square, Westminster, London, WC2N 5DU',
+    address: 'Trafalgar Sq, Westminster (WC2N)',
+    cityName: 'Westminster, London (WC2N)',
+    countryName: 'United Kingdom',
+    postcode: 'WC2N 5DU',
+    isWithinUK: true,
+  },
+  'London North': {
+    latitude: 51.5414,
+    longitude: -0.1444,
+    label: 'Camden High Street, Camden Town, London, NW1 7JE',
+    address: 'Camden High St, Camden Town (NW1)',
+    cityName: 'Camden Town, London (NW1)',
+    countryName: 'United Kingdom',
+    postcode: 'NW1 7JE',
+    isWithinUK: true,
+  },
+  'London South': {
+    latitude: 51.4816,
+    longitude: -0.091,
+    label: 'New Kent Road, Elephant & Castle, Southwark, SE1 6TJ',
+    address: 'New Kent Rd, Southwark (SE1)',
+    cityName: 'Southwark, London (SE1)',
+    countryName: 'United Kingdom',
+    postcode: 'SE1 6TJ',
+    isWithinUK: true,
+  },
+  'Manchester': {
+    latitude: 53.4808,
+    longitude: -2.2426,
+    label: 'Piccadilly Gardens, City Centre, Manchester, M1 1RN',
+    address: 'Piccadilly Gardens, Manchester (M1)',
+    cityName: 'Piccadilly, Manchester (M1)',
+    countryName: 'United Kingdom',
+    postcode: 'M1 1RN',
+    isWithinUK: true,
+  },
+  'Birmingham': {
+    latitude: 52.4862,
+    longitude: -1.8904,
+    label: 'Colmore Row, Birmingham City Centre, B3 2QD',
+    address: 'Colmore Row, Birmingham (B3)',
+    cityName: 'Colmore Row, Birmingham (B3)',
+    countryName: 'United Kingdom',
+    postcode: 'B3 2QD',
+    isWithinUK: true,
+  },
+  'Leeds': {
+    latitude: 53.7968,
+    longitude: -1.5489,
+    label: 'Briggate, Leeds City Centre, LS1 6HD',
+    address: 'Briggate, Leeds Centre (LS1)',
+    cityName: 'Briggate, Leeds (LS1)',
+    countryName: 'United Kingdom',
+    postcode: 'LS1 6HD',
+    isWithinUK: true,
+  },
+  'Bristol': {
+    latitude: 51.4545,
+    longitude: -2.5979,
+    label: 'Broadmead, Bristol City Centre, BS1 3EA',
+    address: 'Broadmead, Bristol Centre (BS1)',
+    cityName: 'Broadmead, Bristol (BS1)',
+    countryName: 'United Kingdom',
+    postcode: 'BS1 3EA',
+    isWithinUK: true,
+  },
+  'Glasgow': {
+    latitude: 55.8642,
+    longitude: -4.2518,
+    label: 'George Square, Glasgow City Centre, G1 1QX',
+    address: 'George Sq, Glasgow Centre (G1)',
+    cityName: 'George Square, Glasgow (G1)',
+    countryName: 'United Kingdom',
+    postcode: 'G1 1QX',
+    isWithinUK: true,
+  },
+  'Liverpool': {
+    latitude: 53.4084,
+    longitude: -2.9916,
+    label: 'Lord Street, Liverpool ONE, Liverpool, L1 8BU',
+    address: 'Lord St, Liverpool Centre (L1)',
+    cityName: 'Lord St, Liverpool (L1)',
+    countryName: 'United Kingdom',
+    postcode: 'L1 8BU',
+    isWithinUK: true,
+  },
+  'Edinburgh': {
+    latitude: 55.9533,
+    longitude: -3.1883,
+    label: 'Royal Mile, Old Town, Edinburgh, EH1 2PB',
+    address: 'Royal Mile, Old Town (EH1)',
+    cityName: 'Royal Mile, Edinburgh (EH1)',
+    countryName: 'United Kingdom',
+    postcode: 'EH1 2PB',
+    isWithinUK: true,
+  },
+  'Cardiff': {
+    latitude: 51.4816,
+    longitude: -3.1791,
+    label: 'Queen Street, Cardiff City Centre, CF10 2HQ',
+    address: 'Queen St, Cardiff Centre (CF10)',
+    cityName: 'Queen St, Cardiff (CF10)',
+    countryName: 'United Kingdom',
+    postcode: 'CF10 2HQ',
+    isWithinUK: true,
+  },
+  'Belfast': {
+    latitude: 54.5973,
+    longitude: -5.9301,
+    label: 'Donegall Square, Belfast City Centre, BT1 5GS',
+    address: 'Donegall Sq, Belfast (BT1)',
+    cityName: 'Donegall Sq, Belfast (BT1)',
+    countryName: 'United Kingdom',
+    postcode: 'BT1 5GS',
+    isWithinUK: true,
+  },
+  'Newcastle': {
+    latitude: 54.9783,
+    longitude: -1.6178,
+    label: 'Grey Street, Grainger Town, Newcastle, NE1 6EE',
+    address: 'Grey St, Newcastle (NE1)',
+    cityName: 'Grey St, Newcastle (NE1)',
+    countryName: 'United Kingdom',
+    postcode: 'NE1 6EE',
+    isWithinUK: true,
+  },
+  'Sheffield': {
+    latitude: 53.3811,
+    longitude: -1.4701,
+    label: 'Fargate, Sheffield City Centre, S1 2HE',
+    address: 'Fargate, Sheffield Centre (S1)',
+    cityName: 'Fargate, Sheffield (S1)',
+    countryName: 'United Kingdom',
+    postcode: 'S1 2HE',
+    isWithinUK: true,
+  },
+};
+
+// Preset Non-UK Test Locations
+export const NON_UK_TEST_LOCATIONS: Record<string, Coordinates> = {
+  'Bhopal (India)': {
+    latitude: 23.2599,
+    longitude: 77.4126,
+    label: 'Ibrahimpura, Old Bhopal, Madhya Pradesh, 462001, India',
+    address: 'Ibrahimpura, Bhopal (462001)',
+    cityName: 'Ibrahimpura, Bhopal',
+    countryName: 'India',
+    postcode: '462001',
+    isWithinUK: false,
+  },
+  'Dubai (UAE)': {
+    latitude: 25.2048,
+    longitude: 55.2708,
+    label: 'Sheikh Mohammed bin Rashid Blvd, Downtown Dubai, UAE',
+    address: 'Downtown Dubai, Burj Khalifa Area',
+    cityName: 'Downtown, Dubai',
+    countryName: 'United Arab Emirates',
+    isWithinUK: false,
+  },
+  'New York (USA)': {
+    latitude: 40.7128,
+    longitude: -74.006,
+    label: 'Broadway, Lower Manhattan, New York, NY 10007, USA',
+    address: 'Broadway, Manhattan, NY (10007)',
+    cityName: 'Manhattan, New York',
+    countryName: 'United States',
+    postcode: '10007',
+    isWithinUK: false,
+  },
+};
+
+export const DEFAULT_NON_UK_LOCATION: Coordinates = NON_UK_TEST_LOCATIONS['Bhopal (India)'];
 
 /**
  * Checks if coordinate falls within the geographic boundary of the United Kingdom
@@ -98,15 +287,27 @@ export const calculateDistanceInMiles = (
 };
 
 /**
- * Reverse geocodes coordinates to a human-readable city/region name
+ * Reverse geocodes coordinates to a precise human-readable street/suburb address
  */
-export const reverseGeocodeCoords = async (latitude: number, longitude: number): Promise<{ cityName?: string; countryName?: string; label: string }> => {
+export const reverseGeocodeCoords = async (
+  latitude: number,
+  longitude: number
+): Promise<{
+  cityName?: string;
+  countryName?: string;
+  address?: string;
+  postcode?: string;
+  suburb?: string;
+  road?: string;
+  label: string;
+}> => {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
+    // Call Nominatim with full address details (without zoom limit to get street level)
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
       {
         headers: { 'User-Agent': 'MultipleMOTUK-App/1.0' },
         signal: controller.signal,
@@ -116,20 +317,70 @@ export const reverseGeocodeCoords = async (latitude: number, longitude: number):
 
     if (res.ok) {
       const data = await res.json();
-      const city = data.address?.city || data.address?.town || data.address?.state_district || data.address?.state || data.address?.county || 'Current Area';
-      const country = data.address?.country || '';
-      const label = country ? `${city}, ${country}` : city;
-      return { cityName: city, countryName: country, label };
+      const addr = data.address || {};
+
+      const road = addr.road || addr.pedestrian || addr.footway || addr.street || '';
+      const suburb =
+        addr.suburb ||
+        addr.neighbourhood ||
+        addr.residential ||
+        addr.quarter ||
+        addr.city_district ||
+        '';
+      const city =
+        addr.city ||
+        addr.town ||
+        addr.village ||
+        addr.municipality ||
+        addr.county ||
+        addr.state_district ||
+        '';
+      const postcode = addr.postcode || '';
+      const country = addr.country || '';
+
+      // Build clean, concise street and locality address
+      const parts: string[] = [];
+      if (road) parts.push(road);
+      if (suburb && !parts.some((p) => p.toLowerCase() === suburb.toLowerCase())) parts.push(suburb);
+      if (city && !parts.some((p) => p.toLowerCase() === city.toLowerCase())) parts.push(city);
+      if (postcode) parts.push(`(${postcode})`);
+
+      const preciseAddress =
+        parts.length > 0
+          ? parts.join(', ')
+          : data.display_name?.split(',').slice(0, 3).join(', ') || city || 'Current Location';
+
+      const shortCityDisplay =
+        suburb && city && suburb.toLowerCase() !== city.toLowerCase()
+          ? `${suburb}, ${city}`
+          : road && city
+          ? `${road}, ${city}`
+          : city || suburb || preciseAddress;
+
+      const label = data.display_name || (country ? `${preciseAddress}, ${country}` : preciseAddress);
+
+      return {
+        cityName: shortCityDisplay,
+        countryName: country,
+        address: preciseAddress,
+        postcode,
+        suburb,
+        road,
+        label,
+      };
     }
   } catch (e) {
     // Non-blocking fallback
   }
 
-  return { label: `${latitude.toFixed(2)}°, ${longitude.toFixed(2)}°` };
+  return {
+    label: `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`,
+    address: `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`,
+  };
 };
 
 /**
- * Resolves UK Postcode to exact GPS Coordinates via api.postcodes.io
+ * Resolves UK Postcode to exact GPS Coordinates & street/ward address via api.postcodes.io
  */
 export const getCoordinatesFromUKPostcode = async (postcode: string): Promise<Coordinates | null> => {
   try {
@@ -141,12 +392,23 @@ export const getCoordinatesFromUKPostcode = async (postcode: string): Promise<Co
 
     const data = await res.json();
     if (data.status === 200 && data.result) {
+      const r = data.result;
+      const locality = r.admin_ward || r.parish || r.admin_district || 'UK';
+      const district = r.admin_district || '';
+      const pcFormatted = `${r.outcode} ${r.incode}`;
+      const preciseAddress =
+        locality && district && locality.toLowerCase() !== district.toLowerCase()
+          ? `${locality}, ${district} (${pcFormatted})`
+          : `${district || locality} (${pcFormatted})`;
+
       return {
-        latitude: data.result.latitude,
-        longitude: data.result.longitude,
-        label: `${postcode.toUpperCase()} (${data.result.admin_district || data.result.parish || 'UK'})`,
-        cityName: data.result.admin_district || data.result.parish || 'UK Region',
+        latitude: r.latitude,
+        longitude: r.longitude,
+        address: preciseAddress,
+        label: `${locality}, ${district}, ${pcFormatted}, United Kingdom`,
+        cityName: `${locality}, ${r.outcode}`,
         countryName: 'United Kingdom',
+        postcode: pcFormatted,
         isWithinUK: true,
       };
     }
@@ -163,17 +425,73 @@ export const getCoordinatesFromLocationQuery = async (query: string): Promise<Co
   const q = query.trim();
   if (!q) return null;
 
-  // Check preset UK cities first
   const lower = q.toLowerCase();
+
+  // 1. Check preset UK cities first
   for (const [cityName, coords] of Object.entries(UK_PRESET_LOCATIONS)) {
     if (lower.includes(cityName.toLowerCase()) || cityName.toLowerCase().includes(lower)) {
       return coords;
     }
   }
 
-  // Try UK Postcode resolver
+  // 2. Check preset Non-UK test locations (e.g. Bhopal, Dubai, New York)
+  for (const [cityName, coords] of Object.entries(NON_UK_TEST_LOCATIONS)) {
+    if (lower.includes(cityName.toLowerCase()) || cityName.toLowerCase().includes(lower)) {
+      return coords;
+    }
+  }
+
+  // 3. Try UK Postcode resolver
   const pcCoords = await getCoordinatesFromUKPostcode(q);
   if (pcCoords) return pcCoords;
+
+  // 4. Fallback to OpenStreetMap geocoding with detailed address
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=1`,
+      {
+        headers: { 'User-Agent': 'MultipleMOTUK-App/1.0' },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const results = await res.json();
+      if (Array.isArray(results) && results.length > 0) {
+        const item = results[0];
+        const lat = parseFloat(item.lat);
+        const lon = parseFloat(item.lon);
+        if (!isNaN(lat) && !isNaN(lon)) {
+          const addr = item.address || {};
+          const road = addr.road || addr.street || '';
+          const suburb = addr.suburb || addr.neighbourhood || addr.quarter || '';
+          const city = addr.city || addr.town || addr.village || item.name || q;
+          const postcode = addr.postcode || '';
+
+          const parts = [road, suburb, city].filter(Boolean);
+          if (postcode) parts.push(`(${postcode})`);
+
+          const preciseAddress = parts.length > 0 ? parts.join(', ') : item.display_name?.split(',').slice(0, 3).join(', ') || q;
+
+          const coords: Coordinates = {
+            latitude: lat,
+            longitude: lon,
+            address: preciseAddress,
+            label: item.display_name || preciseAddress,
+            cityName: suburb && city ? `${suburb}, ${city}` : city,
+            countryName: addr.country || '',
+            postcode,
+          };
+          coords.isWithinUK = isWithinUKBoundary(coords);
+          return coords;
+        }
+      }
+    }
+  } catch (e) {
+    // Non-blocking
+  }
 
   return null;
 };
@@ -195,14 +513,22 @@ export const fetchLiveIpLocation = async (): Promise<Coordinates | null> => {
         const lon = Number(data.longitude);
         const city = data.city || data.region || 'Current Area';
         const country = data.country || '';
-        const region = data.region ? `${data.region}, ` : '';
-        const label = country ? `${city}, ${region}${country}` : city;
+        const region = data.region ? `${data.region}` : '';
+        const postal = data.postal || '';
+
+        const preciseParts = [city];
+        if (region && region.toLowerCase() !== city.toLowerCase()) preciseParts.push(region);
+        if (postal) preciseParts.push(`(${postal})`);
+        const preciseAddress = preciseParts.join(', ');
+
         const coords: Coordinates = {
           latitude: lat,
           longitude: lon,
-          cityName: city,
+          cityName: `${city}, ${region || country}`,
           countryName: country,
-          label,
+          address: preciseAddress,
+          postcode: postal,
+          label: `${preciseAddress}, ${country}`,
         };
         coords.isWithinUK = isWithinUKBoundary(coords);
         return coords;
@@ -225,14 +551,22 @@ export const fetchLiveIpLocation = async (): Promise<Coordinates | null> => {
         const lon = Number(data.longitude);
         const city = data.cityName || 'Current Area';
         const country = data.countryName || '';
-        const region = data.regionName ? `${data.regionName}, ` : '';
-        const label = country ? `${city}, ${region}${country}` : city;
+        const region = data.regionName ? `${data.regionName}` : '';
+        const postal = data.zipCode || '';
+
+        const preciseParts = [city];
+        if (region && region.toLowerCase() !== city.toLowerCase()) preciseParts.push(region);
+        if (postal) preciseParts.push(`(${postal})`);
+        const preciseAddress = preciseParts.join(', ');
+
         const coords: Coordinates = {
           latitude: lat,
           longitude: lon,
-          cityName: city,
+          cityName: `${city}, ${region || country}`,
           countryName: country,
-          label,
+          address: preciseAddress,
+          postcode: postal,
+          label: `${preciseAddress}, ${country}`,
         };
         coords.isWithinUK = isWithinUKBoundary(coords);
         return coords;
@@ -255,14 +589,23 @@ export const fetchLiveIpLocation = async (): Promise<Coordinates | null> => {
         const lon = Number(data.longitude);
         const city = data.city || 'Current Area';
         const country = data.country_name || '';
-        const region = data.region ? `${data.region}, ` : '';
-        const label = country ? `${city}, ${region}${country}` : city;
+        const region = data.region || '';
+        const postal = data.postal || '';
+
+        const preciseParts: string[] = [];
+        if (city && city !== 'Current Area') preciseParts.push(city);
+        if (region && region.toLowerCase() !== city.toLowerCase()) preciseParts.push(region);
+        if (postal) preciseParts.push(`(${postal})`);
+        const preciseAddress = preciseParts.length > 0 ? preciseParts.join(', ') : (country ? `${city}, ${country}` : city);
+
         const coords: Coordinates = {
           latitude: lat,
           longitude: lon,
-          cityName: city,
+          cityName: region ? `${city}, ${region}` : (country ? `${city}, ${country}` : city),
           countryName: country,
-          label,
+          address: preciseAddress,
+          postcode: postal,
+          label: country ? `${preciseAddress}, ${country}` : preciseAddress,
         };
         coords.isWithinUK = isWithinUKBoundary(coords);
         return coords;

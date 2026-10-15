@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,13 +12,37 @@ import {
   Text,
   ActivityIndicator,
   RefreshControl,
+  Image,
+  FlatList,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
-import { useAppValues } from '../context/DataContext';
+import { useAppValues, BASE_URL } from '../context/DataContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { requestUserLiveLocation, isWithinUKBoundary, Coordinates } from '../utils/mapUtils';
+import {
+  requestUserLiveLocation,
+  isWithinUKBoundary,
+  Coordinates,
+  calculateDistanceInMiles,
+  UK_PRESET_LOCATIONS,
+  formatPreciseLocation,
+} from '../utils/mapUtils';
 import CustomerHeader from '../components/CustomerHeader';
+import SelectAreaBottomSheet from '../components/SelectAreaBottomSheet';
+
+const getUserInitials = (name?: string, email?: string) => {
+  if (name && name.trim()) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  if (email && email.trim()) {
+    return email.trim().slice(0, 2).toUpperCase();
+  }
+  return 'G';
+};
 
 const mapBackendVehicleToFrontend = (v: any) => {
   const isPass = v.motStatus === 'Valid' || v.status === 'PASS' || v.status === 'Active';
@@ -89,7 +113,6 @@ const BOOKABLE_SERVICES = [
   {
     id: 'mot_class_4',
     title: 'MOT Test',
-    subtitle: 'Class 4 inspection',
     icon: 'shield-check',
     iconBg: '#10B98115',
     iconColor: '#10B981',
@@ -98,7 +121,6 @@ const BOOKABLE_SERVICES = [
   {
     id: 'full_service',
     title: 'Full Service',
-    subtitle: '50+ point check',
     icon: 'car-cog',
     iconBg: '#1677FF15',
     iconColor: '#1677FF',
@@ -107,7 +129,6 @@ const BOOKABLE_SERVICES = [
   {
     id: 'interim_service',
     title: 'Interim Service',
-    subtitle: 'Oil & filter refresh',
     icon: 'oil',
     iconBg: '#8B5CF615',
     iconColor: '#8B5CF6',
@@ -116,7 +137,6 @@ const BOOKABLE_SERVICES = [
   {
     id: 'brakes',
     title: 'Brakes & Discs',
-    subtitle: 'Pads & discs check',
     icon: 'car-brake-alert',
     iconBg: '#EF444415',
     iconColor: '#EF4444',
@@ -125,7 +145,6 @@ const BOOKABLE_SERVICES = [
   {
     id: 'tyres',
     title: 'Tyres & Tracking',
-    subtitle: 'Fitting & laser tracking',
     icon: 'tire',
     iconBg: '#F59E0B15',
     iconColor: '#F59E0B',
@@ -134,7 +153,6 @@ const BOOKABLE_SERVICES = [
   {
     id: 'diagnostics',
     title: 'Diagnostics Scan',
-    subtitle: 'ECU fault code check',
     icon: 'engine',
     iconBg: '#06B6D415',
     iconColor: '#06B6D4',
@@ -143,7 +161,6 @@ const BOOKABLE_SERVICES = [
   {
     id: 'air_con',
     title: 'Air Con Regas',
-    subtitle: 'Refrigerant recharge',
     icon: 'snowflake',
     iconBg: '#3B82F615',
     iconColor: '#3B82F6',
@@ -152,7 +169,6 @@ const BOOKABLE_SERVICES = [
   {
     id: 'repairs',
     title: 'General Repairs',
-    subtitle: 'Clutch, exhaust & fixes',
     icon: 'wrench',
     iconBg: '#EC489915',
     iconColor: '#EC4899',
@@ -160,15 +176,91 @@ const BOOKABLE_SERVICES = [
   },
 ];
 
+const DEFAULT_GARAGE_SERVICES = [
+  { name: 'MOT Test', price: 45, icon: 'shield-check', iconColor: '#10B981' },
+  { name: 'Full Service', price: 125, icon: 'car-cog', iconColor: '#1677FF' },
+  { name: 'Interim Service', price: 79, icon: 'oil', iconColor: '#8B5CF6' },
+  { name: 'Brakes & Discs', price: 65, icon: 'car-brake-alert', iconColor: '#EF4444' },
+  { name: 'Air Con Regas', price: 55, icon: 'snowflake', iconColor: '#06B6D4' },
+  { name: 'Diagnostics', price: 45, icon: 'engine', iconColor: '#F59E0B' },
+];
+
+const getGarageServices = (garage: any) => {
+  if (Array.isArray(garage?.services) && garage.services.length > 0) {
+    return garage.services.map((s: any) => {
+      const sName = s.name || 'Service';
+      let icon = 'wrench';
+      let iconColor = '#1677FF';
+      if (sName.toLowerCase().includes('mot')) {
+        icon = 'shield-check';
+        iconColor = '#10B981';
+      } else if (sName.toLowerCase().includes('full')) {
+        icon = 'car-cog';
+        iconColor = '#1677FF';
+      } else if (sName.toLowerCase().includes('interim') || sName.toLowerCase().includes('oil')) {
+        icon = 'oil';
+        iconColor = '#8B5CF6';
+      } else if (sName.toLowerCase().includes('brake')) {
+        icon = 'car-brake-alert';
+        iconColor = '#EF4444';
+      } else if (sName.toLowerCase().includes('air')) {
+        icon = 'snowflake';
+        iconColor = '#06B6D4';
+      } else if (sName.toLowerCase().includes('diag')) {
+        icon = 'engine';
+        iconColor = '#F59E0B';
+      }
+      return {
+        id: s._id || s.id || sName,
+        name: sName,
+        price: s.price || 45,
+        duration: s.duration,
+        icon,
+        iconColor,
+      };
+    });
+  }
+  return DEFAULT_GARAGE_SERVICES;
+};
+
 export default function HomeScreen({ navigation }: any) {
   const { theme } = useAppTheme();
-  const { token, vehicles, refreshData, lookupVehicle, user } = useAppValues();
+  const {
+    token,
+    vehicles,
+    refreshData,
+    lookupVehicle,
+    user,
+    userLocation,
+    setUserLocation,
+    isOutsideUK,
+    refreshLocation,
+  } = useAppValues();
   const [regNumber, setRegNumber] = useState('');
   const [garageSearchText, setGarageSearchText] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
-  const [userCoords, setUserCoords] = useState<Coordinates | null>(null);
+  const [nearbyGarages, setNearbyGarages] = useState<any[]>([]);
+  const [loadingGarages, setLoadingGarages] = useState(false);
+  const [areaModalVisible, setAreaModalVisible] = useState(false);
+
+  const fetchNearbyGarages = async () => {
+    try {
+      setLoadingGarages(true);
+      const response = await fetch(`${BASE_URL}/garages`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setNearbyGarages(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch nearby garages:', e);
+    } finally {
+      setLoadingGarages(false);
+    }
+  };
 
   const handleRefreshAndReset = async () => {
     setRefreshing(true);
@@ -180,10 +272,8 @@ export default function HomeScreen({ navigation }: any) {
         await refreshData();
       }
       await loadSearchHistory();
-      const coords = await requestUserLiveLocation();
-      if (coords) {
-        setUserCoords(coords);
-      }
+      await fetchNearbyGarages();
+      await refreshLocation();
     } catch (e) {
       console.error('Home refresh error:', e);
     } finally {
@@ -230,12 +320,8 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   useEffect(() => {
-    requestUserLiveLocation().then((coords) => {
-      if (coords) {
-        setUserCoords(coords);
-      }
-    });
-  }, []);
+    fetchNearbyGarages();
+  }, [token]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -243,15 +329,42 @@ export default function HomeScreen({ navigation }: any) {
         refreshData();
       }
       loadSearchHistory();
-      requestUserLiveLocation().then((coords) => {
-        if (coords) {
-          setUserCoords(coords);
-        }
-      });
+      fetchNearbyGarages();
     });
     loadSearchHistory();
     return unsubscribe;
   }, [navigation, token, user]);
+
+  const sortedGarages = useMemo(() => {
+    if (!nearbyGarages || nearbyGarages.length === 0) return [];
+    // Condition: If location is out of UK, don't show any garage!
+    if (isOutsideUK) return [];
+
+    const mapped = nearbyGarages.map((g: any) => {
+      let calculatedDistance = g.distance || 0;
+      const gLat = g.latitude !== undefined && g.latitude !== null ? g.latitude : (g.location && g.location.coordinates ? g.location.coordinates[1] : null);
+      const gLng = g.longitude !== undefined && g.longitude !== null ? g.longitude : (g.location && g.location.coordinates ? g.location.coordinates[0] : null);
+
+      if (userLocation && gLat && gLng) {
+        calculatedDistance = calculateDistanceInMiles(
+          userLocation.latitude,
+          userLocation.longitude,
+          gLat,
+          gLng
+        );
+      }
+      return {
+        ...g,
+        calculatedDistance,
+      };
+    });
+
+    if (userLocation) {
+      mapped.sort((a, b) => (a.calculatedDistance || 9999) - (b.calculatedDistance || 9999));
+    }
+
+    return mapped;
+  }, [nearbyGarages, userLocation, isOutsideUK]);
 
   const handleCheckMOT = async (overrideReg?: string) => {
     const targetReg = (overrideReg || regNumber).trim().toUpperCase();
@@ -302,24 +415,59 @@ export default function HomeScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Customer Header with Great UI */}
+      {/* Customer Header with Location on Left and Initials on Right */}
       <CustomerHeader
-        title={user?.name ? `Hi, ${user.name.split(' ')[0]}` : 'MOT Search'}
-        subtitle="UK Vehicle Check & Garage Network"
-        iconName="magnify"
-        iconColor={theme.colors.secondary}
-        iconBg={theme.colors.secondary + '15'}
+        title=""
+        customLeft={
+          <TouchableOpacity
+            onPress={() => setAreaModalVisible(true)}
+            style={[
+              styles.headerLocationCol,
+              {
+                backgroundColor: isOutsideUK ? '#EF444415' : theme.colors.secondary + '12',
+                borderColor: isOutsideUK ? '#EF444440' : theme.colors.secondary + '30',
+              },
+            ]}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[styles.headerLocationLabel, { color: isOutsideUK ? '#DC2626' : theme.colors.placeholder }]}>
+              Your location
+            </Text>
+            <View style={styles.headerLocationRow}>
+              <MaterialCommunityIcons
+                name={isOutsideUK ? 'map-marker-remove' : 'map-marker'}
+                size={14}
+                color={isOutsideUK ? '#DC2626' : theme.colors.secondary}
+                style={{ marginRight: 3 }}
+              />
+              <Text
+                style={[
+                  styles.headerLocationCity,
+                  { color: isOutsideUK ? '#DC2626' : theme.colors.text },
+                ]}
+                numberOfLines={1}
+              >
+                {formatPreciseLocation(userLocation)}
+              </Text>
+              <MaterialCommunityIcons
+                name="chevron-down"
+                size={13}
+                color={isOutsideUK ? '#DC2626' : theme.colors.placeholder}
+                style={{ marginLeft: 2 }}
+              />
+            </View>
+          </TouchableOpacity>
+        }
         rightAction={
           <TouchableOpacity
             onPress={() => navigation.navigate(token ? 'Profile' : 'Login')}
-            style={[styles.topProfileBtn, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            style={[styles.headerInitialsWrap, { backgroundColor: theme.colors.secondary + '18', borderColor: theme.colors.secondary }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <MaterialCommunityIcons 
-              name={token ? 'account-check' : 'account-circle-outline'} 
-              size={20} 
-              color={theme.colors.secondary} 
-            />
+            <Text style={[styles.topProfileInitialsText, { color: theme.colors.secondary }]}>
+              {getUserInitials(user?.name, user?.email)}
+            </Text>
           </TouchableOpacity>
         }
       />
@@ -342,68 +490,26 @@ export default function HomeScreen({ navigation }: any) {
           }
         >
 
-        {/* 1. Live Location & Region Status Banner */}
-        {userCoords && (() => {
-          const isUK = isWithinUKBoundary(userCoords);
-          return (
-            <TouchableOpacity
-              style={[
-                styles.locationStatusBar,
-                {
-                  backgroundColor: isUK ? '#10B98112' : '#EF444412',
-                  borderColor: isUK ? '#10B98135' : '#EF444435',
-                },
-              ]}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('Garages', { nearMe: true })}
-            >
-              <View style={[styles.pulseDot, { backgroundColor: isUK ? '#10B981' : '#EF4444' }]} />
-              <Text
-                style={[
-                  styles.locationStatusText,
-                  { color: isUK ? '#059669' : '#2563EB' },
-                ]}
-                numberOfLines={1}
-              >
-                {`📍 Live Location • ${userCoords.label || userCoords.cityName || 'Current Area'}`}
-              </Text>
-              <View style={[styles.locationBadge, { backgroundColor: isUK ? '#10B98120' : '#3B82F620' }]}>
-                <Text style={[styles.locationBadgeText, { color: isUK ? '#059669' : '#2563EB' }]}>
-                  Garages Near Me
-                </Text>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={14}
-                  color={isUK ? '#059669' : '#2563EB'}
-                />
-              </View>
-            </TouchableOpacity>
-          );
-        })()}
-
-        {/* 2. Instant Vehicle MOT Lookup Card (Fast registration plate lookup) */}
+        {/* 2. Check MOT History Card */}
         <View style={[styles.heroSearchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.cardHeaderRow}>
             <View style={[styles.cardHeaderIconWrap, { backgroundColor: theme.colors.secondary + '15' }]}>
-              <MaterialCommunityIcons name="card-search-outline" size={20} color={theme.colors.secondary} />
+              <MaterialCommunityIcons name="card-search-outline" size={22} color={theme.colors.secondary} />
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={[styles.cardHeaderTitle, { color: theme.colors.text }]}>
-                Instant Vehicle MOT Lookup
-              </Text>
-              <Text style={[styles.cardHeaderSub, { color: theme.colors.placeholder }]}>
-                Live DVSA registry data & MOT history
+                Check MOT History
               </Text>
             </View>
           </View>
 
-          {/* Authentic UK Registration Plate Input */}
-          <View style={styles.plateWrapper}>
-            <View style={styles.plateShadowBase}>
-              <View style={styles.ukPlateStrip}>
-                <Text style={styles.ukFlagSymbol}>🇬🇧</Text>
-                <Text style={styles.ukPlateStripText}>UK</Text>
-              </View>
+          {/* Unified UK Registration Plate Input with Attached Check Button */}
+          <View style={styles.plateMergedContainer}>
+            <View style={styles.ukPlateStrip}>
+              <Text style={styles.ukFlagSymbol}>🇬🇧</Text>
+              <Text style={styles.ukPlateStripText}>UK</Text>
+            </View>
+            <View style={styles.plateInputSection}>
               <TextInput
                 value={regNumber}
                 onChangeText={(txt) => setRegNumber(txt.toUpperCase())}
@@ -418,54 +524,81 @@ export default function HomeScreen({ navigation }: any) {
               />
               {regNumber.length > 0 && (
                 <TouchableOpacity onPress={() => setRegNumber('')} style={styles.plateClearBtn}>
-                  <MaterialCommunityIcons name="close-circle" size={20} color="#374151" />
+                  <MaterialCommunityIcons name="close-circle" size={18} color="#374151" />
                 </TouchableOpacity>
               )}
             </View>
+
+            <TouchableOpacity
+              onPress={() => handleCheckMOT()}
+              disabled={loading}
+              activeOpacity={0.85}
+              style={[
+                styles.attachedCheckBtn,
+                { backgroundColor: theme.colors.secondary, opacity: loading ? 0.75 : 1 },
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="magnify" size={17} color="#FFFFFF" style={{ marginRight: 3 }} />
+                  <Text style={styles.attachedCheckBtnText}>Check</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
 
-          {/* Quick Demo Registration Chips */}
-          <View style={styles.quickTagsContainer}>
-            <Text style={[styles.quickTagsLabel, { color: theme.colors.placeholder }]}>Examples:</Text>
-            {['AB18 CDE', 'LD65 XYZ', 'MH07 KKK'].map((sample) => (
-              <TouchableOpacity
-                key={sample}
-                onPress={() => {
-                  setRegNumber(sample);
-                  handleCheckMOT(sample);
-                }}
-                style={[styles.sampleChip, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
-              >
-                <Text style={[styles.sampleChipText, { color: theme.colors.text }]}>{sample}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* What details you can see section (2x2 Grid) */}
+          <View style={[styles.detailsIncludedSection, { borderTopColor: theme.colors.border }]}>
+            <View style={styles.detailsSectionHeader}>
+              <MaterialCommunityIcons name="clipboard-check-outline" size={15} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+              <Text style={[styles.detailsSectionTitle, { color: theme.colors.text }]}>
+                What details you can see:
+              </Text>
+            </View>
 
-          {/* Lookup Button */}
-          <TouchableOpacity
-            onPress={() => handleCheckMOT()}
-            disabled={loading}
-            activeOpacity={0.85}
-            style={[
-              styles.primarySearchBtn,
-              { backgroundColor: theme.colors.secondary, opacity: loading ? 0.75 : 1 },
-            ]}
-          >
-            {loading ? (
-              <View style={styles.btnLoadingRow}>
-                <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 8 }} />
-                <Text style={styles.primarySearchBtnText}>Connecting to DVLA Database...</Text>
+            <View style={styles.detailsGrid2x2}>
+              <View style={[styles.detailGridCell, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <View style={[styles.detailCellIconWrap, { backgroundColor: '#10B98115' }]}>
+                  <MaterialCommunityIcons name="calendar-clock" size={16} color="#10B981" />
+                </View>
+                <Text style={[styles.detailCellTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                  MOT Expiry & Status
+                </Text>
               </View>
-            ) : (
-              <View style={styles.btnContentRow}>
-                <MaterialCommunityIcons name="magnify" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.primarySearchBtnText}>Check MOT Expiry & Details</Text>
+
+              <View style={[styles.detailGridCell, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <View style={[styles.detailCellIconWrap, { backgroundColor: '#F59E0B15' }]}>
+                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#F59E0B" />
+                </View>
+                <Text style={[styles.detailCellTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                  Defects & Advisories
+                </Text>
               </View>
-            )}
-          </TouchableOpacity>
+
+              <View style={[styles.detailGridCell, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <View style={[styles.detailCellIconWrap, { backgroundColor: '#8B5CF615' }]}>
+                  <MaterialCommunityIcons name="speedometer" size={16} color="#8B5CF6" />
+                </View>
+                <Text style={[styles.detailCellTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                  Mileage History
+                </Text>
+              </View>
+
+              <View style={[styles.detailGridCell, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <View style={[styles.detailCellIconWrap, { backgroundColor: '#3B82F615' }]}>
+                  <MaterialCommunityIcons name="car-info" size={16} color="#3B82F6" />
+                </View>
+                <Text style={[styles.detailCellTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                  Vehicle Specs
+                </Text>
+              </View>
+            </View>
+          </View>
         </View>
 
-        {/* 3. Book a Service Catalog (Enlarged Icons & Clickable Flow) */}
+        {/* 3. Book a Service Catalog */}
         <View style={styles.servicesSectionWrap}>
           <View style={styles.servicesSectionHeader}>
             <View style={styles.servicesHeaderTitleRow}>
@@ -477,9 +610,6 @@ export default function HomeScreen({ navigation }: any) {
                 <Text style={[styles.tapHintText, { color: theme.colors.primary }]}>Tap to Book</Text>
               </View>
             </View>
-            <Text style={[styles.servicesSectionSub, { color: theme.colors.placeholder }]}>
-              Swipe & tap a service to find verified garages
-            </Text>
           </View>
 
           <ScrollView
@@ -504,9 +634,6 @@ export default function HomeScreen({ navigation }: any) {
                 <Text style={[styles.horizontalServiceTitle, { color: theme.colors.text }]} numberOfLines={1}>
                   {item.title}
                 </Text>
-                <Text style={[styles.horizontalServiceSubtitle, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                  {item.subtitle}
-                </Text>
 
                 <View style={[styles.selectPill, { backgroundColor: item.iconBg, borderColor: item.iconColor + '30' }]}>
                   <Text style={[styles.selectPillText, { color: item.iconColor }]}>Select</Text>
@@ -517,62 +644,201 @@ export default function HomeScreen({ navigation }: any) {
           </ScrollView>
         </View>
 
-        {/* 4. Garage Finder Quick Search Bar */}
-        <View style={[styles.garageSearchCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <View style={styles.cardHeaderRow}>
-            <View style={[styles.cardHeaderIconWrap, { backgroundColor: '#10B98115' }]}>
-              <MaterialCommunityIcons name="map-search-outline" size={20} color="#10B981" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardHeaderTitle, { color: theme.colors.text }]}>
-                Find Local MOT Test Centres
-              </Text>
-              <Text style={[styles.cardHeaderSub, { color: theme.colors.placeholder }]}>
-                Search by garage name, town, or UK postcode
-              </Text>
+        {/* 4. Local Garages (Vertical Garages with Horizontal Services Below Each) */}
+        <View style={styles.nearbyGaragesSectionWrap}>
+          <View style={styles.nearbyGaragesHeader}>
+            <View style={styles.nearbyGaragesTitleRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons name="storefront-outline" size={20} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                <Text style={[styles.nearbyGaragesTitle, { color: theme.colors.text }]}>
+                  Garages Near You
+                </Text>
+              </View>
+              {!isOutsideUK && (
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Garages', { nearMe: true })}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.viewAllText, { color: theme.colors.secondary }]}>
+                    View All ({sortedGarages.length})
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
-          <View style={[styles.garageSearchInputWrapper, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-            <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} style={{ marginRight: 8 }} />
-            <TextInput
-              value={garageSearchText}
-              onChangeText={setGarageSearchText}
-              placeholder="e.g. Apex Autos, Manchester, M1..."
-              placeholderTextColor={theme.colors.placeholder}
-              style={[styles.garageSearchInput, { color: theme.colors.text }]}
-              returnKeyType="search"
-              onSubmitEditing={handleSearchGarages}
-            />
-            {garageSearchText.length > 0 && (
-              <TouchableOpacity onPress={() => setGarageSearchText('')} style={{ padding: 4, marginRight: 4 }}>
-                <MaterialCommunityIcons name="close-circle" size={18} color={theme.colors.placeholder} />
+          {isOutsideUK ? (
+            /* Condition: if location is out of UK don't show any garage, but message 'Service not available in selected area!' */
+            <View style={[styles.unavailableHomeCard, { backgroundColor: theme.colors.card, borderColor: '#EF444450' }]}>
+              <View style={[styles.unavailableHomeIconCircle, { backgroundColor: '#EF444415' }]}>
+                <MaterialCommunityIcons name="map-marker-off-outline" size={38} color="#DC2626" />
+              </View>
+
+              <View style={[styles.unavailableDetectedPill, { backgroundColor: '#EF444415', borderColor: '#EF444430' }]}>
+                <MaterialCommunityIcons name="crosshairs-gps" size={13} color="#DC2626" style={{ marginRight: 4 }} />
+                <Text style={[styles.unavailableDetectedText, { color: '#DC2626' }]} numberOfLines={1}>
+                  {userLocation?.address || userLocation?.label || 'Outside UK Service Area'}
+                </Text>
+              </View>
+
+              <Text style={[styles.unavailableHomeTitle, { color: '#DC2626' }]}>
+                Service not available in selected area!
+              </Text>
+
+              <Text style={[styles.unavailableHomeDesc, { color: theme.colors.placeholder }]}>
+                Multiple MOT registered garages and DVSA certified testing centres operate exclusively across the United Kingdom. Please select a UK city or area to find local garages.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.unavailableChangeBtn, { backgroundColor: theme.colors.primary }]}
+                onPress={() => setAreaModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="map-marker-radius" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.unavailableChangeBtnText}>Select a UK Area</Text>
               </TouchableOpacity>
-            )}
-          </View>
 
-          <View style={styles.garageBtnRow}>
-            <TouchableOpacity
-              onPress={handleSearchGarages}
-              activeOpacity={0.8}
-              style={[styles.garagePrimaryBtn, { backgroundColor: theme.colors.secondary }]}
-            >
-              <MaterialCommunityIcons name="magnify" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.garagePrimaryBtnText}>Search Garages</Text>
-            </TouchableOpacity>
+              <View style={styles.presetQuickRow}>
+                <Text style={[styles.presetQuickLabel, { color: theme.colors.placeholder }]}>Quick Select UK:</Text>
+                {['London', 'Manchester', 'Birmingham'].map((city) => (
+                  <TouchableOpacity
+                    key={city}
+                    style={[styles.presetQuickChip, { backgroundColor: theme.colors.secondary + '15', borderColor: theme.colors.secondary + '30' }]}
+                    onPress={() => {
+                      const found = UK_PRESET_LOCATIONS[city] || Object.entries(UK_PRESET_LOCATIONS).find(([k]) => k.toLowerCase().includes(city.toLowerCase()))?.[1];
+                      if (found) setUserLocation(found);
+                    }}
+                  >
+                    <Text style={[styles.presetQuickChipText, { color: theme.colors.secondary }]}>
+                      {city}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : loadingGarages ? (
+            <View style={[styles.garagesLoadingWrap, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              <ActivityIndicator color={theme.colors.secondary} size="small" style={{ marginRight: 8 }} />
+              <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>Finding garages near your location...</Text>
+            </View>
+          ) : sortedGarages.length === 0 ? (
+            <View style={[styles.emptyGaragesCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              <MaterialCommunityIcons name="store-alert-outline" size={28} color={theme.colors.placeholder} style={{ marginBottom: 4 }} />
+              <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>No local garages found nearby.</Text>
+            </View>
+          ) : (
+            <View style={styles.garagesVerticalList}>
+              {sortedGarages.slice(0, 6).map((garage: any) => {
+                const coverUri = garage.coverImage || (garage.images && garage.images.length > 0 ? garage.images[0] : garage.logoUrl);
+                const distanceText = garage.calculatedDistance ? `${garage.calculatedDistance.toFixed(1)} mi` : (garage.city || 'Nearby');
+                const servicesList = getGarageServices(garage);
 
-            <TouchableOpacity
-              onPress={() => {
-                Keyboard.dismiss();
-                navigation.navigate('Garages', { nearMe: true });
-              }}
-              activeOpacity={0.8}
-              style={styles.garageNearMeBtn}
-            >
-              <MaterialCommunityIcons name="crosshairs-gps" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.garageNearMeBtnText}>Near Me</Text>
-            </TouchableOpacity>
-          </View>
+                return (
+                  <View
+                    key={garage._id || garage.id}
+                    style={[
+                      styles.garageVerticalCard,
+                      { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                    ]}
+                  >
+                    {/* 1. Garage Top Info Row */}
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => navigation.navigate('GarageDetail', {
+                        garageId: garage._id || garage.id,
+                        garage,
+                      })}
+                      style={styles.garageVerticalTopRow}
+                    >
+                      <View style={styles.garageVerticalLogoWrap}>
+                        {coverUri ? (
+                          <Image source={{ uri: coverUri }} style={styles.garageVerticalLogo} />
+                        ) : (
+                          <View style={[styles.garageVerticalLogoPlaceholder, { backgroundColor: theme.colors.secondary + '15' }]}>
+                            <MaterialCommunityIcons name="storefront" size={26} color={theme.colors.secondary} />
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={styles.garageVerticalInfo}>
+                        <View style={styles.garageNameAndRatingRow}>
+                          <Text style={[styles.garageVerticalName, { color: theme.colors.text }]} numberOfLines={1}>
+                            {garage.name}
+                          </Text>
+                          <View style={styles.garageRatingChip}>
+                            <MaterialCommunityIcons name="star" size={11} color="#F59E0B" style={{ marginRight: 2 }} />
+                            <Text style={styles.garageRatingText}>
+                              {garage.rating ? Number(garage.rating).toFixed(1) : '4.8'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.garageMetaRow}>
+                          <MaterialCommunityIcons name="map-marker-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
+                          <Text style={[styles.garageVerticalAddress, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                            {[garage.address, garage.city, garage.postcode].filter(Boolean).join(', ') || 'UK Certified Garage'}
+                          </Text>
+                        </View>
+
+                        <View style={styles.garageBadgeRow}>
+                          {garage.calculatedDistance !== undefined && garage.calculatedDistance !== null && (
+                            <View style={[styles.distancePill, { backgroundColor: theme.colors.primary + '12' }]}>
+                              <MaterialCommunityIcons name="map-marker-distance" size={11} color={theme.colors.primary} style={{ marginRight: 2 }} />
+                              <Text style={[styles.distancePillText, { color: theme.colors.primary }]}>
+                                {distanceText}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+
+                      <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.placeholder} style={{ alignSelf: 'center', marginLeft: 4 }} />
+                    </TouchableOpacity>
+
+                    {/* 2. Below in horizontal flatlist show services */}
+                    <View style={styles.garageServicesContainer}>
+                      <FlatList
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        data={servicesList}
+                        keyExtractor={(item: any, index: number) => `${garage._id || garage.id}-svc-${item.name}-${index}`}
+                        contentContainerStyle={styles.garageServicesFlatList}
+                        renderItem={({ item: svc }: { item: any }) => (
+                          <TouchableOpacity
+                            activeOpacity={0.75}
+                            onPress={() => navigation.navigate('GarageDetail', {
+                              garageId: garage._id || garage.id,
+                              garage,
+                              serviceName: svc.name,
+                            })}
+                            style={[
+                              styles.garageServiceChipCard,
+                              { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
+                            ]}
+                          >
+                            <View style={[styles.serviceChipIconWrap, { backgroundColor: svc.iconColor + '15' }]}>
+                              <MaterialCommunityIcons name={svc.icon} size={14} color={svc.iconColor} />
+                            </View>
+                            <View style={styles.serviceChipTextCol}>
+                              <Text style={[styles.serviceChipTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                                {svc.name}
+                              </Text>
+                              <Text style={[styles.serviceChipPrice, { color: theme.colors.secondary }]}>
+                                £{svc.price}
+                              </Text>
+                            </View>
+                            <View style={[styles.serviceChipBookBtn, { backgroundColor: theme.colors.secondary }]}>
+                              <Text style={styles.serviceChipBookBtnText}>Book</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* 5. Core Navigation Hub Grid (4 Action Boxes) */}
@@ -811,6 +1077,13 @@ export default function HomeScreen({ navigation }: any) {
         <View style={{ height: 24 }} />
       </ScrollView>
     </KeyboardAvoidingView>
+
+    <SelectAreaBottomSheet
+      visible={areaModalVisible}
+      onClose={() => setAreaModalVisible(false)}
+      currentLocation={userLocation}
+      onSelectLocation={(coords) => setUserLocation(coords)}
+    />
   </View>
   );
 }
@@ -854,7 +1127,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 1,
@@ -862,6 +1135,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
+  },
+  topProfileInitialsText: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   locationStatusBar: {
     flexDirection: 'row',
@@ -1031,23 +1309,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 1,
   },
-  plateWrapper: {
-    marginBottom: 10,
-  },
-  plateShadowBase: {
+  plateMergedContainer: {
     flexDirection: 'row',
-    height: 52,
+    height: 50,
     backgroundColor: '#FFD200', // UK Reflective Yellow
     borderWidth: 2,
     borderColor: '#111827',
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: 'hidden',
     alignItems: 'center',
-    elevation: 3,
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 3,
+    marginBottom: 4,
   },
   ukPlateStrip: {
     width: 36,
@@ -1067,126 +1343,260 @@ const styles = StyleSheet.create({
     fontSize: 9,
     letterSpacing: 0.5,
   },
+  plateInputSection: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: '100%',
+    paddingHorizontal: 4,
+  },
   plateInput: {
     flex: 1,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
     color: '#111827',
     textAlign: 'center',
-    letterSpacing: 2.5,
-    height: '100%',
-    paddingHorizontal: 8,
-  },
-  plateClearBtn: {
-    paddingHorizontal: 10,
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  quickTagsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 14,
-  },
-  quickTagsLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginRight: 2,
-  },
-  sampleChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  sampleChipText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  primarySearchBtn: {
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#1677FF',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  btnContentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  btnLoadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  primarySearchBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  garageSearchCard: {
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    marginBottom: 14,
-  },
-  garageSearchInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 46,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-  },
-  garageSearchInput: {
-    flex: 1,
-    fontSize: 13,
+    letterSpacing: 2,
     height: '100%',
     paddingVertical: 0,
   },
-  garageBtnRow: {
-    flexDirection: 'row',
-    gap: 8,
+  plateClearBtn: {
+    paddingHorizontal: 6,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  garagePrimaryBtn: {
+  attachedCheckBtn: {
+    height: '100%',
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderLeftWidth: 1.5,
+    borderLeftColor: '#111827',
+  },
+  attachedCheckBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  nearbyGaragesSectionWrap: {
+    marginBottom: 16,
+  },
+  nearbyGaragesHeader: {
+    marginBottom: 12,
+  },
+  nearbyGaragesTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  nearbyGaragesTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  nearbyGaragesSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  garagesLoadingWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  emptyGaragesCard: {
+    padding: 24,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerInitialsWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
+  },
+  headerLocationCol: {
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    maxWidth: 240,
+  },
+  headerLocationLabel: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    marginBottom: 1,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  headerLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerLocationCity: {
+    fontSize: 13,
+    fontWeight: '800',
+    maxWidth: 195,
+  },
+  garagesVerticalList: {
+    gap: 12,
+  },
+  garageVerticalCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  garageVerticalTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  garageVerticalLogoWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#00000010',
+  },
+  garageVerticalLogo: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  garageVerticalLogoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  garageVerticalInfo: {
     flex: 1,
-    height: 42,
-    borderRadius: 10,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  garagePrimaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
+  garageNameAndRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  garageVerticalName: {
+    fontSize: 14,
+    fontWeight: '800',
+    flex: 1,
+    marginRight: 6,
+  },
+  garageRatingChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F59E0B18',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  garageRatingText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#D97706',
+  },
+  garageMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  garageVerticalAddress: {
+    fontSize: 11,
+    flex: 1,
+  },
+  garageBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dvsaApprovedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  dvsaApprovedPillText: {
+    fontSize: 9.5,
     fontWeight: '700',
   },
-  garageNearMeBtn: {
-    height: 42,
-    paddingHorizontal: 16,
-    backgroundColor: '#10B981',
-    borderRadius: 10,
+  distancePill: {
     flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  distancePillText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+  },
+  garageServicesContainer: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#0000000D',
+  },
+  garageServicesFlatList: {
+    paddingVertical: 2,
+    paddingRight: 6,
+  },
+  garageServiceChipCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  serviceChipIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 7,
   },
-  garageNearMeBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
+  serviceChipTextCol: {
+    marginRight: 8,
+  },
+  serviceChipTitle: {
+    fontSize: 11.5,
     fontWeight: '700',
+  },
+  serviceChipPrice: {
+    fontSize: 11.5,
+    fontWeight: '800',
+  },
+  serviceChipBookBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  serviceChipBookBtnText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
   servicesSectionWrap: {
     marginBottom: 16,
@@ -1371,5 +1781,129 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 10,
     fontWeight: '800',
+  },
+  detailsIncludedSection: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  detailsSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  detailsSectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  detailsGrid2x2: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  detailGridCell: {
+    width: '48.5%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  detailCellIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  detailCellTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    flex: 1,
+  },
+  unavailableHomeCard: {
+    padding: 22,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    marginTop: 6,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  unavailableHomeIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  unavailableDetectedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  unavailableDetectedText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  unavailableHomeTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  unavailableHomeDesc: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 14,
+    paddingHorizontal: 8,
+  },
+  unavailableChangeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 14,
+  },
+  unavailableChangeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  presetQuickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  presetQuickLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  presetQuickChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginHorizontal: 3,
+    marginVertical: 2,
+  },
+  presetQuickChipText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

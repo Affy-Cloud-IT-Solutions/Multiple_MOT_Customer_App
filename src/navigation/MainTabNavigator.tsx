@@ -18,21 +18,21 @@ export default function MainTabNavigator() {
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ color, size, focused }) => {
-          let iconName = 'magnify';
+          let iconName = 'home-variant';
 
           if (route.name === 'Home') {
-            iconName = focused ? 'magnify' : 'magnify';
+            iconName = focused ? 'home-variant' : 'home-variant-outline';
           } else if (route.name === 'Garages') {
-            iconName = focused ? 'store' : 'store-outline';
+            iconName = focused ? 'storefront' : 'storefront-outline';
           } else if (route.name === 'Bookings' || route.name === 'History') {
-            iconName = focused ? 'calendar-clock' : 'calendar-clock-outline';
+            iconName = focused ? 'calendar-check' : 'calendar-check-outline';
           } else if (route.name === 'My Portal') {
-            iconName = focused ? 'car-cog' : 'car';
+            iconName = focused ? 'car-wrench' : 'car-outline';
           } else if (route.name === 'Profile') {
-            iconName = focused ? 'account' : 'account-outline';
+            iconName = focused ? 'account-circle' : 'account-circle-outline';
           }
 
-          return <MaterialCommunityIcons name={iconName} size={size} color={color} />;
+          return <MaterialCommunityIcons name={iconName} size={24} color={color} />;
         },
         tabBarActiveTintColor: theme.colors.secondary,
         tabBarInactiveTintColor: theme.colors.placeholder,
@@ -65,7 +65,7 @@ export default function MainTabNavigator() {
       <Tab.Screen 
         name="Home" 
         component={HomeScreen} 
-        options={{ title: 'Search', tabBarLabel: 'Search', headerShown: false }} 
+        options={{ title: 'Home', tabBarLabel: 'Home', headerShown: false }} 
       />
       <Tab.Screen 
         name="Garages" 

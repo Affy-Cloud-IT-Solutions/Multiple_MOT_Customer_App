@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Coordinates, requestUserLiveLocation, isWithinUKBoundary } from '../utils/mapUtils';
 
 export interface Customer {
   id: string;
@@ -106,6 +107,10 @@ interface DataContextType {
   rescheduleBooking: (alertId: string, date: string, slot: string) => Promise<void>;
   cancelBooking: (alertId: string, reason?: string) => Promise<void>;
   lookupVehicle: (vrn: string) => Promise<any>;
+  userLocation: Coordinates | null;
+  setUserLocation: (coords: Coordinates | null) => Promise<void>;
+  isOutsideUK: boolean;
+  refreshLocation: () => Promise<Coordinates | null>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -161,6 +166,35 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [audits, setAudits] = useState<AuditLog[]>([]);
   const [token, setTokenState] = useState<string | null>(null);
   const [user, setUserState] = useState<UserProfile | null>(null);
+  const [userLocation, setUserLocationState] = useState<Coordinates | null>(null);
+
+  const setUserLocation = async (coords: Coordinates | null) => {
+    setUserLocationState(coords);
+    try {
+      if (coords) {
+        await AsyncStorage.setItem('@user_selected_location', JSON.stringify(coords));
+      } else {
+        await AsyncStorage.removeItem('@user_selected_location');
+      }
+    } catch (e) {
+      console.error('[DATA CONTEXT] Error saving user location:', e);
+    }
+  };
+
+  const refreshLocation = async (): Promise<Coordinates | null> => {
+    try {
+      const coords = await requestUserLiveLocation();
+      if (coords) {
+        await setUserLocation(coords);
+        return coords;
+      }
+    } catch (e) {
+      console.error('[DATA CONTEXT] Error refreshing user live location:', e);
+    }
+    return null;
+  };
+
+  const isOutsideUK = userLocation ? !isWithinUKBoundary(userLocation) : false;
 
   const setUser = (newUser: UserProfile | null) => {
     setUserState(newUser);
@@ -274,7 +308,34 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         console.error('[DATA CONTEXT] Error loading stored auth details:', err);
       }
     };
+
+    const loadStoredLocation = async () => {
+      try {
+        const savedLoc = await AsyncStorage.getItem('@user_selected_location');
+        if (savedLoc) {
+          const parsed = JSON.parse(savedLoc);
+          if (parsed && typeof parsed.latitude === 'number') {
+            setUserLocationState(parsed);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('[DATA CONTEXT] Error loading stored location:', err);
+      }
+
+      // If no stored location, detect live location in background
+      try {
+        const live = await requestUserLiveLocation();
+        if (live) {
+          setUserLocationState(live);
+        }
+      } catch (err) {
+        console.error('[DATA CONTEXT] Error detecting initial live location:', err);
+      }
+    };
+
     loadStoredAuth();
+    loadStoredLocation();
   }, []);
 
   useEffect(() => {
@@ -604,6 +665,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         rescheduleBooking,
         cancelBooking,
         lookupVehicle,
+        userLocation,
+        setUserLocation,
+        isOutsideUK,
+        refreshLocation,
       }}
     >
       {children}

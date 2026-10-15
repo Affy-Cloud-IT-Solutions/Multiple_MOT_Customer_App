@@ -15,14 +15,32 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   calculateDistanceInMiles,
   requestUserLiveLocation,
-  openGarageDirections,
   isWithinUKBoundary,
   Coordinates,
+  UK_PRESET_LOCATIONS,
+  formatPreciseLocation,
 } from '../utils/mapUtils';
 import CustomerHeader from '../components/CustomerHeader';
+import SelectAreaBottomSheet from '../components/SelectAreaBottomSheet';
+import FilterServiceBottomSheet, { isServiceMatch } from '../components/FilterServiceBottomSheet';
+
+const getUserInitials = (name?: string, email?: string) => {
+  if (name && name.trim()) {
+    const parts = name.trim().split(' ');
+    if (parts.length > 1) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  if (email && email.trim()) {
+    return email.trim().slice(0, 2).toUpperCase();
+  }
+  return 'G';
+};
 
 const GarageLogo = ({ uri, name, style, theme }: any) => {
   const [error, setError] = useState(false);
@@ -46,64 +64,9 @@ const GarageLogo = ({ uri, name, style, theme }: any) => {
   );
 };
 
-const GarageCoverBanner = ({ uri, imagesCount, rating, city, postcode, distanceInMiles, theme }: any) => {
-  const [error, setError] = useState(false);
-
-  return (
-    <View style={styles.bannerContainer}>
-      {error || !uri ? (
-        <View style={[styles.bannerPlaceholder, { backgroundColor: theme.colors.card }]}>
-          <MaterialCommunityIcons name="garage-open-variant" size={40} color={theme.colors.placeholder} />
-        </View>
-      ) : (
-        <Image
-          source={{ uri }}
-          style={styles.bannerImage}
-          onError={() => setError(true)}
-        />
-      )}
-      
-      {/* Top Left: Approved MOT Tag */}
-      <View style={styles.bannerTagTopLeft}>
-        <MaterialCommunityIcons name="shield-check" size={12} color="#10B981" style={{ marginRight: 3 }} />
-        <Text style={styles.bannerTagText}>DVSA Approved</Text>
-      </View>
-
-      {/* Top Right: Photos Count */}
-      {imagesCount > 0 && (
-        <View style={styles.bannerTagTopRight}>
-          <MaterialCommunityIcons name="camera" size={11} color="#FFFFFF" style={{ marginRight: 3 }} />
-          <Text style={styles.bannerTagPhotoCount}>{imagesCount} {imagesCount === 1 ? 'Photo' : 'Photos'}</Text>
-        </View>
-      )}
-
-      {/* Bottom Floating Chips: Rating, Location & Distance in Miles */}
-      <View style={styles.bannerBottomChips}>
-        <View style={styles.bannerChip}>
-          <MaterialCommunityIcons name="star" size={12} color="#F59E0B" />
-          <Text style={styles.bannerChipText}>{rating ? Number(rating).toFixed(1) : '4.8'}</Text>
-        </View>
-        {distanceInMiles !== undefined && distanceInMiles !== null && distanceInMiles > 0 ? (
-          <View style={[styles.bannerChip, { backgroundColor: 'rgba(16, 185, 129, 0.9)' }]}>
-            <MaterialCommunityIcons name="map-marker-distance" size={12} color="#FFFFFF" />
-            <Text style={styles.bannerChipText}>{`${Number(distanceInMiles).toFixed(1)} miles away`}</Text>
-          </View>
-        ) : (city || postcode) ? (
-          <View style={styles.bannerChip}>
-            <MaterialCommunityIcons name="map-marker" size={12} color="#FFFFFF" />
-            <Text style={styles.bannerChipText}>
-              {[city, postcode].filter(Boolean).join(', ')}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-    </View>
-  );
-};
-
 export default function GarageListScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { token } = useAppValues();
+  const { user, token, userLocation, setUserLocation, isOutsideUK } = useAppValues();
 
   const [garages, setGarages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,11 +76,14 @@ export default function GarageListScreen({ route, navigation }: any) {
   const [activeServiceTitle, setActiveServiceTitle] = useState<string>(route?.params?.serviceTitle || '');
   const [error, setError] = useState<string | null>(null);
 
-  // Live Location & Sorting State (strictly live location, no default location)
+  // Live Location & Sorting State
   const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>(null);
   const [isNearMeActive, setIsNearMeActive] = useState<boolean>(route?.params?.nearMe === true);
   const [fetchingLocation, setFetchingLocation] = useState<boolean>(false);
-  const [allowBrowseOutsideUK, setAllowBrowseOutsideUK] = useState<boolean>(false);
+  const [areaModalVisible, setAreaModalVisible] = useState(false);
+  const [serviceModalVisible, setServiceModalVisible] = useState(false);
+
+  const activeCoordinates = userLocation || userCoordinates;
 
   // Background fetch user's live coordinates on screen mount
   useEffect(() => {
@@ -175,7 +141,6 @@ export default function GarageListScreen({ route, navigation }: any) {
   // Handler: Hardware Live GPS for "Near Me"
   const handleTriggerNearMe = async () => {
     setFetchingLocation(true);
-    setAllowBrowseOutsideUK(false);
     try {
       const coords = await requestUserLiveLocation();
       if (coords) {
@@ -197,13 +162,27 @@ export default function GarageListScreen({ route, navigation }: any) {
   const handleClearServiceFilter = () => {
     setActiveServiceFilter('');
     setActiveServiceTitle('');
-    setSearchQuery('');
-    navigation.setParams({ serviceFilter: '', serviceTitle: '', searchQuery: '', search: '' });
+    if (
+      searchQuery.trim().toLowerCase() === activeServiceFilter.trim().toLowerCase() ||
+      searchQuery.trim().toLowerCase() === activeServiceTitle.trim().toLowerCase()
+    ) {
+      setSearchQuery('');
+      navigation.setParams({ searchQuery: '', search: '' });
+    }
+    navigation.setParams({ serviceFilter: '', serviceTitle: '' });
+  };
+
+  const handleSelectServiceFilter = (serviceKey: string, serviceTitle: string) => {
+    setActiveServiceFilter(serviceKey);
+    setActiveServiceTitle(serviceTitle);
+    navigation.setParams({
+      serviceFilter: serviceKey,
+      serviceTitle: serviceTitle,
+    });
   };
 
   const handleResetNearMe = () => {
     setIsNearMeActive(false);
-    setAllowBrowseOutsideUK(false);
     navigation.setParams({ nearMe: false });
   };
 
@@ -215,7 +194,6 @@ export default function GarageListScreen({ route, navigation }: any) {
     setActiveServiceFilter('');
     setActiveServiceTitle('');
     setIsNearMeActive(false);
-    setAllowBrowseOutsideUK(false);
     setError(null);
 
     // 2. Clear route params in react-navigation
@@ -253,20 +231,21 @@ export default function GarageListScreen({ route, navigation }: any) {
 
   // Boundary check
   const isWithinUK = useMemo(() => {
-    if (!userCoordinates) return true;
-    return isWithinUKBoundary(userCoordinates);
-  }, [userCoordinates]);
+    if (!activeCoordinates) return true;
+    return isWithinUKBoundary(activeCoordinates);
+  }, [activeCoordinates]);
 
-  // Out of service area check: if detected outside UK boundary and not searching or picking a service
+  // Out of service area check: if detected outside UK boundary, dont show any garage!
   const isOutsideUKServiceArea = useMemo(() => {
-    if (allowBrowseOutsideUK) return false;
-    if (searchQuery.trim().length > 0 || activeServiceFilter.trim().length > 0) return false;
-    if (!userCoordinates) return false;
-    return !isWithinUKBoundary(userCoordinates);
-  }, [userCoordinates, searchQuery, activeServiceFilter, allowBrowseOutsideUK]);
+    if (!activeCoordinates) return false;
+    return !isWithinUKBoundary(activeCoordinates);
+  }, [activeCoordinates]);
 
   // Filter and sort registered garages cleanly
   const processedGarages = useMemo(() => {
+    // If outside UK, do not show any garage!
+    if (isOutsideUKServiceArea) return [];
+
     const q = (searchQuery || '').toLowerCase().trim();
     const cleanQ = q.replace(/\s+/g, '');
     const filterKey = (activeServiceFilter || '').toLowerCase().trim();
@@ -277,10 +256,10 @@ export default function GarageListScreen({ route, navigation }: any) {
       const gLat = g.latitude !== undefined && g.latitude !== null ? g.latitude : (g.location && g.location.coordinates ? g.location.coordinates[1] : null);
       const gLng = g.longitude !== undefined && g.longitude !== null ? g.longitude : (g.location && g.location.coordinates ? g.location.coordinates[0] : null);
 
-      if (userCoordinates && gLat && gLng) {
+      if (activeCoordinates && gLat && gLng) {
         calculatedDistance = calculateDistanceInMiles(
-          userCoordinates.latitude,
-          userCoordinates.longitude,
+          activeCoordinates.latitude,
+          activeCoordinates.longitude,
           gLat,
           gLng
         );
@@ -293,213 +272,143 @@ export default function GarageListScreen({ route, navigation }: any) {
 
     // Filter by search query (name, address, city, postcode) AND service filter
     const filtered = mapped.filter((g) => {
-      if (!q && !filterKey) return true;
+      // 1. Service filter matching (if activeServiceFilter is set)
+      if (filterKey) {
+        const hasMatchingService =
+          Array.isArray(g.services) &&
+          g.services.some((s: any) => isServiceMatch(s, filterKey));
 
-      // Text matches on garage metadata
-      const nameMatch = q ? (g.name || '').toLowerCase().includes(q) : false;
-      const addressMatch = q ? (g.address || '').toLowerCase().includes(q) : false;
-      const cityMatch = q ? (g.city || '').toLowerCase().includes(q) : false;
-      const postcodeMatch = cleanQ ? (g.postcode || '').toLowerCase().replace(/\s+/g, '').includes(cleanQ) : false;
+        if (!hasMatchingService) {
+          return false;
+        }
+      }
 
-      // Match against garage services catalog
-      const targetTerm = filterKey || q;
-      const servicesMatch = Array.isArray(g.services) && g.services.some((s: any) => {
-        const sName = (s.name || '').toLowerCase();
-        const sCat = (s.category || '').toLowerCase();
-        const sDesc = (s.description || '').toLowerCase();
-        return sName.includes(targetTerm) || sCat.includes(targetTerm) || sDesc.includes(targetTerm);
-      });
+      // 2. Text query matching (if search query is entered)
+      if (!q) return true;
 
-      // Sensible fallback: all certified garages offer MOT and Vehicle Servicing
-      const defaultMatch = (!g.services || g.services.length === 0) && (
-        targetTerm.includes('mot') || targetTerm.includes('service')
-      );
+      const nameMatch = (g.name || '').toLowerCase().includes(q);
+      const addressMatch = (g.address || '').toLowerCase().includes(q);
+      const cityMatch = (g.city || '').toLowerCase().includes(q);
+      const postcodeMatch = cleanQ
+        ? (g.postcode || '').toLowerCase().replace(/\s+/g, '').includes(cleanQ)
+        : false;
 
-      return nameMatch || addressMatch || cityMatch || postcodeMatch || servicesMatch || defaultMatch;
+      const queryServicesMatch =
+        !filterKey &&
+        Array.isArray(g.services) &&
+        g.services.some((s: any) => isServiceMatch(s, q));
+
+      return nameMatch || addressMatch || cityMatch || postcodeMatch || Boolean(queryServicesMatch);
     });
 
-    // Sorting: If "Near Me" is active, sort by nearest to device first. Otherwise sort by highest DVSA rating
+    // Sorting: If "Near Me" is active, sort by nearest to device first. Otherwise sort by highest rating
     if (isNearMeActive) {
       return filtered.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
     }
     return filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  }, [garages, searchQuery, activeServiceFilter, isNearMeActive, userCoordinates]);
+  }, [garages, searchQuery, activeServiceFilter, isNearMeActive, activeCoordinates]);
 
   const renderGarageItem = ({ item }: { item: any }) => {
-    const coverUri = (item.images && item.images.length > 0) ? item.images[0] : (item.logoUrl || '');
-    const imagesCount = item.images ? item.images.length : (item.logoUrl ? 1 : 0);
+    const locationParts = [item.address, item.city, item.postcode].filter(Boolean);
+    const locationText = item.address || (locationParts.length > 0 ? locationParts.join(', ') : (item.city || 'United Kingdom'));
+    const rawDist = item.calculatedDistance ?? item.distance;
+    const distanceText = (rawDist !== undefined && rawDist !== null && !isNaN(Number(rawDist)) && Number(rawDist) >= 0)
+      ? `${Number(rawDist).toFixed(1)} miles`
+      : null;
 
     return (
       <TouchableOpacity
         style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-        activeOpacity={0.88}
+        activeOpacity={0.85}
         onPress={() => navigation.navigate('GarageDetail', { 
           garageId: item.id || item._id, 
-          serviceName: activeServiceTitle || activeServiceFilter || searchQuery, 
+          serviceName: activeServiceFilter || activeServiceTitle || searchQuery, 
+          serviceFilter: activeServiceFilter,
+          serviceTitle: activeServiceTitle,
           searchQuery, 
           vehicle: route.params?.vehicle 
         })}
       >
-        {/* Garage Photo Banner */}
-        <GarageCoverBanner
-          uri={coverUri}
-          imagesCount={imagesCount}
-          rating={item.rating}
-          city={item.city}
-          postcode={item.postcode}
-          distanceInMiles={item.calculatedDistance}
-          theme={theme}
+        <GarageLogo 
+          uri={item.logoUrl || (item.images && item.images.length > 0 ? item.images[0] : null)} 
+          name={item.name} 
+          style={styles.logoSmall} 
+          theme={theme} 
         />
 
-        <View style={styles.cardContent}>
-          <View style={styles.cardMainRow}>
-            <GarageLogo 
-              uri={item.logoUrl} 
-              name={item.name} 
-              style={styles.logoSmall} 
-              theme={theme} 
-            />
-
-            <View style={styles.infoContainer}>
-              <Text style={[styles.garageName, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
-              
-              <View style={styles.addressRow}>
-                <MaterialCommunityIcons name="map-marker-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
-                <Text style={[styles.garageAddress, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                  {item.address || `${item.city || ''} ${item.postcode || ''}`}
-                </Text>
-              </View>
-
-              {item.postcode ? (
-                <View style={styles.postcodeTagRow}>
-                  <View style={[styles.postcodeBadge, { backgroundColor: theme.colors.secondary + '15' }]}>
-                    <Text style={[styles.postcodeBadgeText, { color: theme.colors.secondary }]}>
-                      {item.postcode}
-                    </Text>
-                  </View>
-                  {item.city ? (
-                    <Text style={[styles.cityText, { color: theme.colors.placeholder }]}>• {item.city}</Text>
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
-
-            <View style={{ gap: 6, alignItems: 'flex-end' }}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate('GarageDetail', { 
-                  garageId: item.id || item._id, 
-                  serviceName: activeServiceTitle || activeServiceFilter || searchQuery, 
-                  searchQuery, 
-                  vehicle: route.params?.vehicle 
-                })}
-                style={[styles.bookPill, { backgroundColor: theme.colors.primary }]}
-              >
-                <Text style={styles.bookPillText}>Select Service</Text>
-                <MaterialCommunityIcons name="chevron-right" size={13} color="#FFFFFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => openGarageDirections(item)}
-                style={[styles.directionsBtn, { borderColor: theme.colors.border }]}
-              >
-                <MaterialCommunityIcons name="directions" size={12} color={theme.colors.secondary} />
-                <Text style={[styles.directionsBtnText, { color: theme.colors.secondary }]}>Directions</Text>
-              </TouchableOpacity>
-            </View>
+        <View style={styles.infoContainer}>
+          <View style={styles.garageNameRow}>
+            <Text style={[styles.garageName, { color: theme.colors.text }]} numberOfLines={1}>
+              {item.name}
+            </Text>
           </View>
 
-          <View style={[styles.cardFooter, { borderTopColor: theme.colors.border + '50' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="clock-outline" size={12} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
-              <Text style={[styles.hoursText, { color: theme.colors.placeholder }]}>
-                {item.openingTime || '08:00'} - {item.closingTime || '18:00'}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="calendar-check-outline" size={12} color={theme.colors.secondary} style={{ marginRight: 4 }} />
-              <Text style={[styles.daysText, { color: theme.colors.secondary }]}>
-                {item.workingDays && item.workingDays.length > 0 
-                  ? `${item.workingDays[0].substring(0, 3)} - ${item.workingDays[item.workingDays.length - 1].substring(0, 3)}` 
-                  : 'Mon - Fri'}
-              </Text>
-            </View>
+          <View style={styles.addressRow}>
+            <MaterialCommunityIcons name="map-marker-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
+            <Text style={[styles.garageAddress, { color: theme.colors.placeholder }]} numberOfLines={1}>
+              {locationText}
+            </Text>
           </View>
+
+          {distanceText ? (
+            <Text style={[styles.garageMiles, { color: theme.colors.secondary }]}>
+              {distanceText}
+            </Text>
+          ) : null}
         </View>
+
+        <MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.placeholder} />
       </TouchableOpacity>
     );
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Customer Header with Great UI */}
+      {/* Customer Header with Your Location on Left (No initials on garage list) */}
       <CustomerHeader
-        title="Find Garages"
-        subtitle="Certified UK MOT Test Centres"
-        iconName="storefront-outline"
-        iconColor={theme.colors.primary}
-        iconBg={theme.colors.primary + '15'}
-        showBack={navigation?.canGoBack ? navigation.canGoBack() : false}
-        onBack={() => navigation?.goBack?.()}
-      />
-
-      {/* Top Location Section with Near Me Button */}
-      <View style={styles.topLocationSection}>
-        <View style={[
-          styles.locationRegionBar,
-          { 
-            backgroundColor: userCoordinates 
-              ? (isWithinUK ? '#10B98115' : '#EF444415') 
-              : theme.colors.card,
-            borderColor: userCoordinates 
-              ? (isWithinUK ? '#10B98140' : '#EF444440') 
-              : theme.colors.border,
-            flex: 1,
-            marginRight: 8,
-          }
-        ]}>
-          <MaterialCommunityIcons 
-            name={userCoordinates ? (isWithinUK ? "crosshairs-gps" : "map-marker-remove-variant") : "map-marker-outline"} 
-            size={16} 
-            color={userCoordinates ? (isWithinUK ? "#10B981" : "#DC2626") : theme.colors.placeholder} 
-            style={{ marginRight: 6 }} 
-          />
-          <Text 
+        title=""
+        customLeft={
+          <TouchableOpacity
+            onPress={() => setAreaModalVisible(true)}
             style={[
-              styles.locationRegionText, 
-              { 
-                color: userCoordinates ? (isWithinUK ? '#10B981' : '#DC2626') : theme.colors.placeholder, 
-                flex: 1, 
-                fontWeight: '700' 
-              }
-            ]} 
-            numberOfLines={1}
+              styles.headerLocationCol,
+              {
+                backgroundColor: isOutsideUKServiceArea ? '#EF444415' : theme.colors.secondary + '12',
+                borderColor: isOutsideUKServiceArea ? '#EF444440' : theme.colors.secondary + '30',
+              },
+            ]}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            {userCoordinates 
-              ? (isWithinUK ? `📍 ${userCoordinates.label || 'United Kingdom'}` : `📍 ${userCoordinates.label || 'Outside UK Region'}`)
-              : (fetchingLocation ? '📍 Locating...' : '📍 Tap "Near Me" to locate')}
-          </Text>
-        </View>
-
-        {/* One-Tap Near Me Live GPS Button */}
-        <TouchableOpacity
-          style={[
-            styles.nearMeButton,
-            { backgroundColor: isNearMeActive && isWithinUK ? '#10B981' : theme.colors.primary }
-          ]}
-          onPress={handleTriggerNearMe}
-          disabled={fetchingLocation}
-          activeOpacity={0.8}
-        >
-          {fetchingLocation ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              <MaterialCommunityIcons name="crosshairs-gps" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-              <Text style={styles.nearMeButtonText}>Near Me</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+            <Text style={[styles.headerLocationLabel, { color: isOutsideUKServiceArea ? '#DC2626' : theme.colors.placeholder }]}>
+              Your location
+            </Text>
+            <View style={styles.headerLocationRow}>
+              <MaterialCommunityIcons
+                name={isOutsideUKServiceArea ? 'map-marker-remove' : 'map-marker'}
+                size={14}
+                color={isOutsideUKServiceArea ? '#DC2626' : theme.colors.secondary}
+                style={{ marginRight: 3 }}
+              />
+              <Text
+                style={[
+                  styles.headerLocationCity,
+                  { color: isOutsideUKServiceArea ? '#DC2626' : theme.colors.text },
+                ]}
+                numberOfLines={1}
+              >
+                {formatPreciseLocation(activeCoordinates)}
+              </Text>
+              <MaterialCommunityIcons
+                name="chevron-down"
+                size={13}
+                color={isOutsideUKServiceArea ? '#DC2626' : theme.colors.placeholder}
+                style={{ marginLeft: 2 }}
+              />
+            </View>
+          </TouchableOpacity>
+        }
+      />
 
       {/* Search Bar */}
       <View style={styles.searchRow}>
@@ -517,6 +426,29 @@ export default function GarageListScreen({ route, navigation }: any) {
               <MaterialCommunityIcons name="close-circle" size={18} color={theme.colors.placeholder} />
             </TouchableOpacity>
           )}
+
+          {/* Divider between search and filter */}
+          <View style={[styles.searchDivider, { backgroundColor: theme.colors.border }]} />
+
+          {/* Filter Button inside searchbar */}
+          <TouchableOpacity
+            style={[
+              styles.filterInsideButton,
+              activeServiceFilter ? { backgroundColor: theme.colors.primary + '18' } : null,
+            ]}
+            onPress={() => setServiceModalVisible(true)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <MaterialCommunityIcons
+              name={activeServiceFilter ? 'filter' : 'filter-variant'}
+              size={19}
+              color={activeServiceFilter ? theme.colors.primary : theme.colors.placeholder}
+            />
+            {Boolean(activeServiceFilter) && (
+              <View style={[styles.activeFilterDot, { backgroundColor: theme.colors.primary }]} />
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -525,7 +457,7 @@ export default function GarageListScreen({ route, navigation }: any) {
         <View style={[styles.nearMeActivePill, { backgroundColor: '#10B98115', borderColor: '#10B98140' }]}>
           <MaterialCommunityIcons name="crosshairs-gps" size={14} color="#10B981" style={{ marginRight: 6 }} />
           <Text style={[styles.nearMeActiveText, { color: '#10B981', flex: 1 }]}>
-            Sorted by nearest to {userCoordinates.cityName || userCoordinates.label}
+            Sorted by nearest to {formatPreciseLocation(userCoordinates)}
           </Text>
           <TouchableOpacity onPress={handleResetNearMe} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={[styles.clearFilterLink, { color: theme.colors.primary }]}>Reset</Text>
@@ -533,28 +465,61 @@ export default function GarageListScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* Active Service Filter Banner */}
+      {/* Active Service Filter Banner - Compact */}
       {(activeServiceTitle.length > 0 || activeServiceFilter.length > 0) && !loading && !error && (
-        <View style={[styles.serviceFilterPillBanner, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary }]}>
-          <View style={[styles.serviceFilterIconWrap, { backgroundColor: theme.colors.primary + '18' }]}>
-            <MaterialCommunityIcons name="tools" size={15} color={theme.colors.primary} />
-          </View>
-          <View style={{ flex: 1, marginRight: 8 }}>
-            <Text style={[styles.serviceFilterLabel, { color: theme.colors.placeholder }]}>Selected Service</Text>
-            <Text style={[styles.serviceFilterName, { color: theme.colors.text }]} numberOfLines={1}>
-              {activeServiceTitle || activeServiceFilter}
+        <View
+          style={[
+            styles.serviceFilterPillBanner,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.primary + '40',
+            },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="tools"
+            size={13}
+            color={theme.colors.primary}
+            style={{ marginRight: 6 }}
+          />
+          <TouchableOpacity
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+            onPress={() => setServiceModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[styles.serviceFilterCompactText, { color: theme.colors.text }]}
+              numberOfLines={1}
+            >
+              <Text style={{ fontWeight: '500', color: theme.colors.placeholder }}>Service: </Text>
+              <Text style={{ fontWeight: '700', color: theme.colors.text }}>
+                {activeServiceTitle || activeServiceFilter}
+              </Text>
+            </Text>
+          </TouchableOpacity>
+
+          <View
+            style={[
+              styles.serviceCountBadge,
+              { backgroundColor: theme.colors.primary + '15' },
+            ]}
+          >
+            <Text style={[styles.serviceCountText, { color: theme.colors.primary }]}>
+              {processedGarages.length} {processedGarages.length === 1 ? 'garage' : 'garages'}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={[styles.serviceCountBadge, { backgroundColor: theme.colors.primary + '15' }]}>
-              <Text style={[styles.serviceCountText, { color: theme.colors.primary }]}>
-                {processedGarages.length} {processedGarages.length === 1 ? 'Garage' : 'Garages'}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={handleClearServiceFilter} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <MaterialCommunityIcons name="close-circle" size={18} color={theme.colors.placeholder} />
-            </TouchableOpacity>
-          </View>
+
+          <TouchableOpacity
+            onPress={handleClearServiceFilter}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ marginLeft: 6 }}
+          >
+            <MaterialCommunityIcons
+              name="close-circle"
+              size={16}
+              color={theme.colors.placeholder}
+            />
+          </TouchableOpacity>
         </View>
       )}
 
@@ -622,26 +587,26 @@ export default function GarageListScreen({ route, navigation }: any) {
             <View style={[styles.detectedPill, { backgroundColor: '#EF444415', borderColor: '#EF444430', borderWidth: 1 }]}>
               <MaterialCommunityIcons name="crosshairs-gps" size={13} color="#DC2626" style={{ marginRight: 5 }} />
               <Text style={[styles.detectedPillText, { color: '#DC2626' }]} numberOfLines={1}>
-                {userCoordinates?.label || 'Outside UK Region'}
+                {activeCoordinates?.address || activeCoordinates?.label || 'Outside UK Service Area'}
               </Text>
             </View>
 
             <Text style={[styles.unavailableTitle, { color: '#DC2626' }]}>
-              Service Not Available In Your Area
+              Service not available in selected area!
             </Text>
 
             <Text style={[styles.unavailableDesc, { color: theme.colors.placeholder }]}>
-              Multiple MOT operates exclusively across the United Kingdom (England, Scotland, Wales & Northern Ireland). No DVSA-certified MOT testing stations are available in your detected region.
+              Multiple MOT operates exclusively across the United Kingdom (England, Scotland, Wales & Northern Ireland). No registered MOT testing stations are available in your selected area.
             </Text>
 
-            {/* Action: Allow user to browse all UK garages */}
+            {/* Action: Select UK Area */}
             <TouchableOpacity 
               style={[styles.primaryActionBtn, { backgroundColor: theme.colors.primary }]}
-              onPress={() => setAllowBrowseOutsideUK(true)}
+              onPress={() => setAreaModalVisible(true)}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons name="format-list-bulleted" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text style={styles.primaryActionBtnText}>Browse UK Registered Garages</Text>
+              <MaterialCommunityIcons name="map-marker-radius" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.primaryActionBtnText}>Select a UK Area</Text>
             </TouchableOpacity>
 
             {/* Quick UK City Presets */}
@@ -651,7 +616,12 @@ export default function GarageListScreen({ route, navigation }: any) {
                 <TouchableOpacity
                   key={cityName}
                   style={[styles.presetChip, { backgroundColor: theme.colors.secondary + '15', borderColor: theme.colors.secondary + '30' }]}
-                  onPress={() => setSearchQuery(cityName)}
+                  onPress={() => {
+                    const preset = UK_PRESET_LOCATIONS[cityName] || Object.entries(UK_PRESET_LOCATIONS).find(([k]) => k.toLowerCase().includes(cityName.toLowerCase()))?.[1];
+                    if (preset) {
+                      setUserLocation(preset);
+                    }
+                  }}
                 >
                   <Text style={[styles.presetChipText, { color: theme.colors.secondary }]}>{cityName}</Text>
                 </TouchableOpacity>
@@ -708,6 +678,22 @@ export default function GarageListScreen({ route, navigation }: any) {
           }
         />
       )}
+
+      <SelectAreaBottomSheet
+        visible={areaModalVisible}
+        onClose={() => setAreaModalVisible(false)}
+        currentLocation={activeCoordinates}
+        onSelectLocation={(coords) => setUserLocation(coords)}
+      />
+
+      <FilterServiceBottomSheet
+        visible={serviceModalVisible}
+        onClose={() => setServiceModalVisible(false)}
+        selectedService={activeServiceFilter}
+        selectedServiceTitle={activeServiceTitle}
+        onSelectService={handleSelectServiceFilter}
+        garages={garages}
+      />
     </View>
   );
 }
@@ -738,47 +724,49 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#10B981',
   },
-  subtitle: {
-    fontSize: 11,
-    lineHeight: 14,
-    marginTop: 2,
-  },
-  topLocationSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  locationRegionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  headerLocationCol: {
+    justifyContent: 'center',
     paddingHorizontal: 12,
-    height: 42,
-    borderRadius: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
     borderWidth: 1,
+    maxWidth: 270,
   },
-  locationRegionText: {
-    fontSize: 11,
-    fontWeight: '600',
+  headerLocationLabel: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    marginBottom: 1,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
-  demoBadge: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+  headerLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerLocationCity: {
+    fontSize: 13,
+    fontWeight: '800',
+    maxWidth: 220,
+  },
+  headerInitialsWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginLeft: 6,
   },
-  demoBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: 'bold',
+  topProfileInitialsText: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
-    marginTop: 6,
+    marginTop: 10,
     marginBottom: 8,
   },
   searchContainer: {
@@ -804,23 +792,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     paddingVertical: 0,
   },
-  nearMeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 42,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+  searchDivider: {
+    width: 1,
+    height: 20,
+    marginHorizontal: 8,
   },
-  nearMeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+  filterInsideButton: {
+    padding: 5,
+    borderRadius: 7,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  activeFilterDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   nearMeActivePill: {
     flexDirection: 'row',
@@ -842,92 +832,17 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 14,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    overflow: 'hidden',
-  },
-  bannerContainer: {
-    width: '100%',
-    height: 125,
-    position: 'relative',
-    backgroundColor: '#F3F4F6',
-  },
-  bannerImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  bannerPlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bannerTagTopLeft: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  bannerTagText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  bannerTagTopRight: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  bannerTagPhotoCount: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  bannerBottomChips: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    flexDirection: 'row',
-    gap: 6,
-  },
-  bannerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-    gap: 3,
-  },
-  bannerChipText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  cardContent: {
-    padding: 12,
-  },
-  cardMainRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginBottom: 10,
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
   },
   logoSmall: {
     width: 44,
@@ -947,13 +862,19 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     flex: 1,
-    marginLeft: 10,
-    marginRight: 8,
+    marginHorizontal: 10,
+    justifyContent: 'center',
+  },
+  garageNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   garageName: {
     fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 2,
+    flex: 1,
   },
   addressRow: {
     flexDirection: 'row',
@@ -963,64 +884,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     flex: 1,
   },
-  postcodeTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 3,
-    gap: 4,
-  },
-  postcodeBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  postcodeBadgeText: {
-    fontSize: 10,
+  garageMiles: {
+    fontSize: 11,
     fontWeight: '700',
-  },
-  cityText: {
-    fontSize: 10,
-  },
-  bookPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    gap: 2,
-  },
-  bookPillText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  directionsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 2,
-  },
-  directionsBtnText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-  },
-  hoursText: {
-    fontSize: 11,
-  },
-  daysText: {
-    fontSize: 11,
-    fontWeight: '600',
+    marginTop: 3,
   },
   centerContainer: {
     flex: 1,
@@ -1170,43 +1037,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-  },
-  serviceFilterIconWrap: {
-    width: 32,
-    height: 32,
+    marginBottom: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
+    borderWidth: 1,
   },
-  serviceFilterLabel: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  serviceFilterName: {
-    fontSize: 13,
-    fontWeight: '800',
-    marginTop: 1,
+  serviceFilterCompactText: {
+    fontSize: 12,
   },
   serviceCountBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
   },
   serviceCountText: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 10.5,
+    fontWeight: '700',
   },
 });
