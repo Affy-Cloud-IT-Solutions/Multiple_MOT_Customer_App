@@ -305,10 +305,6 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   // Loading spinner states per vehicle/action
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
-  const handleBookMOT = (vehicle: any) => {
-    navigation.navigate('Booking', { vehicle });
-  };
-
   const handleMarkAsSold = (vehicleId: string, reg: string, makeModel: string) => {
     const actionId = `sold_${vehicleId}`;
     
@@ -1095,7 +1091,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           )}
                         </TouchableOpacity>
 
-                        {isBooked ? (
+                        {isBooked && (
                           <>
                             <TouchableOpacity
                               onPress={() => handleCancelBooking(bookingAlert)}
@@ -1171,31 +1167,6 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                               </View>
                             </TouchableOpacity>
                           </>
-                        ) : (
-                          <TouchableOpacity
-                            onPress={() => handleBookMOT(v)}
-                            disabled={loadingAction !== null}
-                            style={[
-                              styles.actionBtn, 
-                              styles.bookBtn, 
-                              { 
-                                backgroundColor: theme.colors.secondary,
-                                elevation: 1,
-                              }
-                            ]}
-                          >
-                            <View style={styles.actionBtnContent}>
-                              <MaterialCommunityIcons 
-                                name="calendar-plus" 
-                                size={16} 
-                                color={theme.dark ? theme.colors.background : '#FFFFFF'} 
-                                style={{ marginRight: 4 }} 
-                              />
-                              <Text style={[styles.actionBtnText, { color: theme.dark ? theme.colors.background : '#FFFFFF' }]}>
-                                Book MOT
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
                         )}
                       </View>
                     )}

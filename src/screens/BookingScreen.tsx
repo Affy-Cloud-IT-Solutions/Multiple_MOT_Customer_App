@@ -15,10 +15,11 @@ import Toast from 'react-native-toast-message';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { validateMotExpiryDate } from '../utils/validationUtils';
 
 export default function BookingScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addAudit, user, token, cancelBooking } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addAudit, addVehicle, lookupVehicle, user, token, cancelBooking } = useAppValues();
 
   // Find active customer
   const customerId = user?.customerId || 'c1';
@@ -40,6 +41,17 @@ export default function BookingScreen({ route, navigation }: any) {
     const diffTime = expiryDate.getTime() - today.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
+
+  // Inline Add Vehicle states
+  const [showAddCarForm, setShowAddCarForm] = useState(false);
+  const [newRegNo, setNewRegNo] = useState('');
+  const [newMake, setNewMake] = useState('');
+  const [newModel, setNewModel] = useState('');
+  const [newYear, setNewYear] = useState('');
+  const [newExpiry, setNewExpiry] = useState('');
+  const [isSearchingNewPlate, setIsSearchingNewPlate] = useState(false);
+  const [newLookupInfo, setNewLookupInfo] = useState<string | null>(null);
+  const [isAddingCar, setIsAddingCar] = useState(false);
 
   // Selected vehicle state
   const [selectedVehicle, setSelectedVehicle] = useState<any>(
@@ -354,6 +366,142 @@ export default function BookingScreen({ route, navigation }: any) {
     }
   }, [selectedVehicle, isReschedule, bookedDateFormatted, bookedDateRaw, bookedSlotTime]);
 
+  const formatDateInput = (text: string) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    let formatted = cleaned;
+    if (cleaned.length > 4 && cleaned.length <= 6) {
+      formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+    } else if (cleaned.length > 6) {
+      formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`;
+    }
+    return formatted;
+  };
+
+  const handleLookupNewPlate = async () => {
+    const vrnClean = newRegNo.trim().toUpperCase().replace(/\s+/g, '');
+    if (!vrnClean) {
+      Alert.alert('Registration Required', 'Please enter a vehicle registration number to look up.');
+      return;
+    }
+
+    setIsSearchingNewPlate(true);
+    setNewLookupInfo(null);
+
+    try {
+      const res = await lookupVehicle(vrnClean);
+      if (res && res.found && res.vehicle) {
+        const v = res.vehicle;
+        setNewMake(v.make || '');
+        setNewModel(v.model || '');
+        setNewYear(v.year ? String(v.year) : '');
+        setNewExpiry(v.motExpiryDate || '');
+        const infoStr = `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}`;
+        setNewLookupInfo(infoStr);
+
+        Toast.show({
+          type: 'success',
+          text1: 'Vehicle Found on DVSA',
+          text2: `${v.make} ${v.model} details autofilled!`,
+        });
+      } else {
+        Alert.alert(
+          'Vehicle Not Found',
+          `No vehicle details found for "${newRegNo.trim().toUpperCase()}" in DVSA records.\n\nPlease enter the vehicle details manually.`
+        );
+      }
+    } catch (err: any) {
+      console.error('[BookingScreen] lookup error:', err);
+      Alert.alert(
+        'Lookup Failed',
+        err.message || `Could not find registration "${newRegNo.trim().toUpperCase()}". Please enter vehicle details manually.`
+      );
+    } finally {
+      setIsSearchingNewPlate(false);
+    }
+  };
+
+  const handleSaveNewCar = async () => {
+    const regClean = newRegNo.trim().toUpperCase();
+    const makeClean = newMake.trim().toUpperCase();
+    const modelClean = newModel.trim().toUpperCase();
+    const yearClean = newYear.trim();
+    const expiryClean = newExpiry.trim();
+
+    if (!regClean || !makeClean || !modelClean || !yearClean || !expiryClean) {
+      Alert.alert('Missing Details', 'Please fill in registration, make, model, year, and MOT expiry date.');
+      return;
+    }
+
+    if (!/^\d{4}$/.test(yearClean)) {
+      Alert.alert('Invalid Year', 'Please enter a valid 4-digit manufacture year (e.g. 2019).');
+      return;
+    }
+
+    const expiryCheck = validateMotExpiryDate(expiryClean);
+    if (expiryCheck.error) {
+      Alert.alert('Validation Error', expiryCheck.error);
+      return;
+    }
+
+    setIsAddingCar(true);
+    try {
+      const createdVeh = await addVehicle({
+        customerId: customer.id,
+        registrationNumber: regClean,
+        make: makeClean,
+        model: modelClean,
+        year: yearClean,
+        motExpiryDate: expiryClean,
+        status: 'Active',
+      });
+
+      await addAlert({
+        type: 'NEW_VEHICLE',
+        customerName: `${customer.firstName} ${customer.lastName}`.trim() || user?.name || 'Customer',
+        customerId: customer.id,
+        registrationNumber: regClean,
+        makeModel: `${makeClean} ${modelClean}`,
+        status: 'Approved',
+      });
+
+      await addAudit(
+        'New Vehicle Registered',
+        `${customer.firstName} ${customer.lastName} registered ${makeClean} ${modelClean} (${regClean}) during booking`
+      );
+
+      const targetObj = createdVeh || {
+        id: `veh_${Date.now()}`,
+        _id: `veh_${Date.now()}`,
+        customerId: customer.id,
+        registrationNumber: regClean,
+        make: makeClean,
+        model: modelClean,
+        year: yearClean,
+        motExpiryDate: expiryClean,
+        status: 'Active',
+      };
+
+      setSelectedVehicle(targetObj);
+      setShowAddCarForm(false);
+      setNewRegNo('');
+      setNewMake('');
+      setNewModel('');
+      setNewYear('');
+      setNewExpiry('');
+      setNewLookupInfo(null);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Vehicle Added & Selected!',
+        text2: `${regClean} is now selected for this booking.`,
+      });
+    } catch (err: any) {
+      console.error('Failed to add vehicle in booking flow:', err);
+      Alert.alert('Error', err.message || 'Failed to add vehicle. Please try again.');
+    } finally {
+      setIsAddingCar(false);
+    }
+  };
 
   // Fetch live 45-minute slots for the selected garage and date
   const fetchGarageSlots = React.useCallback(async () => {
@@ -691,45 +839,181 @@ export default function BookingScreen({ route, navigation }: any) {
         ) : (
           <>
             {/* 1. Dynamic Vehicle Selector */}
-            <Text style={[styles.sectionHeading, { color: theme.colors.text, marginTop: 4, marginBottom: 8 }]}>
-              Select Vehicle
-            </Text>
-            {route?.params?.vehicle ? (
-              /* If vehicle is passed from portal, lock it and show a premium summary card */
-              <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginBottom: 14, flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 10, borderWidth: 1 }]}>
-                <View style={[styles.plate, { marginRight: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, height: 32 }]}>
-                  <Text style={[styles.plateText, { fontSize: 12 }]}>{selectedVehicle?.registrationNumber}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 14, fontWeight: 'bold' }]}>
-                    {selectedVehicle?.make} {selectedVehicle?.model}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, marginBottom: 8 }}>
+              <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>
+                Select Vehicle
+              </Text>
+              {activeCustomerVehicles.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setShowAddCarForm(!showAddCarForm)}
+                  style={[
+                    styles.addCarToggleBtn,
+                    {
+                      backgroundColor: showAddCarForm ? theme.colors.border : theme.colors.primary + '15',
+                      borderColor: showAddCarForm ? theme.colors.border : theme.colors.primary + '35',
+                    }
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={showAddCarForm ? 'close' : 'plus'}
+                    size={14}
+                    color={showAddCarForm ? theme.colors.text : theme.colors.primary}
+                    style={{ marginRight: 3 }}
+                  />
+                  <Text style={[
+                    styles.addCarToggleText,
+                    { color: showAddCarForm ? theme.colors.text : theme.colors.primary }
+                  ]}>
+                    {showAddCarForm ? 'Cancel' : 'Add Car'}
                   </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                    <MaterialCommunityIcons name="calendar-clock" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
-                    <Text style={[styles.vehicleSubText, { color: theme.colors.placeholder, fontSize: 11 }]}>
-                      MOT Expiry: {selectedVehicle?.motExpiryDate ? `${new Date(selectedVehicle.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} (${(() => {
-                        const daysLeft = getDaysUntilExpiry(selectedVehicle.motExpiryDate);
-                        return daysLeft >= 0 ? `${daysLeft} days left` : `${Math.abs(daysLeft)} days ago`;
-                      })()})` : 'N/A'}
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Inline Add Vehicle Card */}
+            {(showAddCarForm || activeCustomerVehicles.length === 0) && (
+              <View style={[styles.inlineAddCarCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary + '40', marginBottom: 14 }]}>
+                <View style={styles.inlineAddCarHeader}>
+                  <MaterialCommunityIcons name="car-plus" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                  <Text style={[styles.inlineAddCarTitle, { color: theme.colors.text }]}>
+                    Register & Add Vehicle for this Booking
+                  </Text>
+                </View>
+
+                {/* UK Number Plate Input with Attached Lookup */}
+                <Text style={[styles.formLabel, { color: theme.colors.text }]}>UK Registration Plate</Text>
+                <View style={styles.plateInputContainer}>
+                  <View style={styles.ukPlateStrip}>
+                    <Text style={styles.ukFlagEmoji}>🇬🇧</Text>
+                    <Text style={styles.ukStripLabel}>UK</Text>
+                  </View>
+                  <TextInput
+                    value={newRegNo}
+                    onChangeText={(txt) => setNewRegNo(txt.toUpperCase())}
+                    placeholder="eg AB19 CDE"
+                    placeholderTextColor="#6B7280"
+                    style={styles.plateInputField}
+                    autoCapitalize="characters"
+                    maxLength={8}
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    style={[styles.plateLookupBtn, { backgroundColor: theme.colors.primary }]}
+                    onPress={handleLookupNewPlate}
+                    disabled={isSearchingNewPlate}
+                    activeOpacity={0.8}
+                  >
+                    {isSearchingNewPlate ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="magnify" size={15} color="#FFFFFF" style={{ marginRight: 3 }} />
+                        <Text style={styles.plateLookupBtnText}>LOOKUP</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {/* Lookup Info Banner */}
+                {newLookupInfo && (
+                  <View style={styles.lookupSuccessBanner}>
+                    <MaterialCommunityIcons name="check-decagram" size={16} color="#10B981" style={{ marginRight: 6 }} />
+                    <Text style={styles.lookupSuccessText}>
+                      DVSA Verified: Autofilled details for {newLookupInfo}
                     </Text>
                   </View>
+                )}
+
+                {/* Make & Model Row */}
+                <View style={styles.formRow}>
+                  <View style={styles.formCol}>
+                    <Text style={[styles.formLabel, { color: theme.colors.text }]}>Make</Text>
+                    <TextInput
+                      value={newMake}
+                      onChangeText={setNewMake}
+                      placeholder="e.g. FORD"
+                      placeholderTextColor={theme.colors.placeholder}
+                      autoCapitalize="characters"
+                      style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                    />
+                  </View>
+                  <View style={styles.formCol}>
+                    <Text style={[styles.formLabel, { color: theme.colors.text }]}>Model</Text>
+                    <TextInput
+                      value={newModel}
+                      onChangeText={setNewModel}
+                      placeholder="e.g. FOCUS"
+                      placeholderTextColor={theme.colors.placeholder}
+                      autoCapitalize="characters"
+                      style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                    />
+                  </View>
+                </View>
+
+                {/* Year & MOT Expiry Row */}
+                <View style={styles.formRow}>
+                  <View style={styles.formCol}>
+                    <Text style={[styles.formLabel, { color: theme.colors.text }]}>Year</Text>
+                    <TextInput
+                      value={newYear}
+                      onChangeText={setNewYear}
+                      placeholder="e.g. 2019"
+                      placeholderTextColor={theme.colors.placeholder}
+                      keyboardType="numeric"
+                      maxLength={4}
+                      style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                    />
+                  </View>
+                  <View style={styles.formCol}>
+                    <Text style={[styles.formLabel, { color: theme.colors.text }]}>MOT Expiry (YYYY-MM-DD)</Text>
+                    <TextInput
+                      value={newExpiry}
+                      onChangeText={(t) => setNewExpiry(formatDateInput(t))}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={theme.colors.placeholder}
+                      keyboardType="numeric"
+                      maxLength={10}
+                      style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                    />
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                  {activeCustomerVehicles.length > 0 && (
+                    <TouchableOpacity
+                      style={[styles.cancelCarFormBtn, { borderColor: theme.colors.border }]}
+                      onPress={() => setShowAddCarForm(false)}
+                    >
+                      <Text style={[styles.cancelCarFormText, { color: theme.colors.text }]}>Cancel</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.saveCarSubmitBtn, { backgroundColor: theme.colors.primary, flex: 1 }]}
+                    onPress={handleSaveNewCar}
+                    disabled={isAddingCar}
+                  >
+                    {isAddingCar ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="check" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                        <Text style={styles.saveCarSubmitBtnText}>Save & Select Car</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
-            ) : activeCustomerVehicles.length === 0 ? (
-              <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.error + '10', borderColor: theme.colors.error + '30', marginBottom: 12 }]}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={20} color={theme.colors.error} style={{ marginRight: 8 }} />
-                <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text }]}>
-                  No active registered vehicles found. Please register a vehicle in My Portal first.
-                </Text>
-              </View>
-            ) : (
+            )}
+
+            {/* Vehicle Selector Carousel */}
+            {activeCustomerVehicles.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
                 {activeCustomerVehicles.map(v => {
                   const isSelected = selectedVehicle && (v.registrationNumber === selectedVehicle.registrationNumber);
                   const daysLeft = getDaysUntilExpiry(v.motExpiryDate);
                   return (
                     <TouchableOpacity
-                      key={v.id || v.registrationNumber}
+                      key={v.id || v._id || v.registrationNumber}
                       onPress={() => setSelectedVehicle(v)}
                       style={[
                         styles.vehicleSelectorCard,
@@ -1418,5 +1702,142 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
+  },
+  addCarToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  addCarToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  inlineAddCarCard: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginVertical: 10,
+  },
+  inlineAddCarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  inlineAddCarTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  plateInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 42,
+    backgroundColor: '#FFD300',
+    borderWidth: 1.5,
+    borderColor: '#000000',
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  ukPlateStrip: {
+    width: 32,
+    height: '100%',
+    backgroundColor: '#0A4E9B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  ukFlagEmoji: {
+    fontSize: 10,
+  },
+  ukStripLabel: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 8,
+  },
+  plateInputField: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#000000',
+    textAlign: 'center',
+    height: '100%',
+    padding: 0,
+    letterSpacing: 1,
+  },
+  plateLookupBtn: {
+    height: '100%',
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  plateLookupBtnText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 11,
+  },
+  lookupSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B98115',
+    borderColor: '#10B98140',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  lookupSuccessText: {
+    fontSize: 11,
+    color: '#10B981',
+    fontWeight: '600',
+    flex: 1,
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  formCol: {
+    flex: 1,
+  },
+  formLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  formInputField: {
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    fontSize: 13,
+  },
+  cancelCarFormBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelCarFormText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  saveCarSubmitBtn: {
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  saveCarSubmitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 });

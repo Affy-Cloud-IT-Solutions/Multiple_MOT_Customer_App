@@ -439,14 +439,13 @@ export default function HomeScreen({ navigation }: any) {
                 name={isOutsideUK ? 'map-marker-remove' : 'map-marker'}
                 size={14}
                 color={isOutsideUK ? '#DC2626' : theme.colors.secondary}
-                style={{ marginRight: 3 }}
+                style={{ marginRight: 4, marginTop: 1 }}
               />
               <Text
                 style={[
                   styles.headerLocationCity,
                   { color: isOutsideUK ? '#DC2626' : theme.colors.text },
                 ]}
-                numberOfLines={1}
               >
                 {formatPreciseLocation(userLocation)}
               </Text>
@@ -454,7 +453,7 @@ export default function HomeScreen({ navigation }: any) {
                 name="chevron-down"
                 size={13}
                 color={isOutsideUK ? '#DC2626' : theme.colors.placeholder}
-                style={{ marginLeft: 2 }}
+                style={{ marginLeft: 3 }}
               />
             </View>
           </TouchableOpacity>
@@ -558,40 +557,32 @@ export default function HomeScreen({ navigation }: any) {
               </Text>
             </View>
 
-            <View style={styles.detailsGrid2x2}>
-              <View style={[styles.detailGridCell, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                <View style={[styles.detailCellIconWrap, { backgroundColor: '#10B98115' }]}>
-                  <MaterialCommunityIcons name="calendar-clock" size={16} color="#10B981" />
-                </View>
-                <Text style={[styles.detailCellTitle, { color: theme.colors.text }]} numberOfLines={1}>
-                  MOT Expiry & Status
+            <View style={styles.detailsNormalGrid}>
+              <View style={styles.normalDetailItem}>
+                <MaterialCommunityIcons name="calendar-clock" size={17} color="#10B981" style={{ marginRight: 7 }} />
+                <Text style={[styles.normalDetailText, { color: theme.colors.text }]}>
+                  MOT Expiry Date & Status
                 </Text>
               </View>
 
-              <View style={[styles.detailGridCell, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                <View style={[styles.detailCellIconWrap, { backgroundColor: '#F59E0B15' }]}>
-                  <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#F59E0B" />
-                </View>
-                <Text style={[styles.detailCellTitle, { color: theme.colors.text }]} numberOfLines={1}>
+              <View style={styles.normalDetailItem}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={17} color="#F59E0B" style={{ marginRight: 7 }} />
+                <Text style={[styles.normalDetailText, { color: theme.colors.text }]}>
                   Defects & Advisories
                 </Text>
               </View>
 
-              <View style={[styles.detailGridCell, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                <View style={[styles.detailCellIconWrap, { backgroundColor: '#8B5CF615' }]}>
-                  <MaterialCommunityIcons name="speedometer" size={16} color="#8B5CF6" />
-                </View>
-                <Text style={[styles.detailCellTitle, { color: theme.colors.text }]} numberOfLines={1}>
+              <View style={styles.normalDetailItem}>
+                <MaterialCommunityIcons name="speedometer" size={17} color="#8B5CF6" style={{ marginRight: 7 }} />
+                <Text style={[styles.normalDetailText, { color: theme.colors.text }]}>
                   Mileage History
                 </Text>
               </View>
 
-              <View style={[styles.detailGridCell, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                <View style={[styles.detailCellIconWrap, { backgroundColor: '#3B82F615' }]}>
-                  <MaterialCommunityIcons name="car-info" size={16} color="#3B82F6" />
-                </View>
-                <Text style={[styles.detailCellTitle, { color: theme.colors.text }]} numberOfLines={1}>
-                  Vehicle Specs
+              <View style={styles.normalDetailItem}>
+                <MaterialCommunityIcons name="car-info" size={17} color="#3B82F6" style={{ marginRight: 7 }} />
+                <Text style={[styles.normalDetailText, { color: theme.colors.text }]}>
+                  Vehicle Specifications
                 </Text>
               </View>
             </View>
@@ -810,6 +801,7 @@ export default function HomeScreen({ navigation }: any) {
                               garageId: garage._id || garage.id,
                               garage,
                               serviceName: svc.name,
+                              autoOpenBooking: true,
                             })}
                             style={[
                               styles.garageServiceChipCard,
@@ -848,14 +840,11 @@ export default function HomeScreen({ navigation }: any) {
             style={[styles.quickHubCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
             activeOpacity={0.8}
             onPress={() => {
-              if (token) {
-                navigation.navigate('My Portal');
-              } else {
-                Alert.alert('Sign In Required', 'Please sign in to book your MOT appointment.', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Sign In', onPress: () => navigation.navigate('Login') }
-                ]);
-              }
+              navigation.navigate('Garages', {
+                serviceFilter: 'MOT',
+                serviceTitle: 'MOT Test',
+                searchQuery: 'MOT',
+              });
             }}
           >
             <View style={[styles.quickHubIconCircle, { backgroundColor: '#1677FF18' }]}>
@@ -1426,11 +1415,11 @@ const styles = StyleSheet.create({
   },
   headerLocationCol: {
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
-    maxWidth: 240,
+    flex: 1,
   },
   headerLocationLabel: {
     fontSize: 9.5,
@@ -1442,11 +1431,14 @@ const styles = StyleSheet.create({
   headerLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   headerLocationCity: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
-    maxWidth: 195,
+    lineHeight: 16,
+    flex: 1,
+    flexShrink: 1,
   },
   garagesVerticalList: {
     gap: 12,
@@ -1796,32 +1788,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  detailsGrid2x2: {
+  detailsNormalGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 8,
+    rowGap: 10,
+    marginTop: 2,
   },
-  detailGridCell: {
+  normalDetailItem: {
     width: '48.5%',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    borderWidth: 1,
+    paddingVertical: 3,
   },
-  detailCellIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
-  },
-  detailCellTitle: {
-    fontSize: 11,
-    fontWeight: '700',
+  normalDetailText: {
+    fontSize: 12,
+    fontWeight: '600',
     flex: 1,
   },
   unavailableHomeCard: {

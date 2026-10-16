@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,17 +18,28 @@ export interface ServiceItem {
   id: string;
   title: string;
   keyword: string;
+  category: string;
   icon: string;
   iconColor: string;
   iconBg: string;
   description: string;
 }
 
+export const SERVICE_CATEGORIES = [
+  'All',
+  'MOT',
+  'Servicing',
+  'Brakes & Tyres',
+  'Diagnostics',
+  'Repairs',
+] as const;
+
 export const POPULAR_SERVICES: ServiceItem[] = [
   {
     id: 'mot_test',
     title: 'MOT Test',
     keyword: 'MOT',
+    category: 'MOT',
     icon: 'shield-check',
     iconColor: '#10B981',
     iconBg: '#10B98115',
@@ -38,6 +49,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'full_service',
     title: 'Full Service',
     keyword: 'Full Service',
+    category: 'Servicing',
     icon: 'car-cog',
     iconColor: '#1677FF',
     iconBg: '#1677FF15',
@@ -47,6 +59,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'interim_service',
     title: 'Interim Service',
     keyword: 'Interim Service',
+    category: 'Servicing',
     icon: 'oil',
     iconColor: '#8B5CF6',
     iconBg: '#8B5CF615',
@@ -56,6 +69,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'major_service',
     title: 'Major Service',
     keyword: 'Major Service',
+    category: 'Servicing',
     icon: 'car-wrench',
     iconColor: '#D97706',
     iconBg: '#F59E0B15',
@@ -65,6 +79,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'brakes',
     title: 'Brakes & Discs',
     keyword: 'Brake',
+    category: 'Brakes & Tyres',
     icon: 'car-brake-alert',
     iconColor: '#EF4444',
     iconBg: '#EF444415',
@@ -74,6 +89,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'tyres',
     title: 'Tyres & Tracking',
     keyword: 'Tyre',
+    category: 'Brakes & Tyres',
     icon: 'tire',
     iconColor: '#F59E0B',
     iconBg: '#F59E0B15',
@@ -83,6 +99,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'diagnostics',
     title: 'Diagnostics Scan',
     keyword: 'Diagnostic',
+    category: 'Diagnostics',
     icon: 'engine',
     iconColor: '#06B6D4',
     iconBg: '#06B6D415',
@@ -92,6 +109,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'air_con',
     title: 'Air Con Regas',
     keyword: 'Air Con',
+    category: 'Diagnostics',
     icon: 'snowflake',
     iconColor: '#0284C7',
     iconBg: '#0284C715',
@@ -101,6 +119,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'battery',
     title: 'Battery & Electrical',
     keyword: 'Battery',
+    category: 'Diagnostics',
     icon: 'car-battery',
     iconColor: '#EA580C',
     iconBg: '#EA580C15',
@@ -110,6 +129,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'clutch',
     title: 'Clutch & Gearbox',
     keyword: 'Clutch',
+    category: 'Repairs',
     icon: 'cog-sync',
     iconColor: '#9333EA',
     iconBg: '#9333EA15',
@@ -119,6 +139,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'suspension',
     title: 'Suspension & Steering',
     keyword: 'Suspension',
+    category: 'Brakes & Tyres',
     icon: 'car-traction-control',
     iconColor: '#4F46E5',
     iconBg: '#4F46E515',
@@ -128,6 +149,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'exhaust',
     title: 'Exhaust & Emissions',
     keyword: 'Exhaust',
+    category: 'Repairs',
     icon: 'smoke',
     iconColor: '#059669',
     iconBg: '#05966915',
@@ -137,6 +159,7 @@ export const POPULAR_SERVICES: ServiceItem[] = [
     id: 'repairs',
     title: 'General Repairs',
     keyword: 'Repair',
+    category: 'Repairs',
     icon: 'wrench',
     iconColor: '#EC4899',
     iconBg: '#EC489915',
@@ -219,6 +242,7 @@ export default function FilterServiceBottomSheet({
 }: FilterServiceBottomSheetProps) {
   const { theme } = useAppTheme();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   // Count how many garages offer a given service
   const getGarageCountForService = useMemo(() => {
@@ -247,6 +271,15 @@ export default function FilterServiceBottomSheet({
       POPULAR_SERVICES.map((s) => s.keyword.toLowerCase())
     );
 
+    const resolveCategory = (name: string): string => {
+      const n = name.toLowerCase();
+      if (n.includes('mot')) return 'MOT';
+      if (n.includes('service') || n.includes('oil')) return 'Servicing';
+      if (n.includes('brake') || n.includes('tyre') || n.includes('tire') || n.includes('wheel') || n.includes('suspension')) return 'Brakes & Tyres';
+      if (n.includes('diag') || n.includes('battery') || n.includes('air') || n.includes('ac') || n.includes('electric')) return 'Diagnostics';
+      return 'Repairs';
+    };
+
     garages.forEach((g) => {
       if (Array.isArray(g.services)) {
         g.services.forEach((s: any) => {
@@ -257,6 +290,7 @@ export default function FilterServiceBottomSheet({
               id: `custom_${name.toLowerCase().replace(/\s+/g, '_')}`,
               title: name,
               keyword: name,
+              category: resolveCategory(name),
               icon: 'wrench',
               iconColor: theme.colors.primary,
               iconBg: theme.colors.primary + '15',
@@ -270,18 +304,42 @@ export default function FilterServiceBottomSheet({
     return list;
   }, [garages, theme.colors.primary]);
 
-  // Filter services list based on internal search query
-  const filteredServices = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return allServices;
-
-    return allServices.filter(
-      (s) =>
-        s.title.toLowerCase().includes(q) ||
-        s.keyword.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q)
+  // Auto-switch category tab to match active selectedService if present
+  useEffect(() => {
+    if (!visible) return;
+    if (!selectedService) {
+      setSelectedCategory('All');
+      return;
+    }
+    const matched = allServices.find((s) =>
+      isServiceMatch({ name: s.keyword, category: s.category }, selectedService)
     );
-  }, [allServices, searchQuery]);
+    if (matched && matched.category) {
+      setSelectedCategory(matched.category);
+    }
+  }, [selectedService, allServices, visible]);
+
+  // Filter services list based on category tab and search query
+  const filteredServices = useMemo(() => {
+    let list = allServices;
+
+    if (selectedCategory !== 'All') {
+      list = list.filter((s) => s.category === selectedCategory);
+    }
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          s.keyword.toLowerCase().includes(q) ||
+          s.category.toLowerCase().includes(q) ||
+          s.description.toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [allServices, selectedCategory, searchQuery]);
 
   const handleSelect = (serviceKey: string, serviceTitle: string) => {
     onSelectService(serviceKey, serviceTitle);
@@ -336,7 +394,7 @@ export default function FilterServiceBottomSheet({
                     >
                       <MaterialCommunityIcons
                         name="filter-variant"
-                        size={20}
+                        size={18}
                         color={theme.colors.primary}
                       />
                     </View>
@@ -348,7 +406,7 @@ export default function FilterServiceBottomSheet({
                         style={[styles.headerSubtitle, { color: theme.colors.placeholder }]}
                         numberOfLines={1}
                       >
-                        Find certified garages offering specific services
+                        Tap a category tab or service to filter
                       </Text>
                     </View>
                   </View>
@@ -400,13 +458,13 @@ export default function FilterServiceBottomSheet({
                 >
                   <MaterialCommunityIcons
                     name="magnify"
-                    size={20}
+                    size={18}
                     color={theme.colors.placeholder}
                     style={{ marginRight: 8 }}
                   />
                   <TextInput
                     style={[styles.searchInput, { color: theme.colors.text }]}
-                    placeholder="Search service (e.g. MOT, Brakes, Service)..."
+                    placeholder="Search service (MOT, Service, Brakes)..."
                     placeholderTextColor={theme.colors.placeholder}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
@@ -420,24 +478,67 @@ export default function FilterServiceBottomSheet({
                     >
                       <MaterialCommunityIcons
                         name="close-circle"
-                        size={18}
+                        size={16}
                         color={theme.colors.placeholder}
                       />
                     </TouchableOpacity>
                   )}
                 </View>
 
-                {/* Services List */}
+                {/* Border-Radius Category Tabs Bar */}
+                <View style={styles.categoryContainer}>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.categoryScroll}
+                  >
+                    {SERVICE_CATEGORIES.map((cat) => {
+                      const isActive = selectedCategory === cat;
+                      return (
+                        <TouchableOpacity
+                          key={cat}
+                          onPress={() => setSelectedCategory(cat)}
+                          style={[
+                            styles.categoryTab,
+                            {
+                              backgroundColor: isActive
+                                ? theme.colors.primary
+                                : theme.colors.card,
+                              borderColor: isActive
+                                ? theme.colors.primary
+                                : theme.colors.border,
+                            },
+                          ]}
+                          activeOpacity={0.75}
+                        >
+                          <Text
+                            style={[
+                              styles.categoryTabText,
+                              {
+                                color: isActive ? '#FFFFFF' : theme.colors.text,
+                                fontWeight: isActive ? '700' : '500',
+                              },
+                            ]}
+                          >
+                            {cat}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+
+                {/* Services List - Clean, compact border-radius tab rows */}
                 <ScrollView
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={styles.scrollList}
                   keyboardShouldPersistTaps="handled"
                 >
                   {/* Option: All Services (Show all garages) */}
-                  {!searchQuery.trim() && (
+                  {selectedCategory === 'All' && !searchQuery.trim() && (
                     <TouchableOpacity
                       style={[
-                        styles.serviceItem,
+                        styles.serviceItemTab,
                         {
                           backgroundColor: !selectedService
                             ? theme.colors.primary + '10'
@@ -462,7 +563,7 @@ export default function FilterServiceBottomSheet({
                       >
                         <MaterialCommunityIcons
                           name="apps"
-                          size={20}
+                          size={18}
                           color={
                             !selectedService
                               ? theme.colors.primary
@@ -483,7 +584,7 @@ export default function FilterServiceBottomSheet({
                               },
                             ]}
                           >
-                            All Services
+                            All Garages (No Filter)
                           </Text>
                           {!selectedService && (
                             <View
@@ -503,15 +604,6 @@ export default function FilterServiceBottomSheet({
                             </View>
                           )}
                         </View>
-                        <Text
-                          style={[
-                            styles.serviceDesc,
-                            { color: theme.colors.placeholder },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          Show all registered garages without service filter
-                        </Text>
                       </View>
 
                       <View style={styles.rightCol}>
@@ -527,7 +619,7 @@ export default function FilterServiceBottomSheet({
                               { color: theme.colors.secondary },
                             ]}
                           >
-                            {garages.length} Garages
+                            {garages.length}
                           </Text>
                         </View>
                         <View
@@ -546,7 +638,7 @@ export default function FilterServiceBottomSheet({
                           {!selectedService && (
                             <MaterialCommunityIcons
                               name="check"
-                              size={12}
+                              size={11}
                               color="#FFFFFF"
                             />
                           )}
@@ -555,26 +647,12 @@ export default function FilterServiceBottomSheet({
                     </TouchableOpacity>
                   )}
 
-                  {/* Section Title */}
-                  <View style={styles.sectionHeaderRow}>
-                    <Text
-                      style={[
-                        styles.sectionHeading,
-                        { color: theme.colors.placeholder },
-                      ]}
-                    >
-                      {searchQuery.trim()
-                        ? `Search Results (${filteredServices.length})`
-                        : 'Available Services'}
-                    </Text>
-                  </View>
-
-                  {/* Filtered Services */}
+                  {/* Filtered Services List */}
                   {filteredServices.length === 0 ? (
                     <View style={styles.emptyContainer}>
                       <MaterialCommunityIcons
                         name="tools"
-                        size={36}
+                        size={32}
                         color={theme.colors.placeholder}
                         style={{ marginBottom: 6 }}
                       />
@@ -584,7 +662,7 @@ export default function FilterServiceBottomSheet({
                           { color: theme.colors.placeholder },
                         ]}
                       >
-                        No services found matching "{searchQuery}"
+                        No services found in "{selectedCategory}"
                       </Text>
                     </View>
                   ) : (
@@ -596,7 +674,7 @@ export default function FilterServiceBottomSheet({
                         <TouchableOpacity
                           key={item.id}
                           style={[
-                            styles.serviceItem,
+                            styles.serviceItemTab,
                             {
                               backgroundColor: isSelected
                                 ? theme.colors.primary + '10'
@@ -616,16 +694,14 @@ export default function FilterServiceBottomSheet({
                             ]}
                           >
                             <MaterialCommunityIcons
-                              name={item.icon}
-                              size={20}
+                              name={item.icon as any}
+                              size={18}
                               color={item.iconColor}
                             />
                           </View>
 
                           <View style={styles.serviceTextCol}>
-                            <View
-                              style={{ flexDirection: 'row', alignItems: 'center' }}
-                            >
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <Text
                                 style={[
                                   styles.serviceTitle,
@@ -635,6 +711,7 @@ export default function FilterServiceBottomSheet({
                                       : theme.colors.text,
                                   },
                                 ]}
+                                numberOfLines={1}
                               >
                                 {item.title}
                               </Text>
@@ -656,15 +733,6 @@ export default function FilterServiceBottomSheet({
                                 </View>
                               )}
                             </View>
-                            <Text
-                              style={[
-                                styles.serviceDesc,
-                                { color: theme.colors.placeholder },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {item.description}
-                            </Text>
                           </View>
 
                           <View style={styles.rightCol}>
@@ -675,7 +743,7 @@ export default function FilterServiceBottomSheet({
                                   backgroundColor:
                                     count > 0
                                       ? theme.colors.secondary + '15'
-                                      : theme.colors.border + '50',
+                                      : theme.colors.border + '40',
                                 },
                               ]}
                             >
@@ -690,7 +758,7 @@ export default function FilterServiceBottomSheet({
                                   },
                                 ]}
                               >
-                                {count} {count === 1 ? 'Garage' : 'Garages'}
+                                {count} {count === 1 ? 'garage' : 'garages'}
                               </Text>
                             </View>
 
@@ -710,7 +778,7 @@ export default function FilterServiceBottomSheet({
                               {isSelected && (
                                 <MaterialCommunityIcons
                                   name="check"
-                                  size={12}
+                                  size={11}
                                   color="#FFFFFF"
                                 />
                               )}
@@ -738,7 +806,7 @@ const styles = StyleSheet.create({
   },
   sheetWrapper: {
     width: '100%',
-    maxHeight: '85%',
+    maxHeight: '62%',
   },
   sheetContent: {
     borderTopLeftRadius: 22,
@@ -754,144 +822,150 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   handleBar: {
-    width: 44,
+    width: 40,
     height: 4,
     borderRadius: 2,
     backgroundColor: '#94A3B8',
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   headerIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: -0.2,
   },
   headerSubtitle: {
-    fontSize: 11.5,
-    marginTop: 2,
+    fontSize: 11,
+    marginTop: 1,
   },
   resetBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: 8,
   },
   resetBtnText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '700',
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 42,
-    marginBottom: 12,
+    paddingHorizontal: 10,
+    height: 38,
+    marginBottom: 10,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12.5,
     paddingVertical: 0,
   },
-  scrollList: {
-    paddingBottom: 28,
+  categoryContainer: {
+    marginBottom: 10,
   },
-  sectionHeaderRow: {
-    marginTop: 4,
-    marginBottom: 8,
+  categoryScroll: {
+    gap: 6,
+    paddingHorizontal: 2,
   },
-  sectionHeading: {
+  categoryTab: {
+    paddingHorizontal: 13,
+    paddingVertical: 5.5,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryTabText: {
     fontSize: 11.5,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
-  serviceItem: {
+  scrollList: {
+    paddingBottom: 24,
+  },
+  serviceItemTab: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
-    borderWidth: 1,
-    padding: 11,
-    marginBottom: 8,
+    borderWidth: 1.5,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 6,
   },
   serviceIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 9,
   },
   serviceTextCol: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 6,
   },
   serviceTitle: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: '700',
   },
-  serviceDesc: {
-    fontSize: 11,
-    marginTop: 2,
-  },
   activeBadge: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 6,
     marginLeft: 6,
   },
   activeBadgeText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '700',
   },
   rightCol: {
-    alignItems: 'flex-end',
-    gap: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   countChip: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
   },
   countChipText: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: '700',
   },
   radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
   },
   emptyContainer: {
-    paddingVertical: 30,
+    paddingVertical: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: 12.5,
     textAlign: 'center',
   },
 });

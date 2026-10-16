@@ -316,17 +316,21 @@ export default function GarageListScreen({ route, navigation }: any) {
       ? `${Number(rawDist).toFixed(1)} miles`
       : null;
 
+    const filterTarget = activeServiceFilter || activeServiceTitle;
+    const matchingService = filterTarget && Array.isArray(item.services)
+      ? item.services.find((s: any) => isServiceMatch(s, filterTarget))
+      : null;
+
     return (
       <TouchableOpacity
         style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
         activeOpacity={0.85}
         onPress={() => navigation.navigate('GarageDetail', { 
           garageId: item.id || item._id, 
-          serviceName: activeServiceFilter || activeServiceTitle || searchQuery, 
+          serviceName: matchingService?.name || activeServiceFilter || activeServiceTitle || searchQuery, 
           serviceFilter: activeServiceFilter,
           serviceTitle: activeServiceTitle,
           searchQuery, 
-          vehicle: route.params?.vehicle 
         })}
       >
         <GarageLogo 
@@ -350,14 +354,50 @@ export default function GarageListScreen({ route, navigation }: any) {
             </Text>
           </View>
 
-          {distanceText ? (
-            <Text style={[styles.garageMiles, { color: theme.colors.secondary }]}>
-              {distanceText}
-            </Text>
-          ) : null}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
+            {distanceText ? (
+              <Text style={[styles.garageMiles, { color: theme.colors.secondary }]}>
+                {distanceText}
+              </Text>
+            ) : null}
+
+            {matchingService && (
+              <View style={{ backgroundColor: theme.colors.primary + '15', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons name="wrench-outline" size={11} color={theme.colors.primary} style={{ marginRight: 3 }} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>
+                  {matchingService.name}: £{matchingService.price ? Number(matchingService.price).toFixed(0) : '45'}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
-        <MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.placeholder} />
+        {matchingService ? (
+          <TouchableOpacity
+            style={{
+              backgroundColor: theme.colors.primary,
+              paddingHorizontal: 12,
+              paddingVertical: 7,
+              borderRadius: 6,
+              flexDirection: 'row',
+              alignItems: 'center',
+              alignSelf: 'center',
+              marginLeft: 6,
+            }}
+            onPress={() => navigation.navigate('GarageDetail', {
+              garageId: item.id || item._id,
+              serviceName: matchingService.name,
+              serviceFilter: activeServiceFilter,
+              serviceTitle: activeServiceTitle,
+              autoOpenBooking: true,
+            })}
+          >
+            <MaterialCommunityIcons name="calendar-plus" size={14} color="#FFFFFF" style={{ marginRight: 3 }} />
+            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: 'bold' }}>Book</Text>
+          </TouchableOpacity>
+        ) : (
+          <MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.placeholder} />
+        )}
       </TouchableOpacity>
     );
   };
@@ -388,14 +428,13 @@ export default function GarageListScreen({ route, navigation }: any) {
                 name={isOutsideUKServiceArea ? 'map-marker-remove' : 'map-marker'}
                 size={14}
                 color={isOutsideUKServiceArea ? '#DC2626' : theme.colors.secondary}
-                style={{ marginRight: 3 }}
+                style={{ marginRight: 4, marginTop: 1 }}
               />
               <Text
                 style={[
                   styles.headerLocationCity,
                   { color: isOutsideUKServiceArea ? '#DC2626' : theme.colors.text },
                 ]}
-                numberOfLines={1}
               >
                 {formatPreciseLocation(activeCoordinates)}
               </Text>
@@ -403,7 +442,7 @@ export default function GarageListScreen({ route, navigation }: any) {
                 name="chevron-down"
                 size={13}
                 color={isOutsideUKServiceArea ? '#DC2626' : theme.colors.placeholder}
-                style={{ marginLeft: 2 }}
+                style={{ marginLeft: 3 }}
               />
             </View>
           </TouchableOpacity>
@@ -726,11 +765,11 @@ const styles = StyleSheet.create({
   },
   headerLocationCol: {
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
-    maxWidth: 270,
+    flex: 1,
   },
   headerLocationLabel: {
     fontSize: 9.5,
@@ -742,11 +781,14 @@ const styles = StyleSheet.create({
   headerLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   headerLocationCity: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
-    maxWidth: 220,
+    lineHeight: 16,
+    flex: 1,
+    flexShrink: 1,
   },
   headerInitialsWrap: {
     width: 38,

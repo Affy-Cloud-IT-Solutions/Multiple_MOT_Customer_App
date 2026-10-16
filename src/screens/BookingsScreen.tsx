@@ -10,6 +10,10 @@ import {
   TextInput,
   Alert,
   Linking,
+  Modal,
+  TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -33,6 +37,7 @@ export default function BookingsScreen({ navigation }: any) {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [selectedBookingForDetails, setSelectedBookingForDetails] = useState<any | null>(null);
 
   // Active customer resolution
   const customerId = user?.customerId || user?.id || '';
@@ -159,6 +164,7 @@ export default function BookingsScreen({ navigation }: any) {
                 await cancelBooking(bookingId, 'Cancelled by customer');
               }
               await refreshData();
+              setSelectedBookingForDetails(null);
               Alert.alert('Booking Cancelled', 'Your appointment has been cancelled successfully.');
             } catch (err: any) {
               Alert.alert('Error', err.message || 'Failed to cancel appointment.');
@@ -201,6 +207,78 @@ export default function BookingsScreen({ navigation }: any) {
       return makeModel.split(' - Slot: ')[0];
     }
     return makeModel;
+  };
+
+  const getStatusConfig = (rawStatus?: string) => {
+    const s = (rawStatus || 'Pending').toLowerCase();
+    if (s === 'approved' || s === 'confirmed' || s === 'acknowledged') {
+      return {
+        isPending: false,
+        isConfirmed: true,
+        isCompleted: false,
+        isCancelled: false,
+        isRejected: false,
+        color: '#10B981',
+        bg: '#10B98115',
+        icon: 'check-decagram-outline',
+        text: 'Confirmed',
+        desc: 'Appointment is confirmed. The test bay is reserved for your vehicle.',
+      };
+    }
+    if (s === 'completed') {
+      return {
+        isPending: false,
+        isConfirmed: false,
+        isCompleted: true,
+        isCancelled: false,
+        isRejected: false,
+        color: '#3B82F6',
+        bg: '#3B82F615',
+        icon: 'checkbox-marked-circle-outline',
+        text: 'Completed',
+        desc: 'This inspection has been conducted and completed.',
+      };
+    }
+    if (s === 'cancelled') {
+      return {
+        isPending: false,
+        isConfirmed: false,
+        isCompleted: false,
+        isCancelled: true,
+        isRejected: false,
+        color: '#EF4444',
+        bg: '#EF444415',
+        icon: 'close-circle-outline',
+        text: 'Cancelled',
+        desc: 'This booking has been cancelled.',
+      };
+    }
+    if (s === 'rejected') {
+      return {
+        isPending: false,
+        isConfirmed: false,
+        isCompleted: false,
+        isCancelled: false,
+        isRejected: true,
+        color: '#DC2626',
+        bg: '#DC262615',
+        icon: 'alert-circle-outline',
+        text: 'Declined',
+        desc: 'The garage was unable to accept this appointment slot.',
+      };
+    }
+    return {
+      isPending: true,
+      isConfirmed: false,
+      isCompleted: false,
+      isCancelled: false,
+      isRejected: false,
+      color: '#F59E0B',
+      bg: '#F59E0B15',
+      icon: 'timer-sand',
+      text: 'Pending Confirmation',
+      desc: 'Awaiting confirmation and bay assignment from the testing centre.',
+    };
   };
 
   return (
@@ -348,50 +426,7 @@ export default function BookingsScreen({ navigation }: any) {
           </View>
         ) : (
           filteredBookings.map((item) => {
-            const rawStatus = (item.status || 'Pending').toLowerCase();
-            const isPending = rawStatus === 'pending';
-            const isApproved = rawStatus === 'approved' || rawStatus === 'confirmed' || rawStatus === 'acknowledged';
-            const isCompleted = rawStatus === 'completed';
-            const isRejected = rawStatus === 'rejected';
-            const isCancelled = rawStatus === 'cancelled';
-
-            let statusColor = '#F59E0B'; // Pending Amber
-            let statusBg = '#F59E0B15';
-            let statusIcon = 'clock-outline';
-            let statusText = 'Pending Confirmation';
-
-            if (isApproved) {
-              statusColor = '#10B981'; // Green
-              statusBg = '#10B98115';
-              statusIcon = 'check-decagram';
-              statusText = 'Confirmed';
-            } else if (isCompleted) {
-              statusColor = '#3B82F6'; // Blue
-              statusBg = '#3B82F615';
-              statusIcon = 'checkbox-marked-circle';
-              statusText = 'Completed';
-            } else if (isCancelled) {
-              statusColor = '#EF4444'; // Red
-              statusBg = '#EF444415';
-              statusIcon = 'calendar-remove';
-              statusText = 'Cancelled';
-            } else if (isRejected) {
-              statusColor = '#DC2626'; // Red
-              statusBg = '#DC262615';
-              statusIcon = 'close-circle';
-              statusText = 'Declined';
-            }
-
-            const garageDisplayName = item.garageName || item.stationName || item.garage?.name || 'MOT Testing Centre';
-            const garageAddressStr = [
-              item.garageAddress || item.garage?.address,
-              item.garageCity || item.garage?.city,
-              item.garagePostcode || item.garage?.postcode,
-            ]
-              .filter(Boolean)
-              .join(', ');
-
-            const garagePhone = item.garagePhone || item.garage?.phone;
+            const statusCfg = getStatusConfig(item.status);
             const isCancelling = cancellingId === (item.id || item._id);
 
             return (
@@ -399,47 +434,56 @@ export default function BookingsScreen({ navigation }: any) {
                 key={item.id || item._id || `${item.registrationNumber}-${item.date}`}
                 style={[styles.bookingCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
               >
-                {/* Card Header Row: UK Plate & Status Badge */}
+                {/* 1. Header: UK Plate + Status Tag + Info Button */}
                 <View style={styles.cardHeaderRow}>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => navigation.navigate('MotHistory', { registration: item.registrationNumber })}
-                    style={styles.ukPlateChip}
-                  >
+                  <View style={styles.ukPlateChip}>
                     <View style={styles.ukFlagBlock}>
                       <Text style={styles.ukFlagText}>🇬🇧</Text>
                       <Text style={styles.ukTagText}>UK</Text>
                     </View>
                     <Text style={styles.ukPlateNumber}>{item.registrationNumber}</Text>
-                  </TouchableOpacity>
-
-                  <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor + '40' }]}>
-                    <MaterialCommunityIcons name={statusIcon} size={13} color={statusColor} style={{ marginRight: 4 }} />
-                    <Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusText}</Text>
                   </View>
-                </View>
 
-                {/* Vehicle & Service Info */}
-                <View style={styles.vehicleRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.vehicleName, { color: theme.colors.text }]}>
-                      {getVehicleDisplay(item.makeModel)}
-                    </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
-                      <MaterialCommunityIcons name="wrench-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
-                      <Text style={[styles.serviceNameText, { color: theme.colors.placeholder }]}>
-                        {item.serviceName || 'MOT Annual Safety Inspection (Class 4)'}
-                      </Text>
-                      {item.price ? (
-                        <Text style={[styles.priceTag, { color: theme.colors.secondary }]}>
-                          • £{Number(item.price).toFixed(2)}
-                        </Text>
-                      ) : null}
+                  <View style={styles.headerRightActions}>
+                    <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg, borderColor: statusCfg.color + '40' }]}>
+                      <MaterialCommunityIcons name={statusCfg.icon} size={13} color={statusCfg.color} style={{ marginRight: 4 }} />
+                      <Text style={[styles.statusBadgeText, { color: statusCfg.color }]}>{statusCfg.text}</Text>
                     </View>
+
+                    {/* Modern Info Icon Button */}
+                    <TouchableOpacity
+                      onPress={() => setSelectedBookingForDetails(item)}
+                      style={[styles.infoIconBtn, { backgroundColor: theme.colors.secondary + '15', borderColor: theme.colors.secondary + '35' }]}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialCommunityIcons name="information-variant" size={17} color={theme.colors.secondary} />
+                    </TouchableOpacity>
                   </View>
                 </View>
 
-                {/* Appointment Date & Slot Row */}
+                {/* 2. Car Name */}
+                <View style={styles.vehicleRow}>
+                  <MaterialCommunityIcons name="car-sports" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                  <Text style={[styles.vehicleName, { color: theme.colors.text }]} numberOfLines={1}>
+                    {getVehicleDisplay(item.makeModel)}
+                  </Text>
+                </View>
+
+                {/* 3. Type of Service */}
+                <View style={styles.serviceRow}>
+                  <MaterialCommunityIcons name="wrench-clock-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+                  <Text style={[styles.serviceNameText, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                    {item.serviceName || 'MOT Annual Safety Inspection (Class 4)'}
+                  </Text>
+                  {item.price ? (
+                    <Text style={[styles.priceTag, { color: theme.colors.secondary }]}>
+                      • £{Number(item.price).toFixed(2)}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* 4. Appointment Date & Time Slot */}
                 <View style={[styles.appointmentInfoBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
                   <View style={styles.dateSlotRow}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
@@ -464,89 +508,9 @@ export default function BookingsScreen({ navigation }: any) {
                   </View>
                 </View>
 
-                {/* Garage Location Card */}
-                <View style={[styles.garageCardBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
-                      <MaterialCommunityIcons name="storefront-outline" size={16} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                      <Text style={[styles.garageNameText, { color: theme.colors.text }]} numberOfLines={1}>
-                        {garageDisplayName}
-                      </Text>
-                    </View>
-                    {item.garageId ? (
-                      <TouchableOpacity
-                        onPress={() => navigation.navigate('GarageDetail', { garageId: item.garageId })}
-                        style={{ paddingHorizontal: 4 }}
-                      >
-                        <Text style={[styles.viewGarageLink, { color: theme.colors.primary }]}>View</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-
-                  {garageAddressStr ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 }}>
-                      <MaterialCommunityIcons name="map-marker-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 4, marginTop: 1 }} />
-                      <Text style={[styles.garageAddressText, { color: theme.colors.placeholder }]} numberOfLines={2}>
-                        {garageAddressStr}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  {/* Quick Action Buttons for Garage */}
-                  <View style={styles.garageBtnRow}>
-                    <TouchableOpacity
-                      style={[styles.smallActionBtn, { backgroundColor: theme.colors.primary }]}
-                      onPress={() =>
-                        openGarageDirections({
-                          name: garageDisplayName,
-                          address: item.garageAddress || item.garage?.address,
-                          city: item.garageCity || item.garage?.city,
-                          postcode: item.garagePostcode || item.garage?.postcode,
-                          latitude: item.garageLatitude,
-                          longitude: item.garageLongitude,
-                        })
-                      }
-                      activeOpacity={0.8}
-                    >
-                      <MaterialCommunityIcons name="directions" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-                      <Text style={styles.smallActionBtnText}>Directions</Text>
-                    </TouchableOpacity>
-
-                    {garagePhone ? (
-                      <TouchableOpacity
-                        style={[styles.smallActionBtnOutline, { borderColor: theme.colors.border }]}
-                        onPress={() => Linking.openURL(`tel:${garagePhone}`)}
-                        activeOpacity={0.8}
-                      >
-                        <MaterialCommunityIcons name="phone" size={14} color={theme.colors.secondary} style={{ marginRight: 4 }} />
-                        <Text style={[styles.smallActionBtnOutlineText, { color: theme.colors.secondary }]}>Call</Text>
-                      </TouchableOpacity>
-                    ) : null}
-
-                    <TouchableOpacity
-                      style={[styles.smallActionBtnOutline, { borderColor: theme.colors.border }]}
-                      onPress={() => navigation.navigate('MotHistory', { registration: item.registrationNumber })}
-                      activeOpacity={0.8}
-                    >
-                      <MaterialCommunityIcons name="history" size={14} color={theme.colors.text} style={{ marginRight: 4 }} />
-                      <Text style={[styles.smallActionBtnOutlineText, { color: theme.colors.text }]}>MOT History</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Rejection / Cancellation Notice if any */}
-                {(item.rejectionReason || item.cancellationReason) && (
-                  <View style={[styles.reasonNotice, { backgroundColor: '#EF444410', borderColor: '#EF444430' }]}>
-                    <MaterialCommunityIcons name="alert-circle-outline" size={14} color="#EF4444" style={{ marginRight: 6 }} />
-                    <Text style={[styles.reasonNoticeText, { color: '#EF4444' }]}>
-                      Note: {item.rejectionReason || item.cancellationReason}
-                    </Text>
-                  </View>
-                )}
-
-                {/* Bottom Cancel Action for Active Appointments */}
-                {(isPending || isApproved) && (
-                  <View style={[styles.cardBottomRow, { borderTopColor: theme.colors.border + '60' }]}>
+                {/* 5. Cancel Booking Button: Strictly when status is Pending */}
+                {statusCfg.isPending && (
+                  <View style={[styles.cardBottomRow, { borderTopColor: theme.colors.border + '50' }]}>
                     <TouchableOpacity
                       onPress={() => handleCancel(item)}
                       disabled={isCancelling}
@@ -569,6 +533,257 @@ export default function BookingsScreen({ navigation }: any) {
           })
         )}
       </ScrollView>
+
+      {/* Booking Details BottomSheet Modal */}
+      {selectedBookingForDetails && (() => {
+        const item = selectedBookingForDetails;
+        const statusCfg = getStatusConfig(item.status);
+        const garageDisplayName = item.garageName || item.stationName || item.garage?.name || 'MOT Testing Centre';
+        const garageAddressStr = [
+          item.garageAddress || item.garage?.address,
+          item.garageCity || item.garage?.city,
+          item.garagePostcode || item.garage?.postcode,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        const garagePhone = item.garagePhone || item.garage?.phone;
+        const isCancelling = cancellingId === (item.id || item._id);
+
+        return (
+          <Modal
+            visible={!!selectedBookingForDetails}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setSelectedBookingForDetails(null)}
+          >
+            <TouchableWithoutFeedback onPress={() => setSelectedBookingForDetails(null)}>
+              <View style={styles.modalBackdrop}>
+                <TouchableWithoutFeedback onPress={() => {}}>
+                  <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.modalSheetWrapper}
+                  >
+                    <View style={[styles.modalSheetContent, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                      {/* Drag Handle */}
+                      <View style={styles.handleBar} />
+
+                      {/* BottomSheet Header */}
+                      <View style={styles.sheetHeaderRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                          <View style={[styles.sheetHeaderIconWrap, { backgroundColor: theme.colors.secondary + '15' }]}>
+                            <MaterialCommunityIcons name="file-document-outline" size={20} color={theme.colors.secondary} />
+                          </View>
+                          <View style={{ marginLeft: 10, flex: 1 }}>
+                            <Text style={[styles.sheetHeaderTitle, { color: theme.colors.text }]}>Booking Details</Text>
+                            <Text style={[styles.sheetHeaderSubtitle, { color: theme.colors.placeholder }]}>
+                              Ref: #{String(item.id || item._id || 'BK').slice(-6).toUpperCase()}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <TouchableOpacity
+                          onPress={() => setSelectedBookingForDetails(null)}
+                          style={[styles.sheetCloseBtn, { backgroundColor: theme.colors.border + '40' }]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <MaterialCommunityIcons name="close" size={18} color={theme.colors.text} />
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Scrollable details */}
+                      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetScrollContent}>
+                        {/* Vehicle Card */}
+                        <View style={[styles.sheetSectionBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <View style={styles.ukPlateChip}>
+                              <View style={styles.ukFlagBlock}>
+                                <Text style={styles.ukFlagText}>🇬🇧</Text>
+                                <Text style={styles.ukTagText}>UK</Text>
+                              </View>
+                              <Text style={styles.ukPlateNumber}>{item.registrationNumber}</Text>
+                            </View>
+
+                            <TouchableOpacity
+                              onPress={() => {
+                                setSelectedBookingForDetails(null);
+                                navigation.navigate('MotHistory', { registration: item.registrationNumber });
+                              }}
+                              style={[styles.motHistoryBtn, { borderColor: theme.colors.border }]}
+                            >
+                              <MaterialCommunityIcons name="history" size={13} color={theme.colors.secondary} style={{ marginRight: 4 }} />
+                              <Text style={[styles.motHistoryBtnText, { color: theme.colors.secondary }]}>MOT History</Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <MaterialCommunityIcons name="car-sports" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                            <Text style={[styles.sheetVehicleName, { color: theme.colors.text }]}>
+                              {getVehicleDisplay(item.makeModel)}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Status Banner */}
+                        <View style={[styles.sheetStatusBanner, { backgroundColor: statusCfg.bg, borderColor: statusCfg.color + '40' }]}>
+                          <MaterialCommunityIcons name={statusCfg.icon} size={20} color={statusCfg.color} style={{ marginRight: 10 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.sheetStatusTitle, { color: statusCfg.color }]}>{statusCfg.text}</Text>
+                            <Text style={[styles.sheetStatusDesc, { color: theme.colors.text }]}>{statusCfg.desc}</Text>
+                          </View>
+                        </View>
+
+                        {/* Service & Schedule Box */}
+                        <View style={[styles.sheetSectionBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                          <Text style={[styles.sheetSectionHeading, { color: theme.colors.placeholder }]}>SERVICE & APPOINTMENT</Text>
+
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, marginBottom: 8 }}>
+                            <MaterialCommunityIcons name="wrench-clock-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 8 }} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.sheetServiceName, { color: theme.colors.text }]}>
+                                {item.serviceName || 'MOT Annual Safety Inspection (Class 4)'}
+                              </Text>
+                              {item.price ? (
+                                <Text style={[styles.sheetPriceText, { color: theme.colors.secondary }]}>
+                                  Price: £{Number(item.price).toFixed(2)}
+                                </Text>
+                              ) : null}
+                            </View>
+                          </View>
+
+                          <View style={styles.sheetDivider} />
+
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                              <MaterialCommunityIcons name="calendar-month-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                              <View>
+                                <Text style={[styles.sheetScheduleLabel, { color: theme.colors.placeholder }]}>DATE</Text>
+                                <Text style={[styles.sheetScheduleVal, { color: theme.colors.text }]}>
+                                  {formatDisplayDate(item.date)}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                              <MaterialCommunityIcons name="clock-time-four-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                              <View>
+                                <Text style={[styles.sheetScheduleLabel, { color: theme.colors.placeholder }]}>SLOT</Text>
+                                <Text style={[styles.sheetScheduleVal, { color: theme.colors.text }]}>
+                                  {getSlotDisplay(item.makeModel, item.slotTime)}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Garage Details ("show whole data like garage get direction call etc etc!") */}
+                        <View style={[styles.sheetSectionBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                          <Text style={[styles.sheetSectionHeading, { color: theme.colors.placeholder }]}>GARAGE & LOCATION</Text>
+
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                            <MaterialCommunityIcons name="storefront-outline" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                            <Text style={[styles.sheetGarageName, { color: theme.colors.text }]} numberOfLines={1}>
+                              {garageDisplayName}
+                            </Text>
+                          </View>
+
+                          {garageAddressStr ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 6 }}>
+                              <MaterialCommunityIcons name="map-marker-radius-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 8, marginTop: 1 }} />
+                              <Text style={[styles.sheetGarageAddress, { color: theme.colors.placeholder }]}>
+                                {garageAddressStr}
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          {/* Quick Garage Actions: Directions & Call & View Profile */}
+                          <View style={styles.sheetGarageActionRow}>
+                            <TouchableOpacity
+                              style={[styles.sheetActionBtnPrimary, { backgroundColor: theme.colors.primary }]}
+                              onPress={() =>
+                                openGarageDirections({
+                                  name: garageDisplayName,
+                                  address: item.garageAddress || item.garage?.address,
+                                  city: item.garageCity || item.garage?.city,
+                                  postcode: item.garagePostcode || item.garage?.postcode,
+                                  latitude: item.garageLatitude,
+                                  longitude: item.garageLongitude,
+                                })
+                              }
+                              activeOpacity={0.8}
+                            >
+                              <MaterialCommunityIcons name="directions" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                              <Text style={styles.sheetActionBtnPrimaryText}>Get Directions</Text>
+                            </TouchableOpacity>
+
+                            {garagePhone ? (
+                              <TouchableOpacity
+                                style={[styles.sheetActionBtnOutline, { borderColor: theme.colors.border }]}
+                                onPress={() => Linking.openURL(`tel:${garagePhone}`)}
+                                activeOpacity={0.8}
+                              >
+                                <MaterialCommunityIcons name="phone" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                                <Text style={[styles.sheetActionBtnOutlineText, { color: theme.colors.secondary }]}>Call Garage</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
+
+                          {item.garageId ? (
+                            <TouchableOpacity
+                              onPress={() => {
+                                setSelectedBookingForDetails(null);
+                                navigation.navigate('GarageDetail', { garageId: item.garageId });
+                              }}
+                              style={[styles.sheetViewGarageLink, { borderColor: theme.colors.border + '60' }]}
+                            >
+                              <MaterialCommunityIcons name="store-search-outline" size={15} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                              <Text style={[styles.sheetViewGarageLinkText, { color: theme.colors.primary }]}>View Garage Full Profile & Reviews</Text>
+                              <MaterialCommunityIcons name="chevron-right" size={16} color={theme.colors.primary} />
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+
+                        {/* Cancellation / Rejection Note */}
+                        {(item.rejectionReason || item.cancellationReason) && (
+                          <View style={[styles.sheetReasonBox, { backgroundColor: '#EF444410', borderColor: '#EF444430' }]}>
+                            <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#EF4444" style={{ marginRight: 8, marginTop: 1 }} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.sheetReasonTitle, { color: '#EF4444' }]}>Notice</Text>
+                              <Text style={[styles.sheetReasonText, { color: theme.colors.text }]}>
+                                {item.rejectionReason || item.cancellationReason}
+                              </Text>
+                            </View>
+                          </View>
+                        )}
+
+                        {/* Cancel Button inside bottomsheet if pending */}
+                        {statusCfg.isPending && (
+                          <TouchableOpacity
+                            onPress={() => {
+                              handleCancel(item);
+                            }}
+                            disabled={isCancelling}
+                            style={[styles.sheetCancelBtn, { borderColor: '#EF444440' }]}
+                            activeOpacity={0.7}
+                          >
+                            {isCancelling ? (
+                              <ActivityIndicator size="small" color="#EF4444" />
+                            ) : (
+                              <>
+                                <MaterialCommunityIcons name="close-circle-outline" size={16} color="#EF4444" style={{ marginRight: 6 }} />
+                                <Text style={styles.sheetCancelBtnText}>Cancel Booking</Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        )}
+                      </ScrollView>
+                    </View>
+                  </KeyboardAvoidingView>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </Modal>
+        );
+      })()}
     </View>
   );
 }
@@ -671,7 +886,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  infoIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ukPlateChip: {
     flexDirection: 'row',
@@ -719,14 +947,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   vehicleRow: {
-    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    marginBottom: 4,
   },
   vehicleName: {
     fontSize: 15,
     fontWeight: 'bold',
+    flex: 1,
+  },
+  serviceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
   },
   serviceNameText: {
     fontSize: 12,
+    flexShrink: 1,
   },
   priceTag: {
     fontSize: 12,
@@ -737,7 +975,6 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 10,
   },
   dateSlotRow: {
     flexDirection: 'row',
@@ -753,63 +990,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 1,
   },
-  garageCardBox: {
-    padding: 10,
-    borderRadius: 8,
+  motHistoryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
   },
-  garageNameText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  garageAddressText: {
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  viewGarageLink: {
+  motHistoryBtnText: {
     fontSize: 11,
     fontWeight: '700',
-  },
-  garageBtnRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-  },
-  smallActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  smallActionBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  smallActionBtnOutline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  smallActionBtnOutlineText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  reasonNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    marginTop: 8,
-  },
-  reasonNoticeText: {
-    fontSize: 11,
-    flex: 1,
   },
   cardBottomRow: {
     flexDirection: 'row',
@@ -828,6 +1019,210 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontSize: 11,
     fontWeight: '600',
+  },
+  // BottomSheet Modal Styles
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.58)',
+    justifyContent: 'flex-end',
+  },
+  modalSheetWrapper: {
+    width: '100%',
+    maxHeight: '88%',
+  },
+  modalSheetContent: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderTopWidth: 1,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    maxHeight: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 20,
+  },
+  handleBar: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#94A3B8',
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  sheetHeaderIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sheetHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  sheetHeaderSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  sheetCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sheetScrollContent: {
+    paddingBottom: 24,
+    gap: 12,
+  },
+  sheetSectionBox: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  sheetVehicleName: {
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+  },
+  sheetStatusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  sheetStatusTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sheetStatusDesc: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  sheetSectionHeading: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  sheetServiceName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sheetPriceText: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  sheetDivider: {
+    height: 1,
+    backgroundColor: 'rgba(150, 150, 150, 0.15)',
+    marginVertical: 4,
+  },
+  sheetScheduleLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  sheetScheduleVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  sheetGarageName: {
+    fontSize: 14,
+    fontWeight: '700',
+    flex: 1,
+  },
+  sheetGarageAddress: {
+    fontSize: 12,
+    lineHeight: 16,
+    flex: 1,
+  },
+  sheetGarageActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  sheetActionBtnPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  sheetActionBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  sheetActionBtnOutline: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  sheetActionBtnOutlineText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  sheetViewGarageLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    marginTop: 10,
+    borderTopWidth: 1,
+  },
+  sheetViewGarageLinkText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sheetReasonBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  sheetReasonTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  sheetReasonText: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  sheetCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  sheetCancelBtnText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
   },
   emptyContainer: {
     alignItems: 'center',

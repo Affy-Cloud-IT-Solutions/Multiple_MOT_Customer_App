@@ -196,7 +196,7 @@ export default function ProfileScreen({ navigation }: any) {
       <CustomerHeader
         title="My Profile"
         subtitle="Account Settings & Preferences"
-        iconName="account-circle-outline"
+        iconName="account-cog"
         iconColor={theme.colors.secondary}
         iconBg={theme.colors.secondary + '15'}
         rightAction={

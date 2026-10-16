@@ -86,7 +86,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerContainer: {
-    height: 56,
+    minHeight: 56,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

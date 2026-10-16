@@ -18,18 +18,18 @@ export default function MainTabNavigator() {
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ color, size, focused }) => {
-          let iconName = 'home-variant';
+          let iconName = 'home';
 
           if (route.name === 'Home') {
-            iconName = focused ? 'home-variant' : 'home-variant-outline';
+            iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Garages') {
-            iconName = focused ? 'storefront' : 'storefront-outline';
+            iconName = focused ? 'store' : 'store-outline';
           } else if (route.name === 'Bookings' || route.name === 'History') {
-            iconName = focused ? 'calendar-check' : 'calendar-check-outline';
+            iconName = focused ? 'calendar' : 'calendar-outline';
           } else if (route.name === 'My Portal') {
-            iconName = focused ? 'car-wrench' : 'car-outline';
+            iconName = focused ? 'car' : 'car-outline';
           } else if (route.name === 'Profile') {
-            iconName = focused ? 'account-circle' : 'account-circle-outline';
+            iconName = focused ? 'account' : 'account-outline';
           }
 
           return <MaterialCommunityIcons name={iconName} size={24} color={color} />;

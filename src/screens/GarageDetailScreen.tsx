@@ -22,6 +22,7 @@ import { useAppValues, BASE_URL } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { openGarageDirections } from '../utils/mapUtils';
 import { isServiceMatch } from '../components/FilterServiceBottomSheet';
+import { validateMotExpiryDate } from '../utils/validationUtils';
 
 const GarageLogo = ({ uri, name, style, theme }: any) => {
   const [error, setError] = useState(false);
@@ -67,7 +68,7 @@ const GarageCarouselImage = ({ uri, style, width }: any) => {
 
 export default function GarageDetailScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { token, user, customers, vehicles, alerts = [], addAlert, addAudit, addVehicle, refreshData } = useAppValues();
+  const { token, user, customers, vehicles, alerts = [], addAlert, addAudit, addVehicle, refreshData, lookupVehicle } = useAppValues();
   const { garageId } = route.params;
   const { width: screenWidth } = Dimensions.get('window');
 
@@ -89,6 +90,18 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   const [isInfoModalVisible, setIsInfoModalVisible] = useState(false);
   const [isGalleryModalVisible, setIsGalleryModalVisible] = useState(false);
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
+
+  // Inline Add Vehicle in Booking Modal states
+  const [showAddCarForm, setShowAddCarForm] = useState(false);
+  const [newRegNo, setNewRegNo] = useState('');
+  const [newMake, setNewMake] = useState('');
+  const [newModel, setNewModel] = useState('');
+  const [newYear, setNewYear] = useState('');
+  const [newExpiry, setNewExpiry] = useState('');
+  const [isSearchingNewPlate, setIsSearchingNewPlate] = useState(false);
+  const [newLookupInfo, setNewLookupInfo] = useState<string | null>(null);
+  const [isAddingCar, setIsAddingCar] = useState(false);
+  const [hasAutoOpened, setHasAutoOpened] = useState(false);
 
   // All photos associated with the garage for info & full gallery modal
   const displayGarageImages = useMemo(() => {
@@ -324,6 +337,143 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     }
   }, [freeSlots]);
 
+  const formatDateInput = (text: string) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    let formatted = cleaned;
+    if (cleaned.length > 4 && cleaned.length <= 6) {
+      formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+    } else if (cleaned.length > 6) {
+      formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`;
+    }
+    return formatted;
+  };
+
+  const handleLookupNewPlate = async () => {
+    const vrnClean = newRegNo.trim().toUpperCase().replace(/\s+/g, '');
+    if (!vrnClean) {
+      Alert.alert('Registration Required', 'Please enter a vehicle registration number to look up.');
+      return;
+    }
+
+    setIsSearchingNewPlate(true);
+    setNewLookupInfo(null);
+
+    try {
+      const res = await lookupVehicle(vrnClean);
+      if (res && res.found && res.vehicle) {
+        const v = res.vehicle;
+        setNewMake(v.make || '');
+        setNewModel(v.model || '');
+        setNewYear(v.year ? String(v.year) : '');
+        setNewExpiry(v.motExpiryDate || '');
+        const infoStr = `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}`;
+        setNewLookupInfo(infoStr);
+
+        Toast.show({
+          type: 'success',
+          text1: 'Vehicle Found on DVSA',
+          text2: `${v.make} ${v.model} details autofilled!`,
+        });
+      } else {
+        Alert.alert(
+          'Vehicle Not Found',
+          `No vehicle details found for "${newRegNo.trim().toUpperCase()}" in DVSA records.\n\nPlease enter the vehicle details manually.`
+        );
+      }
+    } catch (err: any) {
+      console.error('[GarageDetailScreen] lookup error:', err);
+      Alert.alert(
+        'Lookup Failed',
+        err.message || `Could not find registration "${newRegNo.trim().toUpperCase()}". Please enter vehicle details manually.`
+      );
+    } finally {
+      setIsSearchingNewPlate(false);
+    }
+  };
+
+  const handleSaveNewCar = async () => {
+    const regClean = newRegNo.trim().toUpperCase();
+    const makeClean = newMake.trim().toUpperCase();
+    const modelClean = newModel.trim().toUpperCase();
+    const yearClean = newYear.trim();
+    const expiryClean = newExpiry.trim();
+
+    if (!regClean || !makeClean || !modelClean || !yearClean || !expiryClean) {
+      Alert.alert('Missing Details', 'Please fill in registration, make, model, year, and MOT expiry date.');
+      return;
+    }
+
+    if (!/^\d{4}$/.test(yearClean)) {
+      Alert.alert('Invalid Year', 'Please enter a valid 4-digit manufacture year (e.g. 2019).');
+      return;
+    }
+
+    const expiryCheck = validateMotExpiryDate(expiryClean);
+    if (expiryCheck.error) {
+      Alert.alert('Validation Error', expiryCheck.error);
+      return;
+    }
+
+    setIsAddingCar(true);
+    try {
+      const createdVeh = await addVehicle({
+        customerId: customer.id,
+        registrationNumber: regClean,
+        make: makeClean,
+        model: modelClean,
+        year: yearClean,
+        motExpiryDate: expiryClean,
+        status: 'Active',
+      });
+
+      await addAlert({
+        type: 'NEW_VEHICLE',
+        customerName: `${customer.firstName} ${customer.lastName}`.trim() || user?.name || 'Customer',
+        customerId: customer.id,
+        registrationNumber: regClean,
+        makeModel: `${makeClean} ${modelClean}`,
+        status: 'Approved',
+      });
+
+      await addAudit(
+        'New Vehicle Registered',
+        `${customer.firstName} ${customer.lastName} registered ${makeClean} ${modelClean} (${regClean}) during booking`
+      );
+
+      const targetObj = createdVeh || {
+        id: `veh_${Date.now()}`,
+        _id: `veh_${Date.now()}`,
+        customerId: customer.id,
+        registrationNumber: regClean,
+        make: makeClean,
+        model: modelClean,
+        year: yearClean,
+        motExpiryDate: expiryClean,
+        status: 'Active',
+      };
+
+      setSelectedVehicle(targetObj);
+      setShowAddCarForm(false);
+      setNewRegNo('');
+      setNewMake('');
+      setNewModel('');
+      setNewYear('');
+      setNewExpiry('');
+      setNewLookupInfo(null);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Vehicle Added & Selected!',
+        text2: `${regClean} is now selected for this booking.`,
+      });
+    } catch (err: any) {
+      console.error('Failed to add vehicle in booking flow:', err);
+      Alert.alert('Registration Failed', err.message || 'Could not add vehicle. Please check the details and try again.');
+    } finally {
+      setIsAddingCar(false);
+    }
+  };
+
   const handleOpenBookingModal = (service: any) => {
     if (!token) {
       Alert.alert(
@@ -346,7 +496,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       setSelectedDate(firstDate);
       fetchSlotsForDate(firstDate);
     }
-    if (!selectedVehicle && activeCustomerVehicles.length > 0) {
+    if (activeCustomerVehicles.length === 0) {
+      setShowAddCarForm(true);
+    } else if (!selectedVehicle) {
       const eligibleVeh = activeCustomerVehicles.find(v => {
         const days = getDaysUntilExpiry(v.motExpiryDate);
         const isPending = v.status === 'Pending' || v.status === 'Rejected';
@@ -513,17 +665,12 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     return { bg: theme.colors.secondary + '15', text: theme.colors.secondary, border: theme.colors.secondary + '40' };
   };
 
+  // Target service selected from Home / GarageList
+  const targetServiceQuery = route?.params?.serviceName || route?.params?.serviceFilter || route?.params?.serviceTitle || '';
+
   // State for services category filtering & search
   const [selectedServiceCategory, setSelectedServiceCategory] = useState<string>('All');
-  const [serviceSearchText, setServiceSearchText] = useState<string>(route?.params?.serviceName || route?.params?.searchQuery || '');
-
-  useEffect(() => {
-    if (route?.params?.serviceName) {
-      setServiceSearchText(route.params.serviceName);
-    } else if (route?.params?.searchQuery) {
-      setServiceSearchText(route.params.searchQuery);
-    }
-  }, [route?.params?.serviceName, route?.params?.searchQuery]);
+  const [serviceSearchText, setServiceSearchText] = useState<string>('');
 
   // Extract all active garage services
   const allActiveServices = useMemo(() => {
@@ -561,7 +708,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
   // Filtered services by category & search query
   const displayServices = useMemo(() => {
-    return allActiveServices.filter((s: any) => {
+    let list = allActiveServices.filter((s: any) => {
       const sCat = (s.category || 'Servicing').trim();
       const matchCat = selectedServiceCategory === 'All' || sCat.toLowerCase() === selectedServiceCategory.toLowerCase();
       
@@ -582,7 +729,32 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       
       return matchCat && matchQuery;
     });
-  }, [allActiveServices, selectedServiceCategory, serviceSearchText]);
+
+    // If a target service was selected from Home/GarageList, sort matching service(s) to top!
+    if (targetServiceQuery && !serviceSearchText) {
+      list = [...list].sort((a: any, b: any) => {
+        const aMatch = isServiceMatch(a, targetServiceQuery) ? 1 : 0;
+        const bMatch = isServiceMatch(b, targetServiceQuery) ? 1 : 0;
+        return bMatch - aMatch;
+      });
+    }
+
+    return list;
+  }, [allActiveServices, selectedServiceCategory, serviceSearchText, targetServiceQuery]);
+
+  // Flow B Support: Auto-open booking modal if arriving with autoOpenBooking param
+  useEffect(() => {
+    if (garage && route?.params?.autoOpenBooking && !hasAutoOpened && allActiveServices.length > 0) {
+      setHasAutoOpened(true);
+      const targetQuery = route?.params?.serviceName || route?.params?.serviceFilter || '';
+      const matchedSvc = allActiveServices.find((s: any) =>
+        targetQuery ? isServiceMatch(s, targetQuery) : false
+      ) || allActiveServices[0];
+      if (matchedSvc) {
+        handleOpenBookingModal(matchedSvc);
+      }
+    }
+  }, [garage, route?.params?.autoOpenBooking, route?.params?.serviceName, route?.params?.serviceFilter, hasAutoOpened, allActiveServices]);
 
   if (loading) {
     return (
@@ -685,7 +857,10 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   return (
                     <TouchableOpacity
                       key={cat}
-                      onPress={() => setSelectedServiceCategory(cat)}
+                      onPress={() => {
+                        setSelectedServiceCategory(cat);
+                        setServiceSearchText('');
+                      }}
                       style={[
                         styles.categoryPill,
                         {
@@ -738,12 +913,30 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 const catTheme = getCategoryTheme(service.category, service.name);
                 const catIcon = getCategoryIcon(service.category, service.name);
                 const isMot = (service.category || '').toLowerCase().includes('mot') || (service.name || '').toLowerCase().includes('mot');
+                const isSelectedService = Boolean(targetServiceQuery && isServiceMatch(service, targetServiceQuery));
 
                 return (
                   <View 
                     key={service._id || service.id || service.name} 
-                    style={[styles.serviceCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                    style={[
+                      styles.serviceCard, 
+                      { 
+                        backgroundColor: theme.colors.card, 
+                        borderColor: isSelectedService ? theme.colors.primary : theme.colors.border,
+                        borderWidth: isSelectedService ? 1.5 : 1,
+                      }
+                    ]}
                   >
+                    {/* Selected Service Badge Indicator */}
+                    {isSelectedService && (
+                      <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ backgroundColor: theme.colors.primary + '18', borderColor: theme.colors.primary + '40', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 6, flexDirection: 'row', alignItems: 'center' }}>
+                          <MaterialCommunityIcons name="star-circle" size={13} color={theme.colors.primary} style={{ marginRight: 4 }} />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>Selected Service</Text>
+                        </View>
+                      </View>
+                    )}
+
                     {/* Top Row: Icon, Name & Category Badge */}
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                       <View style={[styles.serviceIconCircle, { backgroundColor: catTheme.bg }]}>
@@ -809,7 +1002,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         activeOpacity={0.8}
                       >
                         <MaterialCommunityIcons name="calendar-plus" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
-                        <Text style={styles.bookBtnText}>Book Service</Text>
+                        <Text style={styles.bookBtnText}>
+                          {isSelectedService ? 'Book This Service' : 'Book Service'}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1345,42 +1540,179 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 {/* 1. Vehicle Selection Section */}
                 <View style={styles.flowSection}>
                   <View style={styles.flowSectionHeader}>
-                    <MaterialCommunityIcons name="car-cog" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                    <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
-                      1. Select Your Active Vehicle
-                    </Text>
-                  </View>
-                  <Text style={[styles.flowSectionSubtitle, { color: theme.colors.placeholder }]}>
-                    Choose which registered vehicle is attending the appointment
-                  </Text>
-
-                  {/* DVSA Pre-Booking & Renewal Window Notice */}
-                  <View style={[styles.dvsaNoticeBox, { backgroundColor: theme.colors.primary + '10', borderColor: theme.colors.primary + '30' }]}>
-                    <MaterialCommunityIcons name="information-outline" size={16} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                    <Text style={[styles.dvsaNoticeText, { color: theme.colors.text }]}>
-                      DVSA Pre-Booking & Renewal: Pre-book slots within 30 days before expiry to preserve your anniversary date. Expired vehicles can book immediately.
-                    </Text>
-                  </View>
-
-                  {activeCustomerVehicles.length === 0 ? (
-                    <View style={[styles.emptyVehicleNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                      <MaterialCommunityIcons name="car-off" size={28} color={theme.colors.placeholder} />
-                      <Text style={[styles.emptyVehicleText, { color: theme.colors.placeholder }]}>
-                        No active registered vehicles found in your account. Please register your vehicle in My Portal.
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <MaterialCommunityIcons name="car-cog" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                      <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
+                        1. Select or Add Vehicle
                       </Text>
+                    </View>
+                    {activeCustomerVehicles.length > 0 && (
                       <TouchableOpacity
-                        style={[styles.enterVrnBtn, { backgroundColor: theme.colors.primary + '15' }]}
-                        onPress={() => {
-                          setIsBookingModalVisible(false);
-                          navigation.navigate('Main', { screen: 'My Portal' });
-                        }}
+                        onPress={() => setShowAddCarForm(!showAddCarForm)}
+                        style={[
+                          styles.addCarToggleBtn,
+                          {
+                            backgroundColor: showAddCarForm ? theme.colors.border : theme.colors.primary + '15',
+                            borderColor: showAddCarForm ? theme.colors.border : theme.colors.primary + '35',
+                          }
+                        ]}
                       >
-                        <Text style={[styles.enterVrnBtnText, { color: theme.colors.primary }]}>
-                          Manage Vehicles in Portal
+                        <MaterialCommunityIcons
+                          name={showAddCarForm ? 'close' : 'plus'}
+                          size={14}
+                          color={showAddCarForm ? theme.colors.text : theme.colors.primary}
+                          style={{ marginRight: 3 }}
+                        />
+                        <Text style={[
+                          styles.addCarToggleText,
+                          { color: showAddCarForm ? theme.colors.text : theme.colors.primary }
+                        ]}>
+                          {showAddCarForm ? 'Cancel' : 'Add Car'}
                         </Text>
                       </TouchableOpacity>
+                    )}
+                  </View>
+                  <Text style={[styles.flowSectionSubtitle, { color: theme.colors.placeholder }]}>
+                    Choose an active vehicle or register a new car for this appointment
+                  </Text>
+
+                  {/* Inline Add Vehicle Card */}
+                  {(showAddCarForm || activeCustomerVehicles.length === 0) && (
+                    <View style={[styles.inlineAddCarCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary + '40' }]}>
+                      <View style={styles.inlineAddCarHeader}>
+                        <MaterialCommunityIcons name="car-plus" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                        <Text style={[styles.inlineAddCarTitle, { color: theme.colors.text }]}>
+                          Register & Add Vehicle for this Booking
+                        </Text>
+                      </View>
+
+                      {/* UK Number Plate Input with Attached Lookup */}
+                      <Text style={[styles.formLabel, { color: theme.colors.text }]}>UK Registration Plate</Text>
+                      <View style={styles.plateInputContainer}>
+                        <View style={styles.ukPlateStrip}>
+                          <Text style={styles.ukFlagEmoji}>🇬🇧</Text>
+                          <Text style={styles.ukStripLabel}>UK</Text>
+                        </View>
+                        <TextInput
+                          value={newRegNo}
+                          onChangeText={(txt) => setNewRegNo(txt.toUpperCase())}
+                          placeholder="eg AB19 CDE"
+                          placeholderTextColor="#6B7280"
+                          style={styles.plateInputField}
+                          autoCapitalize="characters"
+                          maxLength={8}
+                          autoCorrect={false}
+                        />
+                        <TouchableOpacity
+                          style={[styles.plateLookupBtn, { backgroundColor: theme.colors.primary }]}
+                          onPress={handleLookupNewPlate}
+                          disabled={isSearchingNewPlate}
+                          activeOpacity={0.8}
+                        >
+                          {isSearchingNewPlate ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                          ) : (
+                            <>
+                              <MaterialCommunityIcons name="magnify" size={15} color="#FFFFFF" style={{ marginRight: 3 }} />
+                              <Text style={styles.plateLookupBtnText}>LOOKUP</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Lookup Info Banner */}
+                      {newLookupInfo && (
+                        <View style={styles.lookupSuccessBanner}>
+                          <MaterialCommunityIcons name="check-decagram" size={16} color="#10B981" style={{ marginRight: 6 }} />
+                          <Text style={styles.lookupSuccessText}>
+                            DVSA Verified: Autofilled details for {newLookupInfo}
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Make & Model Row */}
+                      <View style={styles.formRow}>
+                        <View style={styles.formCol}>
+                          <Text style={[styles.formLabel, { color: theme.colors.text }]}>Make</Text>
+                          <TextInput
+                            value={newMake}
+                            onChangeText={setNewMake}
+                            placeholder="e.g. FORD"
+                            placeholderTextColor={theme.colors.placeholder}
+                            autoCapitalize="characters"
+                            style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                          />
+                        </View>
+                        <View style={styles.formCol}>
+                          <Text style={[styles.formLabel, { color: theme.colors.text }]}>Model</Text>
+                          <TextInput
+                            value={newModel}
+                            onChangeText={setNewModel}
+                            placeholder="e.g. FOCUS"
+                            placeholderTextColor={theme.colors.placeholder}
+                            autoCapitalize="characters"
+                            style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                          />
+                        </View>
+                      </View>
+
+                      {/* Year & MOT Expiry Row */}
+                      <View style={styles.formRow}>
+                        <View style={styles.formCol}>
+                          <Text style={[styles.formLabel, { color: theme.colors.text }]}>Year</Text>
+                          <TextInput
+                            value={newYear}
+                            onChangeText={setNewYear}
+                            placeholder="e.g. 2019"
+                            placeholderTextColor={theme.colors.placeholder}
+                            keyboardType="numeric"
+                            maxLength={4}
+                            style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                          />
+                        </View>
+                        <View style={styles.formCol}>
+                          <Text style={[styles.formLabel, { color: theme.colors.text }]}>MOT Expiry (YYYY-MM-DD)</Text>
+                          <TextInput
+                            value={newExpiry}
+                            onChangeText={(t) => setNewExpiry(formatDateInput(t))}
+                            placeholder="YYYY-MM-DD"
+                            placeholderTextColor={theme.colors.placeholder}
+                            keyboardType="numeric"
+                            maxLength={10}
+                            style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                          />
+                        </View>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                        {activeCustomerVehicles.length > 0 && (
+                          <TouchableOpacity
+                            style={[styles.cancelCarFormBtn, { borderColor: theme.colors.border }]}
+                            onPress={() => setShowAddCarForm(false)}
+                          >
+                            <Text style={[styles.cancelCarFormText, { color: theme.colors.text }]}>Cancel</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          style={[styles.saveCarSubmitBtn, { backgroundColor: theme.colors.primary, flex: 1 }]}
+                          onPress={handleSaveNewCar}
+                          disabled={isAddingCar}
+                        >
+                          {isAddingCar ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                          ) : (
+                            <>
+                              <MaterialCommunityIcons name="check" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+                              <Text style={styles.saveCarSubmitBtnText}>Save & Select Car</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  ) : (
+                  )}
+
+                  {/* Registered Customer Vehicles List */}
+                  {activeCustomerVehicles.length > 0 && (
                     <View style={{ marginTop: 8 }}>
                       {activeCustomerVehicles.map((veh) => {
                         const isSelected = selectedVehicle?.registrationNumber?.toUpperCase() === veh.registrationNumber?.toUpperCase();
@@ -1552,6 +1884,20 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           </TouchableOpacity>
                         );
                       })}
+
+                      {/* Add Another Vehicle dashed button under list */}
+                      {!showAddCarForm && (
+                        <TouchableOpacity
+                          style={[styles.addAnotherCarDashedBtn, { borderColor: theme.colors.primary + '50', backgroundColor: theme.colors.primary + '08' }]}
+                          onPress={() => setShowAddCarForm(true)}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialCommunityIcons name="plus-circle-outline" size={17} color={theme.colors.primary} />
+                          <Text style={[styles.addAnotherCarText, { color: theme.colors.primary }]}>
+                            + Add Another Vehicle
+                          </Text>
+                        </TouchableOpacity>
+                      )}
 
                       {/* Selected Vehicle Inline Status Warning */}
                       {selectedVehicle && (
@@ -2736,5 +3082,157 @@ const styles = StyleSheet.create({
   galleryStripThumbImg: {
     width: '100%',
     height: '100%',
+  },
+  addCarToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  addCarToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  inlineAddCarCard: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginVertical: 10,
+  },
+  inlineAddCarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  inlineAddCarTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  plateInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 42,
+    backgroundColor: '#FFD300',
+    borderWidth: 1.5,
+    borderColor: '#000000',
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  ukPlateStrip: {
+    width: 32,
+    height: '100%',
+    backgroundColor: '#0A4E9B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  ukFlagEmoji: {
+    fontSize: 10,
+  },
+  ukStripLabel: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 8,
+  },
+  plateInputField: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#000000',
+    textAlign: 'center',
+    height: '100%',
+    padding: 0,
+    letterSpacing: 1,
+  },
+  plateLookupBtn: {
+    height: '100%',
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  plateLookupBtnText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 11,
+  },
+  lookupSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B98115',
+    borderColor: '#10B98140',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  lookupSuccessText: {
+    fontSize: 11,
+    color: '#10B981',
+    fontWeight: '600',
+    flex: 1,
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  formCol: {
+    flex: 1,
+  },
+  formLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  formInputField: {
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    fontSize: 13,
+  },
+  cancelCarFormBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelCarFormText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  saveCarSubmitBtn: {
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  saveCarSubmitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  addAnotherCarDashedBtn: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 10,
+  },
+  addAnotherCarText: {
+    fontWeight: '700',
+    fontSize: 13,
+    marginLeft: 6,
   },
 });

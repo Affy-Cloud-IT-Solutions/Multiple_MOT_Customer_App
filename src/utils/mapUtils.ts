@@ -9,6 +9,8 @@ try {
   // Native bridge not linked yet in APK
 }
 
+export const GOOGLE_MAPS_API_KEY = 'AIzaSyCCiW08B0GTFjP1uj4LZ3QnqKzUVSuYcH0';
+
 export interface GarageLocationTarget {
   name?: string;
   address?: string;
@@ -36,18 +38,16 @@ export interface Coordinates {
  */
 export const formatPreciseLocation = (coords: Coordinates | null | undefined): string => {
   if (!coords) return 'Select Location';
+  if (coords.label && coords.label.trim()) {
+    return coords.label.replace(/, United Kingdom$/i, '').trim();
+  }
   if (coords.address && coords.address.trim()) {
     return coords.address.trim();
   }
-  if (coords.label && coords.label.trim()) {
-    const parts = coords.label.split(',').map((s) => s.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      return parts.slice(0, 2).join(', ');
-    }
-    return coords.label.trim();
-  }
   return coords.cityName || 'United Kingdom';
 };
+
+export const formatFullLocation = formatPreciseLocation;
 
 // Preset UK Locations with Precise Addresses, Streets & Postcodes
 export const UK_PRESET_LOCATIONS: Record<string, Coordinates> = {
@@ -301,6 +301,66 @@ export const reverseGeocodeCoords = async (
   road?: string;
   label: string;
 }> => {
+  // 1. Google Maps Geocoding API (Fast, precise UK street address)
+  if (GOOGLE_MAPS_API_KEY) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const gRes = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        if (gData.status === 'OK' && Array.isArray(gData.results) && gData.results.length > 0) {
+          const result = gData.results[0];
+          let road = '';
+          let suburb = '';
+          let city = '';
+          let postcode = '';
+          let country = '';
+
+          for (const comp of result.address_components || []) {
+            const types = comp.types || [];
+            if (types.includes('route')) road = comp.long_name || comp.short_name;
+            else if (types.includes('sublocality') || types.includes('neighborhood')) suburb = comp.long_name || comp.short_name;
+            else if (types.includes('postal_town') || types.includes('locality')) city = comp.long_name || comp.short_name;
+            else if (types.includes('postal_code')) postcode = comp.long_name || comp.short_name;
+            else if (types.includes('country')) country = comp.long_name || comp.short_name;
+          }
+
+          const parts: string[] = [];
+          if (road) parts.push(road);
+          if (suburb && !parts.some((p) => p.toLowerCase() === suburb.toLowerCase())) parts.push(suburb);
+          if (city && !parts.some((p) => p.toLowerCase() === city.toLowerCase())) parts.push(city);
+          if (postcode) parts.push(`(${postcode})`);
+
+          const preciseAddress = parts.length > 0 ? parts.join(', ') : result.formatted_address;
+          const shortCityDisplay =
+            suburb && city && suburb.toLowerCase() !== city.toLowerCase()
+              ? `${suburb}, ${city}`
+              : road && city
+              ? `${road}, ${city}`
+              : city || suburb || preciseAddress;
+
+          return {
+            cityName: shortCityDisplay,
+            countryName: country,
+            address: preciseAddress,
+            postcode,
+            suburb,
+            road,
+            label: result.formatted_address || preciseAddress,
+          };
+        }
+      }
+    } catch (e) {
+      // Fallback to nominatim
+    }
+  }
+
+  // 2. Fallback Nominatim Reverse Geocoding
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
@@ -445,7 +505,62 @@ export const getCoordinatesFromLocationQuery = async (query: string): Promise<Co
   const pcCoords = await getCoordinatesFromUKPostcode(q);
   if (pcCoords) return pcCoords;
 
-  // 4. Fallback to OpenStreetMap geocoding with detailed address
+  // 4. Try Google Maps Geocoding API (Fast, accurate worldwide and UK queries)
+  if (GOOGLE_MAPS_API_KEY) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const gRes = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q)}&key=${GOOGLE_MAPS_API_KEY}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        if (gData.status === 'OK' && Array.isArray(gData.results) && gData.results.length > 0) {
+          const result = gData.results[0];
+          const lat = result.geometry?.location?.lat;
+          const lon = result.geometry?.location?.lng;
+          if (typeof lat === 'number' && typeof lon === 'number') {
+            let road = '';
+            let suburb = '';
+            let city = '';
+            let postcode = '';
+            let country = '';
+
+            for (const comp of result.address_components || []) {
+              const types = comp.types || [];
+              if (types.includes('route')) road = comp.long_name || comp.short_name;
+              else if (types.includes('sublocality') || types.includes('neighborhood')) suburb = comp.long_name || comp.short_name;
+              else if (types.includes('postal_town') || types.includes('locality')) city = comp.long_name || comp.short_name;
+              else if (types.includes('postal_code')) postcode = comp.long_name || comp.short_name;
+              else if (types.includes('country')) country = comp.long_name || comp.short_name;
+            }
+
+            const parts = [road, suburb, city].filter(Boolean);
+            if (postcode) parts.push(`(${postcode})`);
+            const preciseAddress = parts.length > 0 ? parts.join(', ') : result.formatted_address;
+
+            const coords: Coordinates = {
+              latitude: lat,
+              longitude: lon,
+              address: preciseAddress,
+              label: result.formatted_address || preciseAddress,
+              cityName: suburb && city ? `${suburb}, ${city}` : city || suburb || q,
+              countryName: country,
+              postcode,
+            };
+            coords.isWithinUK = isWithinUKBoundary(coords);
+            return coords;
+          }
+        }
+      }
+    } catch (e) {
+      // Fallback
+    }
+  }
+
+  // 5. Fallback to OpenStreetMap geocoding with detailed address
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3500);

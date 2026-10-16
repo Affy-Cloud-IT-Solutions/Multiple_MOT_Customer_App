@@ -94,7 +94,7 @@ interface DataContextType {
   setUser: (user: UserProfile | null) => void;
   refreshData: () => Promise<void>;
   addCustomer: (customer: Omit<Customer, 'id' | 'createdDate'>) => Promise<string>;
-  addVehicle: (vehicle: Omit<Vehicle, 'id'>) => Promise<void>;
+  addVehicle: (vehicle: Omit<Vehicle, 'id'>) => Promise<any>;
   updateVehicleStatus: (vehicleId: string, status: 'Active' | 'Sold' | 'Scrapped' | 'Pending') => Promise<void>;
   addAlert: (alert: Omit<AlertNotification, 'id' | 'status' | 'date'> & { status?: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected', date?: string }) => Promise<void>;
   approveAlert: (alertId: string) => Promise<void>;
@@ -366,7 +366,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addVehicle = async (vehicleData: Omit<Vehicle, 'id'>): Promise<void> => {
+  const addVehicle = async (vehicleData: Omit<Vehicle, 'id'>): Promise<any> => {
     try {
       const response = await fetch(`${BASE_URL}/vehicles`, {
         method: 'POST',
@@ -376,11 +376,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         },
         body: JSON.stringify(vehicleData)
       });
+      const data = await response.json();
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || 'Failed to add vehicle');
       }
       await refreshData();
+      return data.vehicle;
     } catch (error) {
       console.error('[DATA CONTEXT] addVehicle error:', error);
       throw error;
