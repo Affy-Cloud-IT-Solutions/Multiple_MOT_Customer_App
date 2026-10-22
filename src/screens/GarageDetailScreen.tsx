@@ -78,15 +78,71 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
   // Booking Flow States
   const [isBookingModalVisible, setIsBookingModalVisible] = useState(false);
-  const [selectedMotService, setSelectedMotService] = useState<any>(null);
-  const [selectedVehicle, setSelectedVehicle] = useState<any>(route?.params?.vehicle || null);
+  const [selectedServices, setSelectedServices] = useState<any[]>([]);
+  const selectedMotService = selectedServices[0] || null;
+  const setSelectedMotService = (svc: any) => {
+    if (!svc) setSelectedServices([]);
+    else setSelectedServices([svc]);
+  };
+  const [selectedVehicle, setSelectedVehicle] = useState<any>(route?.params?.vehicle || route?.params?.selectedVehicle || null);
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [currentViewDate, setCurrentViewDate] = useState<Date>(() => new Date());
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
   const [garageSlots, setGarageSlots] = useState<any[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
+
+  // Multi-Service Select Helpers
+  const hasMot = useMemo(() => {
+    return selectedServices.some((s: any) => {
+      const c = (s?.category || '').toLowerCase();
+      const n = (s?.name || '').toLowerCase();
+      return c.includes('mot') || n.includes('mot');
+    });
+  }, [selectedServices]);
+
+  const isDateOnly = !hasMot;
+
+  const totalSelectedPrice = useMemo(() => {
+    return selectedServices.reduce((sum, s) => sum + (Number(s?.price) || 0), 0);
+  }, [selectedServices]);
+
+  const totalSelectedDuration = useMemo(() => {
+    return selectedServices.reduce((sum, s) => sum + (Number(s?.duration) || 45), 0);
+  }, [selectedServices]);
+
+  const selectedServiceNames = useMemo(() => {
+    return selectedServices.map(s => s?.name).filter(Boolean).join(', ');
+  }, [selectedServices]);
+
+  const isServiceSelected = useCallback((service: any) => {
+    if (!service) return false;
+    const targetId = service._id || service.id;
+    const targetName = service.name;
+    return selectedServices.some(s => (targetId && (s._id === targetId || s.id === targetId)) || s.name === targetName);
+  }, [selectedServices]);
+
+  const toggleSelectService = useCallback((service: any) => {
+    if (!service) return;
+    const targetId = service._id || service.id;
+    const targetName = service.name;
+    setSelectedServices(prev => {
+      const exists = prev.some(s => (targetId && (s._id === targetId || s.id === targetId)) || s.name === targetName);
+      if (exists) {
+        return prev.filter(s => !((targetId && (s._id === targetId || s.id === targetId)) || s.name === targetName));
+      } else {
+        return [...prev, service];
+      }
+    });
+  }, []);
+
+  const removeServiceFromSelection = useCallback((service: any) => {
+    const targetId = service._id || service.id;
+    const targetName = service.name;
+    setSelectedServices(prev => prev.filter(s => !((targetId && (s._id === targetId || s.id === targetId)) || s.name === targetName)));
+  }, []);
   const [isInfoModalVisible, setIsInfoModalVisible] = useState(false);
   const [isGalleryModalVisible, setIsGalleryModalVisible] = useState(false);
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
@@ -207,57 +263,134 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     }
   }, [route?.params?.vehicle, activeCustomerVehicles, selectedVehicle, alerts]);
 
-  // Calculate available working days for the next window:
-  // - If vehicle MOT is in the future (>30 days away): Show pre-booking slots within the 30-day window prior to expiry [Expiry - 30 days -> Expiry]
-  // - If vehicle MOT is within 30 days or already expired: Show immediate available dates from Today onwards
-  const availableDates = useMemo(() => {
-    const dates = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const formatLocalDate = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const getDaysInMonth = (year: number, month: number) => {
+    const date = new Date(year, month, 1);
+    const days: (Date | null)[] = [];
+    const firstDayIndex = date.getDay(); // 0 = Sun, 6 = Sat
+    
+    // Empty slots before 1st of month
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push(null);
+    }
+    
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    for (let d = 1; d <= lastDay; d++) {
+      days.push(new Date(year, month, d));
+    }
+    
+    return days;
+  };
+
+  const isDateSelectable = useCallback((date: Date | null) => {
+    if (!date) return false;
+    const currentToday = new Date();
+    currentToday.setHours(0, 0, 0, 0);
+
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+
+    // Never allow past days
+    if (d < currentToday) return false;
+
+    // Working days check according to garage workingDays
+    const workingDays = garage?.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = daysMap[d.getDay()];
+    const isWorkingDay = workingDays.some((w: string) => w.toLowerCase() === dayName.toLowerCase());
+    if (!isWorkingDay) return false;
+
+    // DVSA 30-day pre-booking rule check
+    if (selectedVehicle?.motExpiryDate) {
+      const expDate = new Date(selectedVehicle.motExpiryDate);
+      expDate.setHours(0, 0, 0, 0);
+      const daysLeft = Math.ceil((expDate.getTime() - currentToday.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysLeft > 30) {
+        // Only allow dates within the 30-day window leading up to expiry
+        const windowStart = new Date(expDate);
+        windowStart.setDate(windowStart.getDate() - 30);
+        windowStart.setHours(0, 0, 0, 0);
+
+        if (d < windowStart || d > expDate) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }, [garage?.workingDays, selectedVehicle]);
+
+  const getFirstSelectableDate = useCallback((forVehicle?: any) => {
+    const veh = forVehicle !== undefined ? forVehicle : selectedVehicle;
+    const currentToday = new Date();
+    currentToday.setHours(0, 0, 0, 0);
 
     const workingDays = garage?.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    let startDate = new Date(today);
-    let totalDaysToScan = 21;
-
-    if (selectedVehicle?.motExpiryDate) {
-      const expiryDate = new Date(selectedVehicle.motExpiryDate);
-      expiryDate.setHours(0, 0, 0, 0);
-      const daysLeft = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
+    let start = new Date(currentToday);
+    if (veh?.motExpiryDate) {
+      const expDate = new Date(veh.motExpiryDate);
+      expDate.setHours(0, 0, 0, 0);
+      const daysLeft = Math.ceil((expDate.getTime() - currentToday.getTime()) / (1000 * 60 * 60 * 24));
       if (daysLeft > 30) {
-        // Pre-booking mode: Show available operating days within the 30-day window leading up to expiry
-        startDate = new Date(expiryDate);
-        startDate.setDate(startDate.getDate() - 30);
-        totalDaysToScan = 31;
+        const windowStart = new Date(expDate);
+        windowStart.setDate(windowStart.getDate() - 30);
+        windowStart.setHours(0, 0, 0, 0);
+        if (windowStart > start) {
+          start = windowStart;
+        }
       }
     }
 
-    for (let i = 0; i < totalDaysToScan; i++) {
-      const d = new Date(startDate);
-      d.setDate(startDate.getDate() + i);
-
-      // Never show past days
-      if (d < today) continue;
-
+    // Scan up to 90 days ahead for the first valid working day
+    for (let i = 0; i < 90; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
       const dayName = daysMap[d.getDay()];
       const isWorkingDay = workingDays.some((w: string) => w.toLowerCase() === dayName.toLowerCase());
       if (isWorkingDay) {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const dateStr = `${year}-${month}-${day}`;
-        dates.push({
-          dateStr,
-          dayName: dayName.substring(0, 3),
-          dayNumber: day,
-          monthName: d.toLocaleDateString('en-GB', { month: 'short' }),
-        });
+        return d;
       }
     }
-    return dates;
+    return currentToday;
   }, [garage?.workingDays, selectedVehicle]);
+
+  const handlePrevMonth = () => {
+    const prev = new Date(currentViewDate.getFullYear(), currentViewDate.getMonth() - 1, 1);
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (prev < currentMonthStart) {
+      return;
+    }
+    setCurrentViewDate(prev);
+  };
+
+  const handleNextMonth = () => {
+    const next = new Date(currentViewDate.getFullYear(), currentViewDate.getMonth() + 1, 1);
+    setCurrentViewDate(next);
+  };
+
+  const isPrevMonthDisabled = useMemo(() => {
+    const now = new Date();
+    return currentViewDate.getFullYear() === now.getFullYear() && currentViewDate.getMonth() <= now.getMonth();
+  }, [currentViewDate]);
+
+  const calendarDays = useMemo(() => {
+    return getDaysInMonth(currentViewDate.getFullYear(), currentViewDate.getMonth());
+  }, [currentViewDate]);
 
   // Fetch live 45-min slots for selected date
   const fetchSlotsForDate = useCallback(async (dateStr: string) => {
@@ -282,13 +415,29 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     }
   }, [garage, garageId, token]);
 
+  // Sync selectedDate and currentViewDate if selectedVehicle changes or date becomes invalid
   useEffect(() => {
-    if (availableDates.length > 0) {
-      if (!selectedDate || !availableDates.some(d => d.dateStr === selectedDate)) {
-        setSelectedDate(availableDates[0].dateStr);
+    if (selectedVehicle) {
+      const firstValid = getFirstSelectableDate(selectedVehicle);
+      const firstValidStr = formatLocalDate(firstValid);
+      if (selectedDate) {
+        const parts = selectedDate.split('-').map(Number);
+        if (parts.length === 3) {
+          const curDate = new Date(parts[0], parts[1] - 1, parts[2]);
+          if (!isDateSelectable(curDate)) {
+            setSelectedDate(firstValidStr);
+            setCurrentViewDate(new Date(firstValid.getFullYear(), firstValid.getMonth(), 1));
+          }
+        } else {
+          setSelectedDate(firstValidStr);
+          setCurrentViewDate(new Date(firstValid.getFullYear(), firstValid.getMonth(), 1));
+        }
+      } else {
+        setSelectedDate(firstValidStr);
+        setCurrentViewDate(new Date(firstValid.getFullYear(), firstValid.getMonth(), 1));
       }
     }
-  }, [availableDates, selectedDate]);
+  }, [selectedVehicle, isDateSelectable, getFirstSelectableDate, selectedDate]);
 
   useEffect(() => {
     if (selectedDate && isBookingModalVisible) {
@@ -474,11 +623,11 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     }
   };
 
-  const handleOpenBookingModal = (service: any) => {
+  const handleOpenBookingModal = (service?: any) => {
     if (!token) {
       Alert.alert(
         'Authentication Required',
-        'Please sign in to book your MOT appointment.',
+        'Please sign in to book your appointment.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Sign In', onPress: () => navigation.navigate('Login') }
@@ -487,15 +636,18 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       return;
     }
 
-    setSelectedMotService(service);
+    if (service) {
+      if (!isServiceSelected(service)) {
+        setSelectedServices(prev => [...prev, service]);
+      }
+    } else if (selectedServices.length === 0 && allActiveServices.length > 0) {
+      setSelectedServices([allActiveServices[0]]);
+    }
+
     setBookingSuccess(false);
     setIsBookingModalVisible(true);
 
-    const firstDate = availableDates[0]?.dateStr;
-    if (firstDate) {
-      setSelectedDate(firstDate);
-      fetchSlotsForDate(firstDate);
-    }
+    let targetVehicle = selectedVehicle;
     if (activeCustomerVehicles.length === 0) {
       setShowAddCarForm(true);
     } else if (!selectedVehicle) {
@@ -509,22 +661,34 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         );
         return days <= 30 && !isPending && !hasBooking;
       });
-      setSelectedVehicle(eligibleVeh || activeCustomerVehicles[0]);
+      targetVehicle = eligibleVeh || activeCustomerVehicles[0];
+      setSelectedVehicle(targetVehicle);
+    }
+
+    const firstValid = getFirstSelectableDate(targetVehicle);
+    const firstDate = formatLocalDate(firstValid);
+    if (firstDate) {
+      setSelectedDate(firstDate);
+      setCurrentViewDate(new Date(firstValid.getFullYear(), firstValid.getMonth(), 1));
+      fetchSlotsForDate(firstDate);
     }
   };
 
-
-
   const handleConfirmBooking = async () => {
+    if (selectedServices.length === 0) {
+      Alert.alert('No Services Selected', 'Please select at least one service to book.');
+      return;
+    }
+
     if (!selectedVehicle) {
-      Alert.alert('Error', 'Please select a vehicle to book MOT.');
+      Alert.alert('Error', 'Please select a vehicle to book.');
       return;
     }
 
     if (selectedVehicle.status === 'Pending') {
       Alert.alert(
         'Registration Pending Approval',
-        `The registration for ${selectedVehicle.registrationNumber} is currently pending approval by garage staff. You can book an MOT test once it is verified.`
+        `The registration for ${selectedVehicle.registrationNumber} is currently pending approval by garage staff. You can book once it is verified.`
       );
       return;
     }
@@ -545,7 +709,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     if (pendingBooking) {
       Alert.alert(
         'Booking Pending Approval',
-        `An MOT appointment request for ${selectedVehicle.registrationNumber} is already awaiting confirmation by garage staff.`
+        `An appointment request for ${selectedVehicle.registrationNumber} is already awaiting confirmation by garage staff.`
       );
       return;
     }
@@ -558,14 +722,14 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     if (activeBooking) {
       Alert.alert(
         'Vehicle Already Booked',
-        `${selectedVehicle.registrationNumber} already has an active MOT booking.`
+        `${selectedVehicle.registrationNumber} already has an active booking.`
       );
       return;
     }
 
     const daysLeft = getDaysUntilExpiry(selectedVehicle.motExpiryDate);
-    // If vehicle is in pre-booking mode (>30 days away), ensure booking date is within the 30-day window before expiry
-    if (daysLeft > 30) {
+    // If vehicle is in pre-booking mode (>30 days away) and booking contains MOT, ensure booking date is within the 30-day window before expiry
+    if (hasMot && daysLeft > 30) {
       const expDate = new Date(selectedVehicle.motExpiryDate);
       const minDate = new Date(expDate);
       minDate.setDate(minDate.getDate() - 30);
@@ -575,34 +739,47 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       if (selD < minDate) {
         Alert.alert(
           'Pre-Booking Window',
-          `Under DVSA rules, pre-booking slots must be within 30 days of your expiry date (${formatDisplayDate(selectedVehicle.motExpiryDate)}).\nPlease select an appointment date on or after ${formatDisplayDate(minDate.toISOString())}.`
+          `Under DVSA rules, MOT pre-booking slots must be within 30 days of your expiry date (${formatDisplayDate(selectedVehicle.motExpiryDate)}).\nPlease select an appointment date on or after ${formatDisplayDate(minDate.toISOString())}.`
         );
         return;
       }
     }
 
-    if (!selectedDate || !selectedTime) {
-      Alert.alert('Error', 'Please select an available MOT time slot.');
+    if (!selectedDate) {
+      Alert.alert('Error', 'Please select an appointment date.');
+      return;
+    }
+
+    if (hasMot && !selectedTime) {
+      Alert.alert('Error', 'Please select an available MOT test slot.');
       return;
     }
 
     setSubmittingBooking(true);
     try {
       const targetGarageId = garage.id || garage._id || garageId;
-      const targetPrice = selectedMotService?.price || 45;
-      const targetDuration = selectedSlot?.slotDuration || selectedMotService?.duration || 45;
-      const targetSlotTime = selectedSlot?.time || selectedTime;
+      const targetPrice = totalSelectedPrice;
+      const targetDuration = totalSelectedDuration;
+      const targetSlotTime = hasMot ? (selectedSlot?.time || selectedTime) : 'Full Day Drop-off';
 
       await addAlert({
         type: 'BOOKED',
         customerName: `${customer.firstName} ${customer.lastName}`.trim() || user?.name || 'Customer',
         customerId: customer.id,
         garageId: targetGarageId,
-        serviceName: selectedMotService?.name || 'MOT Test',
+        serviceName: selectedServiceNames,
+        services: selectedServices.map((s: any) => ({
+          name: s.name,
+          category: s.category || 'Servicing',
+          price: Number(s.price) || 0,
+          duration: Number(s.duration) || 45,
+        })),
+        hasMot,
+        isDateOnly: !hasMot,
         price: targetPrice,
         duration: targetDuration,
         slotTime: targetSlotTime,
-        slotNumber: selectedSlot?.slotNumber,
+        slotNumber: hasMot ? selectedSlot?.slotNumber : undefined,
         registrationNumber: selectedVehicle.registrationNumber,
         makeModel: `${selectedVehicle.make} ${selectedVehicle.model}`.trim(),
         status: 'Pending',
@@ -610,8 +787,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       });
 
       await addAudit(
-        'MOT Booking Requested',
-        `${customer.firstName} ${customer.lastName} requested MOT test slot for ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) at ${garage.name} on ${selectedDate} at ${targetSlotTime}`
+        hasMot ? 'MOT & Service Booking Requested' : 'Workshop Service Booking Requested',
+        `${customer.firstName} ${customer.lastName} requested ${selectedServiceNames} for ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) at ${garage.name} on ${selectedDate} (${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'})`
       );
 
       setSubmittingBooking(false);
@@ -621,12 +798,14 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       Toast.show({
         type: 'success',
         text1: 'Booking Requested!',
-        text2: `MOT slot confirmed for ${selectedDate} at ${targetSlotTime}`,
+        text2: hasMot 
+          ? `MOT slot requested for ${selectedDate} at ${targetSlotTime}`
+          : `Workshop drop-off requested for ${selectedDate}`,
       });
     } catch (err: any) {
       setSubmittingBooking(false);
       console.error('Booking confirmation failed:', err);
-      Alert.alert('Booking Error', err.message || 'Could not confirm MOT booking slot. Please try again.');
+      Alert.alert('Booking Error', err.message || 'Could not confirm booking. Please try again.');
     }
   };
 
@@ -675,23 +854,11 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   // Extract all active garage services
   const allActiveServices = useMemo(() => {
     if (!garage?.services || !Array.isArray(garage.services) || garage.services.length === 0) {
-      return [
-        {
-          _id: 'default-mot',
-          id: 'default-mot',
-          name: 'MOT Test (Class 4)',
-          category: 'MOT',
-          duration: 45,
-          price: 45.00,
-          description: 'Official DVSA MOT annual safety inspection for passenger vehicles (Class 4).',
-          availability: garage?.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-          isActive: true
-        }
-      ];
+      return [];
     }
     const active = garage.services.filter((s: any) => s.isActive !== false);
     return active.length > 0 ? active : garage.services;
-  }, [garage?.services, garage?.workingDays]);
+  }, [garage?.services]);
 
   // Unique categories list
   const availableCategories = useMemo(() => {
@@ -985,7 +1152,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       </View>
                     </View>
 
-                    {/* Bottom Action Row: Pricing & Book Button */}
+                    {/* Bottom Action Row: Pricing, Multi-Select Checkbox & Book Button */}
                     <View style={[styles.serviceCardBottomRow, { borderTopColor: theme.colors.border + '50' }]}>
                       <View>
                         <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase' }}>
@@ -996,16 +1163,43 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         </Text>
                       </View>
 
-                      <TouchableOpacity
-                        style={[styles.bookBtn, { backgroundColor: theme.colors.primary }]}
-                        onPress={() => handleOpenBookingModal(service)}
-                        activeOpacity={0.8}
-                      >
-                        <MaterialCommunityIcons name="calendar-plus" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
-                        <Text style={styles.bookBtnText}>
-                          {isSelectedService ? 'Book This Service' : 'Book Service'}
-                        </Text>
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <TouchableOpacity
+                          style={[
+                            styles.serviceSelectToggleBtn,
+                            {
+                              backgroundColor: isServiceSelected(service) ? theme.colors.primary + '18' : theme.colors.card,
+                              borderColor: isServiceSelected(service) ? theme.colors.primary : theme.colors.border,
+                            }
+                          ]}
+                          onPress={() => toggleSelectService(service)}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialCommunityIcons
+                            name={isServiceSelected(service) ? "checkbox-marked-circle" : "plus-circle-outline"}
+                            size={16}
+                            color={isServiceSelected(service) ? theme.colors.primary : theme.colors.placeholder}
+                            style={{ marginRight: 4 }}
+                          />
+                          <Text style={[
+                            styles.serviceSelectToggleText,
+                            { color: isServiceSelected(service) ? theme.colors.primary : theme.colors.text, fontWeight: isServiceSelected(service) ? '700' : '600' }
+                          ]}>
+                            {isServiceSelected(service) ? 'Selected' : 'Select'}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.bookBtn, { backgroundColor: theme.colors.primary }]}
+                          onPress={() => handleOpenBookingModal(service)}
+                          activeOpacity={0.8}
+                        >
+                          <MaterialCommunityIcons name="calendar-plus" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                          <Text style={styles.bookBtnText}>
+                            Book Now
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
                 );
@@ -1014,6 +1208,31 @@ export default function GarageDetailScreen({ route, navigation }: any) {
           </View>
         </View>
       </ScrollView>
+
+      {/* Floating Bottom Bar when services are selected */}
+      {selectedServices.length > 0 && !isBookingModalVisible && (
+        <View style={[styles.floatingBottomBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <MaterialCommunityIcons name="check-circle" size={16} color={theme.colors.primary} style={{ marginRight: 5 }} />
+              <Text style={[styles.floatingBarTitle, { color: theme.colors.text }]}>
+                {selectedServices.length} {selectedServices.length === 1 ? 'Service' : 'Services'} Selected
+              </Text>
+            </View>
+            <Text style={[styles.floatingBarSubtitle, { color: theme.colors.primary, fontWeight: '700' }]}>
+              Total: £{totalSelectedPrice.toFixed(2)} • {hasMot ? '45-Min MOT Slot' : 'Workshop Drop-off'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.floatingBarActionBtn, { backgroundColor: theme.colors.primary }]}
+            onPress={() => handleOpenBookingModal()}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.floatingBarActionText}>Book Garage</Text>
+            <MaterialCommunityIcons name="arrow-right" size={16} color="#FFFFFF" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Garage Info Modal */}
       <Modal
@@ -1356,7 +1575,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   Book Appointment
                 </Text>
                 <Text style={[styles.modalHeaderSubtitle, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                  {garage.name} • {selectedMotService?.name || 'Automotive Service'}
+                  {garage.name} • {selectedServices.length > 1 ? `${selectedServices.length} Services Selected` : (selectedMotService?.name || 'Automotive Service')}
                 </Text>
               </View>
               <TouchableOpacity
@@ -1377,7 +1596,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   Booking Request Sent!
                 </Text>
                 <Text style={[styles.successSubtitle, { color: theme.colors.placeholder }]}>
-                  Your appointment request for {selectedMotService?.name || 'service'} has been submitted to {garage.name}. Garage staff will review and confirm your slot.
+                  Your appointment request for {selectedServiceNames || selectedMotService?.name || 'services'} has been submitted to {garage.name}. Garage staff will review and confirm your request.
                 </Text>
 
                 <View style={[styles.summaryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, width: '100%', marginVertical: 20 }]}>
@@ -1392,21 +1611,21 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{garage.name}</Text>
                   </View>
                   <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Service:</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Services:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.text, fontWeight: 'bold' }]}>
-                      {selectedMotService?.name || 'MOT Test'} ({selectedMotService?.category || 'Servicing'})
+                      {selectedServiceNames || selectedMotService?.name || 'Services'}
                     </Text>
                   </View>
                   <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Date & Time:</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Appointment:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.primary, fontWeight: 'bold' }]}>
-                      {formatDisplayDate(selectedDate)} at {selectedTime}
+                      {hasMot ? `${formatDisplayDate(selectedDate)} at ${selectedTime}` : `${formatDisplayDate(selectedDate)} (Full-Day Drop-off)`}
                     </Text>
                   </View>
                   <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
-                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Service Rate:</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Total Fee:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.primary, fontWeight: 'bold' }]}>
-                      £{selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '0.00'}
+                      £{totalSelectedPrice.toFixed(2)}
                     </Text>
                   </View>
                 </View>
@@ -1434,107 +1653,140 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 contentContainerStyle={styles.modalScrollContent} 
                 keyboardShouldPersistTaps="handled"
               >
-                {/* 0. Selected Service Package Preview & Quick Switcher */}
+                {/* 0. Selected Services & Multi-Service Selection */}
                 <View style={styles.flowSection}>
                   <View style={styles.flowSectionHeader}>
                     <MaterialCommunityIcons name="wrench-clock" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
                     <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
-                      Selected Service Package
+                      Selected Services ({selectedServices.length})
                     </Text>
                   </View>
 
-                  {/* Active Selected Service Card */}
-                  <View style={[
-                    styles.selectedServiceBanner,
-                    { 
-                      backgroundColor: theme.colors.card, 
-                      borderColor: theme.colors.primary,
-                      borderWidth: 1.5 
-                    }
-                  ]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                      <View style={{ flex: 1, paddingRight: 8 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                          <Text style={[styles.serviceName, { color: theme.colors.text, fontSize: 15 }]}>
-                            {selectedMotService?.name || 'Service Package'}
-                          </Text>
-                          <View style={[
-                            styles.categoryBadge, 
-                            { 
-                              backgroundColor: getCategoryTheme(selectedMotService?.category, selectedMotService?.name).bg,
-                              borderColor: getCategoryTheme(selectedMotService?.category, selectedMotService?.name).border
-                            }
-                          ]}>
-                            <Text style={[
-                              styles.categoryBadgeText, 
-                              { color: getCategoryTheme(selectedMotService?.category, selectedMotService?.name).text }
-                            ]}>
-                              {selectedMotService?.category || 'Servicing'}
-                            </Text>
-                          </View>
-                        </View>
+                  {/* List of Selected Service Cards */}
+                  {selectedServices.map((svc: any) => {
+                    const svcCatTheme = getCategoryTheme(svc.category, svc.name);
+                    const isMotSvc = (svc.category || '').toLowerCase().includes('mot') || (svc.name || '').toLowerCase().includes('mot');
 
-                        {selectedMotService?.description ? (
-                          <Text style={[styles.serviceDescText, { color: theme.colors.placeholder, marginTop: 4 }]} numberOfLines={2}>
-                            {selectedMotService.description}
-                          </Text>
-                        ) : null}
-
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 10 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <MaterialCommunityIcons name="clock-time-four-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
-                            <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: '600' }}>
-                              {selectedMotService?.duration || 45} mins
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase' }}>
-                          Fee
-                        </Text>
-                        <Text style={[styles.servicePriceText, { color: theme.colors.primary, fontSize: 18 }]}>
-                          £{selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '0.00'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Quick Switch Service Chips if multiple services */}
-                    {allActiveServices.length > 1 && (
-                      <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
-                        <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6 }}>
-                          Switch Service for {garage.name}:
-                        </Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                          {allActiveServices.map((svc: any) => {
-                            const isChosen = (selectedMotService?._id && svc._id && selectedMotService._id === svc._id) ||
-                              (selectedMotService?.name && svc.name && selectedMotService.name === svc.name);
-                            return (
-                              <TouchableOpacity
-                                key={svc._id || svc.id || svc.name}
-                                onPress={() => setSelectedMotService(svc)}
-                                style={[
-                                  styles.serviceSwitchChip,
-                                  {
-                                    backgroundColor: isChosen ? theme.colors.primary : theme.colors.background,
-                                    borderColor: isChosen ? theme.colors.primary : theme.colors.border,
-                                  }
-                                ]}
-                              >
+                    return (
+                      <View 
+                        key={svc._id || svc.id || svc.name}
+                        style={[
+                          styles.selectedServiceBanner,
+                          { 
+                            backgroundColor: theme.colors.card, 
+                            borderColor: theme.colors.primary + '50',
+                            borderWidth: 1.5,
+                            marginBottom: 8,
+                          }
+                        ]}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                          <View style={{ flex: 1, paddingRight: 8 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                              <Text style={[styles.serviceName, { color: theme.colors.text, fontSize: 14 }]}>
+                                {svc.name}
+                              </Text>
+                              <View style={[
+                                styles.categoryBadge, 
+                                { 
+                                  backgroundColor: svcCatTheme.bg,
+                                  borderColor: svcCatTheme.border
+                                }
+                              ]}>
                                 <Text style={[
-                                  styles.serviceSwitchChipText,
-                                  { color: isChosen ? '#FFFFFF' : theme.colors.text, fontWeight: isChosen ? '700' : '500' }
+                                  styles.categoryBadgeText, 
+                                  { color: svcCatTheme.text }
                                 ]}>
-                                  {svc.name} • £{svc.price ? Number(svc.price).toFixed(0) : '0'}
+                                  {svc.category || (isMotSvc ? 'MOT' : 'Servicing')}
                                 </Text>
+                              </View>
+                            </View>
+
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 10 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name="clock-time-four-outline" size={12} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
+                                <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: '600' }}>
+                                  {svc.duration || 45} mins
+                                </Text>
+                              </View>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <MaterialCommunityIcons name={isMotSvc ? "clock-check" : "calendar-today"} size={12} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
+                                <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                                  {isMotSvc ? '45-Min Bay Slot' : 'Workshop Drop-off'}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <View style={{ alignItems: 'flex-end' }}>
+                              <Text style={[styles.servicePriceText, { color: theme.colors.primary, fontSize: 16 }]}>
+                                £{svc.price ? Number(svc.price).toFixed(2) : '0.00'}
+                              </Text>
+                            </View>
+                            {selectedServices.length > 1 && (
+                              <TouchableOpacity
+                                onPress={() => removeServiceFromSelection(svc)}
+                                style={{ padding: 4, borderRadius: 12, backgroundColor: theme.colors.border + '40' }}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              >
+                                <MaterialCommunityIcons name="close" size={14} color={theme.colors.placeholder} />
                               </TouchableOpacity>
-                            );
-                          })}
-                        </ScrollView>
+                            )}
+                          </View>
+                        </View>
                       </View>
-                    )}
+                    );
+                  })}
+
+                  {/* Quick Totals Strip */}
+                  <View style={[styles.multiServiceTotalStrip, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialCommunityIcons 
+                        name={hasMot ? "clock-alert-outline" : "calendar-check-outline"} 
+                        size={15} 
+                        color={hasMot ? "#3B82F6" : "#10B981"} 
+                        style={{ marginRight: 6 }} 
+                      />
+                      <Text style={{ fontSize: 12, color: theme.colors.text, fontWeight: '600' }}>
+                        {hasMot ? 'Includes 45-Min MOT Test Slot' : 'Date-Only Workshop Drop-off'}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: theme.colors.primary }}>
+                      £{totalSelectedPrice.toFixed(2)}
+                    </Text>
                   </View>
+
+                  {/* Add More Services from Garage Quick Chips */}
+                  {allActiveServices.filter((s: any) => !isServiceSelected(s)).length > 0 && (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6 }}>
+                        + Add more services to this booking:
+                      </Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                        {allActiveServices
+                          .filter((svc: any) => !isServiceSelected(svc))
+                          .map((svc: any) => (
+                            <TouchableOpacity
+                              key={svc._id || svc.id || svc.name}
+                              onPress={() => toggleSelectService(svc)}
+                              style={[
+                                styles.serviceSwitchChip,
+                                {
+                                  backgroundColor: theme.colors.card,
+                                  borderColor: theme.colors.border,
+                                }
+                              ]}
+                            >
+                              <MaterialCommunityIcons name="plus" size={12} color={theme.colors.primary} style={{ marginRight: 2 }} />
+                              <Text style={[styles.serviceSwitchChipText, { color: theme.colors.text }]}>
+                                {svc.name} • £{svc.price ? Number(svc.price).toFixed(0) : '0'}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                      </ScrollView>
+                    </View>
+                  )}
                 </View>
 
                 {/* 1. Vehicle Selection Section */}
@@ -1800,11 +2052,16 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                             style={[
                               styles.vehicleSelectItem,
                               { 
-                                backgroundColor: isSelected ? theme.colors.primary + '10' : theme.colors.card, 
-                                borderColor: isSelected ? theme.colors.primary : (isEligible ? theme.colors.border : theme.colors.placeholder + '30'),
-                                borderWidth: isSelected ? 1.5 : 1,
+                                backgroundColor: isSelected 
+                                  ? (theme.dark ? theme.colors.primary + '18' : theme.colors.primary + '0A') 
+                                  : theme.colors.card, 
+                                borderColor: isSelected 
+                                  ? theme.colors.primary 
+                                  : (isEligible ? theme.colors.border : theme.colors.placeholder + '30'),
+                                borderWidth: isSelected ? 2 : 1,
                                 opacity: isEligible ? 1 : 0.7,
-                                elevation: isEligible ? 1 : 0,
+                                elevation: 0,
+                                shadowOpacity: 0,
                               }
                             ]}
                             onPress={() => {
@@ -1948,108 +2205,217 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   <View style={styles.flowSectionHeader}>
                     <MaterialCommunityIcons name="calendar-month" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
                     <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
-                      2. Choose MOT Appointment Date
+                      {hasMot ? '2. Choose MOT & Service Appointment Date' : '2. Choose Workshop Drop-off Date'}
                     </Text>
                   </View>
                   <Text style={[styles.flowSectionSubtitle, { color: theme.colors.placeholder }]}>
-                    Select from verified operating days for {garage.name}
+                    {hasMot 
+                      ? `Select from verified operating days for ${garage.name}`
+                      : `Select what date you will bring your car to ${garage.name} (Workshop Intake)`}
                   </Text>
 
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false} 
-                    style={styles.dateScrollView}
-                    contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
-                  >
-                    {availableDates.map((item) => {
-                      const isDateActive = selectedDate === item.dateStr;
-                      return (
-                        <TouchableOpacity
-                          key={item.dateStr}
-                          style={[
-                            styles.dateChip,
-                            {
-                              backgroundColor: isDateActive ? theme.colors.primary : theme.colors.card,
-                              borderColor: isDateActive ? theme.colors.primary : theme.colors.border,
-                            }
-                          ]}
-                          onPress={() => setSelectedDate(item.dateStr)}
-                        >
-                          <Text style={[styles.dateChipDay, { color: isDateActive ? '#FFFFFF' : theme.colors.placeholder }]}>
-                            {item.dayName}
-                          </Text>
-                          <Text style={[styles.dateChipNumber, { color: isDateActive ? '#FFFFFF' : theme.colors.text }]}>
-                            {item.dayNumber}
-                          </Text>
-                          <Text style={[styles.dateChipMonth, { color: isDateActive ? '#FFFFFF' : theme.colors.placeholder }]}>
-                            {item.monthName}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-
-                {/* 3. Slot Selection Section */}
-                <View style={styles.flowSection}>
-                  <View style={styles.flowSectionHeader}>
-                    <MaterialCommunityIcons name="clock-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                    <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
-                      3. Select 45-Min Test Slot
-                    </Text>
-                  </View>
-                  <Text style={[styles.flowSectionSubtitle, { color: theme.colors.placeholder }]}>
-                    Live MOT bay slots for {formatDisplayDate(selectedDate)}
-                  </Text>
-
-                  {loadingSlots ? (
-                    <View style={[styles.slotsLoadingContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                      <ActivityIndicator size="small" color={theme.colors.primary} />
-                      <Text style={[styles.slotsLoadingText, { color: theme.colors.placeholder }]}>
-                        Checking live MOT bay availability...
+                  {/* Whole Calendar Card */}
+                  <View style={[styles.calendarCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                    {/* Header: Month / Year + Prev/Next buttons */}
+                    <View style={styles.calendarHeader}>
+                      <TouchableOpacity 
+                        onPress={handlePrevMonth} 
+                        style={[styles.calNavBtn, { opacity: isPrevMonthDisabled ? 0.3 : 1 }]}
+                        disabled={isPrevMonthDisabled}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialCommunityIcons 
+                          name="chevron-left" 
+                          size={24} 
+                          color={isPrevMonthDisabled ? theme.colors.placeholder : theme.colors.text} 
+                        />
+                      </TouchableOpacity>
+                      <Text style={[styles.calendarTitle, { color: theme.colors.text }]}>
+                        {monthNames[currentViewDate.getMonth()]} {currentViewDate.getFullYear()}
                       </Text>
+                      <TouchableOpacity 
+                        onPress={handleNextMonth} 
+                        style={styles.calNavBtn}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialCommunityIcons 
+                          name="chevron-right" 
+                          size={24} 
+                          color={theme.colors.text} 
+                        />
+                      </TouchableOpacity>
                     </View>
-                  ) : freeSlots.length === 0 ? (
-                    <View style={[styles.slotsEmptyContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                      <MaterialCommunityIcons name="clock-alert-outline" size={28} color={theme.colors.placeholder} />
-                      <Text style={[styles.slotsEmptyText, { color: theme.colors.placeholder }]}>
-                        No open test slots available on this date. Please choose another date above.
-                      </Text>
+
+                    {/* Weekday Row */}
+                    <View style={styles.weekdayRow}>
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => {
+                        const workingDays = garage?.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        const isWorkingDay = workingDays.some((w: string) => w.toLowerCase().startsWith(d.toLowerCase()));
+                        return (
+                          <Text 
+                            key={d} 
+                            style={[
+                              styles.weekdayText, 
+                              { color: !isWorkingDay ? theme.colors.error : theme.colors.placeholder }
+                            ]}
+                          >
+                            {d}
+                          </Text>
+                        );
+                      })}
                     </View>
-                  ) : (
-                    <View style={styles.slotsGrid}>
-                      {freeSlots.map((slot) => {
-                        const isSlotSelected = selectedTime === slot.time;
+
+                    {/* Days Grid */}
+                    <View style={styles.daysGrid}>
+                      {calendarDays.map((day, idx) => {
+                        if (!day) {
+                          return <View key={`empty-${idx}`} style={styles.dayCell} />;
+                        }
+
+                        const isoString = formatLocalDate(day);
+                        const isSelected = selectedDate === isoString;
+                        const selectable = isDateSelectable(day);
+                        
+                        const todayObj = new Date();
+                        const isToday = day.getDate() === todayObj.getDate() && 
+                                        day.getMonth() === todayObj.getMonth() && 
+                                        day.getFullYear() === todayObj.getFullYear();
+
                         return (
                           <TouchableOpacity
-                            key={slot.time}
+                            key={isoString}
+                            disabled={!selectable}
+                            onPress={() => setSelectedDate(isoString)}
+                            activeOpacity={0.7}
                             style={[
-                              styles.slotChip,
-                              {
-                                backgroundColor: isSlotSelected ? theme.colors.primary : theme.colors.card,
-                                borderColor: isSlotSelected ? theme.colors.primary : theme.colors.border,
-                              }
+                              styles.dayCell,
+                              isSelected && { backgroundColor: theme.colors.primary, borderRadius: 18 },
+                              isToday && !isSelected && { borderWidth: 1.5, borderColor: theme.colors.primary, borderRadius: 18 }
                             ]}
-                            onPress={() => {
-                              setSelectedTime(slot.time);
-                              setSelectedSlot(slot);
-                            }}
                           >
-                            <MaterialCommunityIcons
-                              name="clock-time-four-outline"
-                              size={14}
-                              color={isSlotSelected ? '#FFFFFF' : theme.colors.secondary}
-                              style={{ marginRight: 4 }}
-                            />
-                            <Text style={[styles.slotChipText, { color: isSlotSelected ? '#FFFFFF' : theme.colors.text }]}>
-                              {slot.time}
+                            <Text
+                              style={[
+                                styles.dayCellText,
+                                { color: theme.colors.text },
+                                isSelected && { color: '#FFFFFF', fontWeight: 'bold' },
+                                !selectable && { color: theme.colors.placeholder + '35' }
+                              ]}
+                            >
+                              {day.getDate()}
                             </Text>
                           </TouchableOpacity>
                         );
                       })}
                     </View>
-                  )}
+
+                    {/* Selected Date Indicator Banner */}
+                    {selectedDate ? (
+                      <View style={[styles.calendarSelectedBanner, { borderTopColor: theme.colors.border + '60' }]}>
+                        <MaterialCommunityIcons name="calendar-check" size={16} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                        <Text style={[styles.calendarSelectedText, { color: theme.colors.text }]}>
+                          Selected Date:{' '}
+                          <Text style={{ fontWeight: 'bold', color: theme.colors.primary }}>
+                            {formatDisplayDate(selectedDate)}
+                          </Text>
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
+
+                {/* 3. Slot Selection (MOT has 45-min slots; Non-MOT is Date-Only Workshop Drop-off) */}
+                {hasMot ? (
+                  <View style={styles.flowSection}>
+                    <View style={styles.flowSectionHeader}>
+                      <MaterialCommunityIcons name="clock-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                      <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
+                        3. Select 45-Min MOT Test Slot
+                      </Text>
+                    </View>
+                    <Text style={[styles.flowSectionSubtitle, { color: theme.colors.placeholder }]}>
+                      Live MOT bay test slots for {formatDisplayDate(selectedDate)}
+                    </Text>
+
+                    {loadingSlots ? (
+                      <View style={[styles.slotsLoadingContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                        <ActivityIndicator size="small" color={theme.colors.primary} />
+                        <Text style={[styles.slotsLoadingText, { color: theme.colors.placeholder }]}>
+                          Checking live MOT bay availability...
+                        </Text>
+                      </View>
+                    ) : freeSlots.length === 0 ? (
+                      <View style={[styles.slotsEmptyContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                        <MaterialCommunityIcons name="clock-alert-outline" size={28} color={theme.colors.placeholder} />
+                        <Text style={[styles.slotsEmptyText, { color: theme.colors.placeholder }]}>
+                          No open test slots available on this date. Please choose another date above.
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.slotsGrid}>
+                        {freeSlots.map((slot) => {
+                          const isSlotSelected = selectedTime === slot.time;
+                          return (
+                            <TouchableOpacity
+                              key={slot.time}
+                              style={[
+                                styles.slotChip,
+                                {
+                                  backgroundColor: isSlotSelected ? theme.colors.primary : theme.colors.card,
+                                  borderColor: isSlotSelected ? theme.colors.primary : theme.colors.border,
+                                }
+                              ]}
+                              onPress={() => {
+                                setSelectedTime(slot.time);
+                                setSelectedSlot(slot);
+                              }}
+                            >
+                              <MaterialCommunityIcons
+                                name="clock-time-four-outline"
+                                size={14}
+                                color={isSlotSelected ? '#FFFFFF' : theme.colors.secondary}
+                                style={{ marginRight: 4 }}
+                              />
+                              <Text style={[styles.slotChipText, { color: isSlotSelected ? '#FFFFFF' : theme.colors.text }]}>
+                                {slot.time}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.flowSection}>
+                    <View style={styles.flowSectionHeader}>
+                      <MaterialCommunityIcons name="store-clock-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                      <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
+                        3. Workshop Drop-Off Intake
+                      </Text>
+                    </View>
+                    <Text style={[styles.flowSectionSubtitle, { color: theme.colors.placeholder }]}>
+                      No fixed 45-min time slot needed for non-MOT services
+                    </Text>
+
+                    <View style={[styles.dateOnlyNoticeCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary + '30' }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                        <View style={[styles.dateOnlyIconCircle, { backgroundColor: theme.colors.primary + '15' }]}>
+                          <MaterialCommunityIcons name="car-wrench" size={22} color={theme.colors.primary} />
+                        </View>
+                        <View style={{ marginLeft: 12, flex: 1 }}>
+                          <Text style={[styles.dateOnlyCardTitle, { color: theme.colors.text }]}>
+                            Full-Day Workshop Drop-Off
+                          </Text>
+                          <Text style={{ fontSize: 12, color: theme.colors.primary, fontWeight: '700', marginTop: 2 }}>
+                            Operating Hours: 08:00 – 18:00
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.dateOnlyCardBody, { color: theme.colors.placeholder }]}>
+                        Bring your car to {garage.name} on {formatDisplayDate(selectedDate)}. Garage staff will receive notification of your request to accept or reject as before, and will work on your vehicle during workshop hours.
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
                 {/* 4. Booking Summary Card */}
                 <View style={[styles.summaryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
@@ -2063,16 +2429,16 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   </View>
 
                   <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Service Package:</Text>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Selected Services:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.text, fontWeight: 'bold' }]}>
-                      {selectedMotService?.name || 'MOT Test'} ({selectedMotService?.category || 'Servicing'})
+                      {selectedServiceNames || selectedMotService?.name || 'Services'}
                     </Text>
                   </View>
 
                   <View style={styles.summaryRow}>
                     <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Estimated Duration:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-                      {selectedMotService?.duration || 45} mins
+                      ~{totalSelectedDuration} mins
                     </Text>
                   </View>
 
@@ -2086,14 +2452,16 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   <View style={styles.summaryRow}>
                     <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Appointment:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.primary, fontWeight: 'bold' }]}>
-                      {selectedDate && selectedTime ? `${formatDisplayDate(selectedDate)} at ${selectedTime}` : 'Select date & slot'}
+                      {hasMot 
+                        ? (selectedDate && selectedTime ? `${formatDisplayDate(selectedDate)} at ${selectedTime}` : 'Select date & MOT slot')
+                        : (selectedDate ? `${formatDisplayDate(selectedDate)} (Full-Day Drop-off)` : 'Select date')}
                     </Text>
                   </View>
 
                   <View style={[styles.summaryRow, { borderBottomWidth: 0, paddingTop: 10 }]}>
-                    <Text style={[styles.summaryTotalLabel, { color: theme.colors.text }]}>Service Fee:</Text>
+                    <Text style={[styles.summaryTotalLabel, { color: theme.colors.text }]}>Total Fee:</Text>
                     <Text style={[styles.summaryTotalPrice, { color: theme.colors.primary }]}>
-                      £{selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '0.00'}
+                      £{totalSelectedPrice.toFixed(2)}
                     </Text>
                   </View>
                 </View>
@@ -2115,15 +2483,16 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   );
                   const isVehicleEligible = selectedVehicle && !isPendingApproval && !isRejected && !hasPendingBooking && !hasApprovedBooking;
 
-                  let buttonLabel = `Confirm Booking • £${selectedMotService?.price ? Number(selectedMotService.price).toFixed(2) : '0.00'}`;
+                  let buttonLabel = `Confirm Booking • £${totalSelectedPrice.toFixed(2)}`;
                   if (!selectedVehicle) buttonLabel = 'Select a Vehicle';
                   else if (isPendingApproval) buttonLabel = 'Registration Pending Approval';
                   else if (isRejected) buttonLabel = 'Registration Rejected';
                   else if (hasPendingBooking) buttonLabel = 'Booking Already Pending';
                   else if (hasApprovedBooking) buttonLabel = 'Vehicle Already Booked';
-                  else if (!selectedTime) buttonLabel = 'Select an Available Slot';
+                  else if (!selectedDate) buttonLabel = 'Select an Appointment Date';
+                  else if (hasMot && !selectedTime) buttonLabel = 'Select an Available MOT Slot';
 
-                  const canSubmit = isVehicleEligible && selectedDate && selectedTime && !submittingBooking;
+                  const canSubmit = isVehicleEligible && selectedDate && (hasMot ? Boolean(selectedTime) : true) && !submittingBooking;
 
                   return (
                     <TouchableOpacity
@@ -2530,11 +2899,12 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     marginBottom: 8,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 2,
+    borderWidth: 1,
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
   },
   plateContainerSmall: {
     flexDirection: 'row',
@@ -2577,30 +2947,65 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 
-  dateScrollView: {
-    marginTop: 4,
-  },
-  dateChip: {
-    width: 64,
-    paddingVertical: 10,
-    borderRadius: 10,
+  calendarCard: {
     borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 6,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingHorizontal: 4,
   },
-  dateChipDay: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+  calNavBtn: {
+    padding: 6,
+    borderRadius: 8,
   },
-  dateChipNumber: {
-    fontSize: 18,
+  calendarTitle: {
+    fontSize: 14,
     fontWeight: 'bold',
-    marginVertical: 2,
   },
-  dateChipMonth: {
-    fontSize: 10,
+  weekdayRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.06)',
+    paddingBottom: 6,
+    marginBottom: 8,
+  },
+  weekdayText: {
+    width: '14.2%',
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 6,
+  },
+  dayCell: {
+    width: '14.2%',
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayCellText: {
+    fontSize: 13,
     fontWeight: '500',
+  },
+  calendarSelectedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+  },
+  calendarSelectedText: {
+    fontSize: 12,
   },
   slotsLoadingContainer: {
     flexDirection: 'row',
@@ -3234,5 +3639,85 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
     marginLeft: 6,
+  },
+  serviceSelectToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  serviceSelectToggleText: {
+    fontSize: 12,
+  },
+  floatingBottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  floatingBarTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  floatingBarSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  floatingBarActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  floatingBarActionText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  multiServiceTotalStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  dateOnlyNoticeCard: {
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 6,
+  },
+  dateOnlyIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateOnlyCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  dateOnlyCardBody: {
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

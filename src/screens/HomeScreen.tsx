@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,6 +14,7 @@ import {
   RefreshControl,
   Image,
   FlatList,
+  Animated,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
@@ -109,122 +110,199 @@ const mapBackendVehicleToFrontend = (v: any) => {
   };
 };
 
-const BOOKABLE_SERVICES = [
+interface BookableServiceItem {
+  id: string;
+  title: string;
+  name: string;
+  category: string;
+  icon: string;
+  iconBg: string;
+  iconColor: string;
+  searchQuery: string;
+  price: number;
+  duration: number;
+  description?: string;
+  garageCount?: number;
+}
+
+const DEFAULT_BOOKABLE_SERVICES: BookableServiceItem[] = [
   {
     id: 'mot_class_4',
     title: 'MOT Test',
+    name: 'MOT Test',
+    category: 'MOT',
     icon: 'shield-check',
     iconBg: '#10B98115',
     iconColor: '#10B981',
     searchQuery: 'MOT',
+    price: 45,
+    duration: 45,
   },
   {
     id: 'full_service',
     title: 'Full Service',
+    name: 'Full Service',
+    category: 'Servicing',
     icon: 'car-cog',
     iconBg: '#1677FF15',
     iconColor: '#1677FF',
     searchQuery: 'Full Service',
+    price: 125,
+    duration: 120,
   },
   {
     id: 'interim_service',
     title: 'Interim Service',
+    name: 'Interim Service',
+    category: 'Servicing',
     icon: 'oil',
     iconBg: '#8B5CF615',
     iconColor: '#8B5CF6',
     searchQuery: 'Interim Service',
+    price: 79,
+    duration: 60,
   },
   {
     id: 'brakes',
     title: 'Brakes & Discs',
+    name: 'Brakes & Discs',
+    category: 'Repairs',
     icon: 'car-brake-alert',
     iconBg: '#EF444415',
     iconColor: '#EF4444',
     searchQuery: 'Brake',
+    price: 65,
+    duration: 60,
   },
   {
     id: 'tyres',
     title: 'Tyres & Tracking',
+    name: 'Tyres & Tracking',
+    category: 'Tyres',
     icon: 'tire',
     iconBg: '#F59E0B15',
     iconColor: '#F59E0B',
     searchQuery: 'Tyre',
+    price: 65,
+    duration: 45,
   },
   {
     id: 'diagnostics',
     title: 'Diagnostics Scan',
+    name: 'Diagnostics Scan',
+    category: 'Diagnostics',
     icon: 'engine',
     iconBg: '#06B6D415',
     iconColor: '#06B6D4',
     searchQuery: 'Diagnostic',
+    price: 45,
+    duration: 30,
   },
   {
     id: 'air_con',
     title: 'Air Con Regas',
+    name: 'Air Con Regas',
+    category: 'Air Conditioning',
     icon: 'snowflake',
     iconBg: '#3B82F615',
     iconColor: '#3B82F6',
     searchQuery: 'Air Conditioning',
+    price: 55,
+    duration: 45,
   },
   {
     id: 'repairs',
     title: 'General Repairs',
+    name: 'General Repairs',
+    category: 'Repairs',
     icon: 'wrench',
     iconBg: '#EC489915',
     iconColor: '#EC4899',
     searchQuery: 'Repair',
+    price: 65,
+    duration: 60,
   },
 ];
 
-const DEFAULT_GARAGE_SERVICES = [
-  { name: 'MOT Test', price: 45, icon: 'shield-check', iconColor: '#10B981' },
-  { name: 'Full Service', price: 125, icon: 'car-cog', iconColor: '#1677FF' },
-  { name: 'Interim Service', price: 79, icon: 'oil', iconColor: '#8B5CF6' },
-  { name: 'Brakes & Discs', price: 65, icon: 'car-brake-alert', iconColor: '#EF4444' },
-  { name: 'Air Con Regas', price: 55, icon: 'snowflake', iconColor: '#06B6D4' },
-  { name: 'Diagnostics', price: 45, icon: 'engine', iconColor: '#F59E0B' },
-];
+const resolveServiceIcon = (name: string = '', category: string = '') => {
+  const s = `${name} ${category}`.toLowerCase();
+  if (/\bmot\b/i.test(s)) return { icon: 'shield-check', iconColor: '#10B981', iconBg: '#10B98115' };
+  if (s.includes('full')) return { icon: 'car-cog', iconColor: '#1677FF', iconBg: '#1677FF15' };
+  if (s.includes('interim') || s.includes('oil')) return { icon: 'oil', iconColor: '#8B5CF6', iconBg: '#8B5CF615' };
+  if (s.includes('major')) return { icon: 'car-wrench', iconColor: '#D97706', iconBg: '#F59E0B15' };
+  if (s.includes('brake') || s.includes('pad') || s.includes('disc')) return { icon: 'car-brake-alert', iconColor: '#EF4444', iconBg: '#EF444415' };
+  if (s.includes('tyre') || s.includes('tire') || s.includes('track') || s.includes('wheel') || s.includes('align')) return { icon: 'tire', iconColor: '#F59E0B', iconBg: '#F59E0B15' };
+  if (s.includes('diag') || s.includes('scan') || s.includes('fault') || s.includes('ecu')) return { icon: 'engine', iconColor: '#06B6D4', iconBg: '#06B6D415' };
+  if (s.includes('air') || s.includes('ac') || s.includes('regas') || s.includes('condit')) return { icon: 'snowflake', iconColor: '#3B82F6', iconBg: '#3B82F615' };
+  if (s.includes('exhaust') || s.includes('dpf') || s.includes('emission') || s.includes('pipe')) return { icon: 'pipe', iconColor: '#6366F1', iconBg: '#6366F115' };
+  if (s.includes('battery') || s.includes('electric') || s.includes('alternator')) return { icon: 'car-battery', iconColor: '#EAB308', iconBg: '#EAB30815' };
+  if (s.includes('clutch') || s.includes('gear') || s.includes('flywheel') || s.includes('transmiss')) return { icon: 'cog-sync', iconColor: '#9333EA', iconBg: '#9333EA15' };
+  if (s.includes('suspension') || s.includes('spring') || s.includes('shock') || s.includes('strut')) return { icon: 'car-traction-control', iconColor: '#4F46E5', iconBg: '#4F46E515' };
+  return { icon: 'wrench', iconColor: '#EC4899', iconBg: '#EC489915' };
+};
 
-const getGarageServices = (garage: any) => {
-  if (Array.isArray(garage?.services) && garage.services.length > 0) {
-    return garage.services.map((s: any) => {
-      const sName = s.name || 'Service';
-      let icon = 'wrench';
-      let iconColor = '#1677FF';
-      if (sName.toLowerCase().includes('mot')) {
-        icon = 'shield-check';
-        iconColor = '#10B981';
-      } else if (sName.toLowerCase().includes('full')) {
-        icon = 'car-cog';
-        iconColor = '#1677FF';
-      } else if (sName.toLowerCase().includes('interim') || sName.toLowerCase().includes('oil')) {
-        icon = 'oil';
-        iconColor = '#8B5CF6';
-      } else if (sName.toLowerCase().includes('brake')) {
-        icon = 'car-brake-alert';
-        iconColor = '#EF4444';
-      } else if (sName.toLowerCase().includes('air')) {
-        icon = 'snowflake';
-        iconColor = '#06B6D4';
-      } else if (sName.toLowerCase().includes('diag')) {
-        icon = 'engine';
-        iconColor = '#F59E0B';
-      }
-      return {
-        id: s._id || s.id || sName,
-        name: sName,
-        price: s.price || 45,
-        duration: s.duration,
-        icon,
-        iconColor,
-      };
-    });
-  }
-  return DEFAULT_GARAGE_SERVICES;
+const ServicesSkeletonCarousel = ({ isDarkMode }: { isDarkMode: boolean }) => {
+  const pulseAnim = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.85,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.35,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnim]);
+
+  const skeletonBg = isDarkMode ? '#1E354A' : '#E2E8F0';
+  const skeletonSubBg = isDarkMode ? '#284666' : '#CBD5E1';
+  const titleWidths = [66, 76, 56, 72, 62, 68];
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.servicesHorizontalScroll}
+    >
+      {[0, 1, 2, 3, 4, 5].map((idx) => (
+        <Animated.View key={idx} style={[styles.horizontalServiceItem, { opacity: pulseAnim }]}>
+          <View style={[styles.enlargedIconCircle, { backgroundColor: skeletonBg, borderColor: skeletonSubBg }]}>
+            <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: skeletonSubBg }} />
+            <View
+              style={[
+                styles.iconActionBadge,
+                { backgroundColor: skeletonSubBg, borderColor: isDarkMode ? '#0B1F33' : '#F7F9FC' },
+              ]}
+            />
+          </View>
+
+          <View
+            style={[
+              styles.skeletonTextBar,
+              { width: titleWidths[idx % titleWidths.length], backgroundColor: skeletonBg },
+            ]}
+          />
+
+          <View style={[styles.skeletonSelectPill, { backgroundColor: skeletonBg, borderColor: skeletonSubBg }]}>
+            <View style={{ width: 24, height: 8, borderRadius: 4, backgroundColor: skeletonSubBg }} />
+          </View>
+        </Animated.View>
+      ))}
+    </ScrollView>
+  );
 };
 
 export default function HomeScreen({ navigation }: any) {
-  const { theme } = useAppTheme();
+  const { theme, isDarkMode } = useAppTheme();
   const {
     token,
     vehicles,
@@ -235,6 +313,8 @@ export default function HomeScreen({ navigation }: any) {
     setUserLocation,
     isOutsideUK,
     refreshLocation,
+    services,
+    fetchServices,
   } = useAppValues();
   const [regNumber, setRegNumber] = useState('');
   const [garageSearchText, setGarageSearchText] = useState('');
@@ -243,7 +323,28 @@ export default function HomeScreen({ navigation }: any) {
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
   const [nearbyGarages, setNearbyGarages] = useState<any[]>([]);
   const [loadingGarages, setLoadingGarages] = useState(false);
+  const [loadingServices, setLoadingServices] = useState(services.length === 0);
   const [areaModalVisible, setAreaModalVisible] = useState(false);
+
+  const fetchDynamicServices = async (showMinLoader = false) => {
+    const startTime = Date.now();
+    try {
+      if (services.length === 0 || showMinLoader) {
+        setLoadingServices(true);
+      }
+      await fetchServices();
+      if (showMinLoader) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 400) {
+          await new Promise((resolve) => setTimeout(() => resolve(true), 400 - elapsed));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch services in Home:', e);
+    } finally {
+      setLoadingServices(false);
+    }
+  };
 
   const fetchNearbyGarages = async () => {
     try {
@@ -253,13 +354,121 @@ export default function HomeScreen({ navigation }: any) {
       });
       if (response.ok) {
         const data = await response.json();
-        setNearbyGarages(Array.isArray(data) ? data : []);
+        const approvedOnly = Array.isArray(data) ? data.filter((g: any) => g.status === 'Approved') : [];
+        setNearbyGarages(approvedOnly);
       }
     } catch (e) {
       console.error('Failed to fetch nearby garages:', e);
     } finally {
       setLoadingGarages(false);
     }
+  };
+
+  // Dynamic Bookable Services derived from API + live nearby garages with case-insensitive deduplication
+  const dynamicBookableServices = useMemo<BookableServiceItem[]>(() => {
+    const serviceMap = new Map<string, BookableServiceItem>();
+
+    // 1. Gather all services fetched from backend /api/services
+    if (Array.isArray(services) && services.length > 0) {
+      services.forEach((s) => {
+        const rawName = (s.name || s.title || '').trim();
+        if (!rawName) return;
+        const key = rawName.toLowerCase();
+        const iconDetails = resolveServiceIcon(rawName, s.category);
+        const price = s.minPrice !== undefined ? Number(s.minPrice) : (s.price !== undefined ? Number(s.price) : 45);
+
+        serviceMap.set(key, {
+          id: s.id || s._id || `svc_${key.replace(/[^a-z0-9]/g, '_')}`,
+          title: s.title || rawName,
+          name: rawName,
+          category: s.category || 'Servicing',
+          price: price,
+          duration: s.duration || 45,
+          icon: s.icon && s.icon !== 'wrench' ? s.icon : iconDetails.icon,
+          iconBg: s.iconBg || iconDetails.iconBg,
+          iconColor: s.iconColor || iconDetails.iconColor,
+          searchQuery: s.searchQuery || rawName,
+          description: s.description || '',
+          garageCount: s.garageCount || 0,
+        });
+      });
+    }
+
+    // 2. Also incorporate any services directly from loaded nearbyGarages (e.g. Service A, B from Garage A, Service C from Garage B)
+    if (Array.isArray(nearbyGarages) && nearbyGarages.length > 0) {
+      nearbyGarages.forEach((garage) => {
+        if (!Array.isArray(garage.services)) return;
+        garage.services.forEach((s: any) => {
+          if (s.isActive === false) return;
+          const rawName = (s.name || '').trim();
+          if (!rawName) return;
+          const key = rawName.toLowerCase();
+          const sPrice = s.price !== undefined ? Number(s.price) : 45;
+
+          if (serviceMap.has(key)) {
+            const existing = serviceMap.get(key)!;
+            existing.garageCount = (existing.garageCount || 0) + 1;
+            // Reflect lowest starting price among offering garages
+            if (sPrice > 0 && (existing.price === 0 || sPrice < existing.price)) {
+              existing.price = sPrice;
+            }
+          } else {
+            const iconDetails = resolveServiceIcon(rawName, s.category);
+            serviceMap.set(key, {
+              id: s._id || s.id || `custom_${key.replace(/[^a-z0-9]/g, '_')}`,
+              title: rawName,
+              name: rawName,
+              category: s.category || 'Servicing',
+              price: sPrice,
+              duration: s.duration || 45,
+              icon: iconDetails.icon,
+              iconBg: iconDetails.iconBg,
+              iconColor: iconDetails.iconColor,
+              searchQuery: rawName,
+              description: s.description || '',
+              garageCount: 1,
+            });
+          }
+        });
+      });
+    }
+
+    if (serviceMap.size > 0) {
+      return Array.from(serviceMap.values());
+    }
+
+    return DEFAULT_BOOKABLE_SERVICES;
+  }, [services, nearbyGarages]);
+
+  const getGarageServices = (garage: any) => {
+    if (Array.isArray(garage?.services) && garage.services.length > 0) {
+      const activeSvcs = garage.services.filter((s: any) => s.isActive !== false);
+      if (activeSvcs.length > 0) {
+        return activeSvcs.map((s: any) => {
+          const sName = s.name || 'Service';
+          const iconDetails = resolveServiceIcon(sName, s.category);
+          return {
+            id: s._id || s.id || sName,
+            name: sName,
+            price: s.price || 45,
+            duration: s.duration,
+            icon: iconDetails.icon,
+            iconColor: iconDetails.iconColor,
+          };
+        });
+      }
+    }
+    // Default fallback if garage has not explicitly configured custom services
+    return [
+      {
+        id: 'mot_default',
+        name: 'MOT Test',
+        price: 45,
+        duration: 45,
+        icon: 'shield-check',
+        iconColor: '#10B981',
+      },
+    ];
   };
 
   const handleRefreshAndReset = async () => {
@@ -271,13 +480,17 @@ export default function HomeScreen({ navigation }: any) {
       if (token) {
         await refreshData();
       }
-      await loadSearchHistory();
-      await fetchNearbyGarages();
-      await refreshLocation();
+      await Promise.all([
+        loadSearchHistory(),
+        fetchNearbyGarages(),
+        refreshLocation(),
+        fetchDynamicServices(true),
+      ]);
     } catch (e) {
       console.error('Home refresh error:', e);
     } finally {
       setRefreshing(false);
+      setLoadingServices(false);
     }
   };
 
@@ -321,6 +534,7 @@ export default function HomeScreen({ navigation }: any) {
 
   useEffect(() => {
     fetchNearbyGarages();
+    fetchDynamicServices();
   }, [token]);
 
   useEffect(() => {
@@ -330,8 +544,10 @@ export default function HomeScreen({ navigation }: any) {
       }
       loadSearchHistory();
       fetchNearbyGarages();
+      fetchDynamicServices();
     });
     loadSearchHistory();
+    fetchDynamicServices();
     return unsubscribe;
   }, [navigation, token, user]);
 
@@ -403,11 +619,11 @@ export default function HomeScreen({ navigation }: any) {
     navigation.navigate('Garages', { searchQuery: query });
   };
 
-  const handleSelectService = (service: typeof BOOKABLE_SERVICES[0]) => {
+  const handleSelectService = (service: any) => {
     navigation.navigate('Garages', {
-      serviceFilter: service.searchQuery,
-      searchQuery: service.searchQuery,
-      serviceTitle: service.title,
+      serviceFilter: service.searchQuery || service.title || service.name,
+      searchQuery: '',
+      serviceTitle: service.title || service.name,
     });
   };
 
@@ -603,36 +819,40 @@ export default function HomeScreen({ navigation }: any) {
             </View>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.servicesHorizontalScroll}
-          >
-            {BOOKABLE_SERVICES.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.horizontalServiceItem}
-                activeOpacity={0.65}
-                onPress={() => handleSelectService(item)}
-              >
-                <View style={[styles.enlargedIconCircle, { backgroundColor: item.iconBg, borderColor: item.iconColor + '35' }]}>
-                  <MaterialCommunityIcons name={item.icon} size={28} color={item.iconColor} />
-                  <View style={[styles.iconActionBadge, { backgroundColor: item.iconColor, borderColor: theme.colors.background }]}>
-                    <MaterialCommunityIcons name="arrow-right" size={10} color="#FFFFFF" />
+          {loadingServices ? (
+            <ServicesSkeletonCarousel isDarkMode={isDarkMode} />
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.servicesHorizontalScroll}
+            >
+              {dynamicBookableServices.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.horizontalServiceItem}
+                  activeOpacity={0.65}
+                  onPress={() => handleSelectService(item)}
+                >
+                  <View style={[styles.enlargedIconCircle, { backgroundColor: item.iconBg, borderColor: item.iconColor + '35' }]}>
+                    <MaterialCommunityIcons name={item.icon} size={28} color={item.iconColor} />
+                    <View style={[styles.iconActionBadge, { backgroundColor: item.iconColor, borderColor: theme.colors.background }]}>
+                      <MaterialCommunityIcons name="arrow-right" size={10} color="#FFFFFF" />
+                    </View>
                   </View>
-                </View>
 
-                <Text style={[styles.horizontalServiceTitle, { color: theme.colors.text }]} numberOfLines={1}>
-                  {item.title}
-                </Text>
+                  <Text style={[styles.horizontalServiceTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
 
-                <View style={[styles.selectPill, { backgroundColor: item.iconBg, borderColor: item.iconColor + '30' }]}>
-                  <Text style={[styles.selectPillText, { color: item.iconColor }]}>Select</Text>
-                  <MaterialCommunityIcons name="chevron-right" size={11} color={item.iconColor} />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <View style={[styles.selectPill, { backgroundColor: item.iconBg, borderColor: item.iconColor + '30' }]}>
+                    <Text style={[styles.selectPillText, { color: item.iconColor }]}>Select</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={11} color={item.iconColor} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
         {/* 4. Local Garages (Vertical Garages with Horizontal Services Below Each) */}
@@ -843,7 +1063,7 @@ export default function HomeScreen({ navigation }: any) {
               navigation.navigate('Garages', {
                 serviceFilter: 'MOT',
                 serviceTitle: 'MOT Test',
-                searchQuery: 'MOT',
+                searchQuery: '',
               });
             }}
           >
@@ -869,7 +1089,7 @@ export default function HomeScreen({ navigation }: any) {
             activeOpacity={0.8}
             onPress={() => {
               if (token) {
-                navigation.navigate('My Portal', { initialTab: 'home' });
+                navigation.navigate('My Portal');
               } else {
                 Alert.alert('Sign In Required', 'Please sign in to access your garage portal.', [
                   { text: 'Cancel', style: 'cancel' },
@@ -920,13 +1140,13 @@ export default function HomeScreen({ navigation }: any) {
             </View>
           </TouchableOpacity>
 
-          {/* Card 4: My Bookings (Opens Customer Vehicle Booking History Tab) */}
+          {/* Card 4: My Bookings */}
           <TouchableOpacity
             style={[styles.quickHubCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
             activeOpacity={0.8}
             onPress={() => {
               if (token) {
-                navigation.navigate('My Portal', { initialTab: 'history' });
+                navigation.navigate('Bookings');
               } else {
                 Alert.alert('Sign In Required', 'Please sign in to view and manage your booked MOT slots.', [
                   { text: 'Cancel', style: 'cancel' },
@@ -1674,6 +1894,20 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: '800',
     marginRight: 1,
+  },
+  skeletonTextBar: {
+    height: 12,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  skeletonSelectPill: {
+    width: 52,
+    height: 18,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   recentSectionWrap: {
     marginBottom: 10,

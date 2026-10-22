@@ -117,6 +117,14 @@ export default function BookingScreen({ route, navigation }: any) {
     duration: route?.params?.duration || alertAny?.duration || 45
   });
 
+  const hasMot = React.useMemo(() => {
+    const sName = (selectedService?.name || '').toLowerCase();
+    const sCat = (selectedService?.category || '').toLowerCase();
+    return sName.includes('mot') || sCat.includes('mot');
+  }, [selectedService]);
+
+  const isDateOnly = !hasMot;
+
   // Fetch garages list
   useEffect(() => {
     let isMounted = true;
@@ -129,7 +137,8 @@ export default function BookingScreen({ route, navigation }: any) {
         if (response.ok) {
           const data = await response.json();
           if (!isMounted) return;
-          setGarages(data);
+          const approvedOnly = Array.isArray(data) ? data.filter((g: any) => g.status === 'Approved') : [];
+          setGarages(approvedOnly);
           
           if (isReschedule) {
             // Find the booked garage
@@ -585,8 +594,8 @@ export default function BookingScreen({ route, navigation }: any) {
   }, [freeSlots]);
 
   const handleConfirmBooking = async () => {
-    if (!selectedDate || !selectedTime) {
-      Alert.alert('Error', 'Please select a date and time slot.');
+    if (!selectedDate || (hasMot && !selectedTime)) {
+      Alert.alert('Error', hasMot ? 'Please select a date and time slot.' : 'Please select an appointment date.');
       return;
     }
 
@@ -596,7 +605,7 @@ export default function BookingScreen({ route, navigation }: any) {
     }
 
     // If vehicle is in pre-booking mode (>30 days away), ensure selected date is within the 30-day window before expiry
-    if (selectedVehicle?.motExpiryDate) {
+    if (hasMot && selectedVehicle?.motExpiryDate) {
       const expDate = new Date(selectedVehicle.motExpiryDate);
       expDate.setHours(0, 0, 0, 0);
       const currentToday = new Date();
@@ -634,6 +643,7 @@ export default function BookingScreen({ route, navigation }: any) {
         : selectedDate;
 
       const isAdmin = route?.params?.isAdmin || false;
+      const targetSlotTime = hasMot ? (selectedSlot?.time || selectedTime) : 'Full Day Drop-off';
 
       // Add BOOKED alert notification to Admin alerts list
       await addAlert({
@@ -642,12 +652,20 @@ export default function BookingScreen({ route, navigation }: any) {
         customerId: customer.id,
         garageId: selectedGarage.id || selectedGarage._id,
         serviceName: selectedService.name,
+        services: [{
+          name: selectedService.name,
+          category: selectedService.category || (hasMot ? 'MOT' : 'Servicing'),
+          price: selectedService.price,
+          duration: selectedService.duration || 45,
+        }],
+        hasMot,
+        isDateOnly,
         price: selectedService.price,
-        duration: selectedSlot?.slotDuration || 45,
-        slotTime: selectedSlot?.time || selectedTime,
-        slotNumber: selectedSlot?.slotNumber,
+        duration: selectedSlot?.slotDuration || selectedService.duration || 45,
+        slotTime: targetSlotTime,
+        slotNumber: hasMot ? selectedSlot?.slotNumber : undefined,
         registrationNumber: selectedVehicle.registrationNumber,
-        makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - Slot: ${selectedSlot?.time || selectedTime}`,
+        makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}`,
         status: isAdmin ? 'Approved' : 'Pending',
         date: selectedDate,
       });
@@ -1327,86 +1345,110 @@ export default function BookingScreen({ route, navigation }: any) {
           </View>
         </View>
 
-        {/* Time Selector Section (Only Free 45-Min Slots) */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 14 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <MaterialCommunityIcons name="clock-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
-            <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>
-              2. Choose Time Slot (45 Mins)
-            </Text>
-          </View>
-          {loadingSlots && <ActivityIndicator size="small" color={theme.colors.secondary} />}
-        </View>
+        {/* Time Selector Section (Only for MOT; Date-Only Workshop Intake for Other Services) */}
+        {hasMot ? (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons name="clock-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+                <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>
+                  2. Choose Time Slot (45 Mins)
+                </Text>
+              </View>
+              {loadingSlots && <ActivityIndicator size="small" color={theme.colors.secondary} />}
+            </View>
 
-        {!selectedGarage ? (
-          <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <MaterialCommunityIcons name="store-clock-outline" size={22} color={theme.colors.placeholder} />
-            <Text style={{ marginLeft: 8, color: theme.colors.placeholder, fontSize: 13 }}>
-              Please select a garage above to view available time slots.
-            </Text>
-          </View>
-        ) : loadingSlots ? (
-          <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginRight: 8 }} />
-            <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>
-              Checking available slots for {selectedGarage.name}...
-            </Text>
-          </View>
-        ) : freeSlots.length === 0 ? (
-          <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <MaterialCommunityIcons name="calendar-remove" size={24} color={theme.colors.error} />
-            <View style={{ marginLeft: 10, flex: 1 }}>
-              <Text style={{ color: theme.colors.text, fontSize: 13.5, fontWeight: '700' }}>
-                No Free Slots Available
-              </Text>
-              <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 2, lineHeight: 16 }}>
-                All MOT slots are fully booked or closed on this date at {selectedGarage.name}. Please choose another date on the calendar above.
+            {!selectedGarage ? (
+              <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="store-clock-outline" size={22} color={theme.colors.placeholder} />
+                <Text style={{ marginLeft: 8, color: theme.colors.placeholder, fontSize: 13 }}>
+                  Please select a garage above to view available time slots.
+                </Text>
+              </View>
+            ) : loadingSlots ? (
+              <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginRight: 8 }} />
+                <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>
+                  Checking available slots for {selectedGarage.name}...
+                </Text>
+              </View>
+            ) : freeSlots.length === 0 ? (
+              <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="calendar-remove" size={24} color={theme.colors.error} />
+                <View style={{ marginLeft: 10, flex: 1 }}>
+                  <Text style={{ color: theme.colors.text, fontSize: 13.5, fontWeight: '700' }}>
+                    No Free Slots Available
+                  </Text>
+                  <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 2, lineHeight: 16 }}>
+                    All MOT slots are fully booked or closed on this date at {selectedGarage.name}. Please choose another date on the calendar above.
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.timePickerContainer}>
+                {freeSlots.map((slot: any) => {
+                  const isSelected = selectedTime === slot.time;
+                  return (
+                    <TouchableOpacity
+                      key={slot.time}
+                      onPress={() => {
+                        setSelectedSlot(slot);
+                        setSelectedTime(slot.time);
+                      }}
+                      style={[
+                        styles.timeCard,
+                        {
+                          backgroundColor: isSelected ? theme.colors.secondary + '18' : theme.colors.card,
+                          borderColor: isSelected ? theme.colors.secondary : theme.colors.border,
+                          borderWidth: isSelected ? 2 : 1.5,
+                        },
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: 14, fontWeight: '800' }]}>
+                            {slot.time}
+                          </Text>
+                          {isSelected ? (
+                            <MaterialCommunityIcons name="check-circle" size={16} color={theme.colors.secondary} />
+                          ) : (
+                            <View style={[styles.freeTag, { backgroundColor: '#10B98115' }]}>
+                              <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '700' }}>
+                                {slot.availableCount} Open
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[styles.timeText, { color: theme.colors.placeholder, fontSize: 11, marginTop: 2 }]}>
+                          {slot.slotLabel || `${slot.time} - ${slot.endTime || '45m'}`}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        ) : (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 14 }}>
+              <MaterialCommunityIcons name="store-clock-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+              <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>
+                2. Workshop Intake & Drop-off
               </Text>
             </View>
-          </View>
-        ) : (
-          <View style={styles.timePickerContainer}>
-            {freeSlots.map((slot: any) => {
-              const isSelected = selectedTime === slot.time;
-              return (
-                <TouchableOpacity
-                  key={slot.time}
-                  onPress={() => {
-                    setSelectedSlot(slot);
-                    setSelectedTime(slot.time);
-                  }}
-                  style={[
-                    styles.timeCard,
-                    {
-                      backgroundColor: isSelected ? theme.colors.secondary + '18' : theme.colors.card,
-                      borderColor: isSelected ? theme.colors.secondary : theme.colors.border,
-                      borderWidth: isSelected ? 2 : 1.5,
-                    },
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: 14, fontWeight: '800' }]}>
-                        {slot.time}
-                      </Text>
-                      {isSelected ? (
-                        <MaterialCommunityIcons name="check-circle" size={16} color={theme.colors.secondary} />
-                      ) : (
-                        <View style={[styles.freeTag, { backgroundColor: '#10B98115' }]}>
-                          <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '700' }}>
-                            {slot.availableCount} Open
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={[styles.timeText, { color: theme.colors.placeholder, fontSize: 11, marginTop: 2 }]}>
-                      {slot.slotLabel || `${slot.time} - ${slot.endTime || '45m'}`}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+            <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.secondary + '40', padding: 14 }]}>
+              <MaterialCommunityIcons name="car-wrench" size={26} color={theme.colors.secondary} />
+              <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text style={{ color: theme.colors.text, fontSize: 13.5, fontWeight: '700' }}>
+                  Full-Day Workshop Drop-off (08:00 - 18:00)
+                </Text>
+                <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 3, lineHeight: 17 }}>
+                  No fixed 45-minute lane slot is needed for {selectedService.name}. Bring your vehicle to {selectedGarage?.name || 'the garage'} on {selectedDate}. The garage owner will receive notification to accept or reject your request as before.
+                </Text>
+              </View>
+            </View>
+          </>
         )}
 
         {/* Notes/Comments Section */}

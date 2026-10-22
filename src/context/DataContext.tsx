@@ -55,6 +55,9 @@ export interface AlertNotification {
   garageLongitude?: number | string;
   garage?: any;
   serviceName?: string;
+  services?: { name: string; category?: string; price: number; duration?: number }[];
+  hasMot?: boolean;
+  isDateOnly?: boolean;
   price?: number;
   duration?: number;
   slotTime?: string;
@@ -81,6 +84,26 @@ export interface UserProfile {
   role: 'admin' | 'garage_admin' | 'staff' | 'customer';
   customerId?: string;
   garageId?: string;
+}
+
+export interface DynamicService {
+  id: string;
+  _id?: string;
+  name: string;
+  title: string;
+  category: string;
+  price: number;
+  minPrice?: number;
+  maxPrice?: number;
+  garageCount?: number;
+  duration?: number;
+  icon: string;
+  iconBg: string;
+  iconColor: string;
+  searchQuery: string;
+  description?: string;
+  isActive?: boolean;
+  isFromGarage?: boolean;
 }
 
 interface DataContextType {
@@ -111,6 +134,8 @@ interface DataContextType {
   setUserLocation: (coords: Coordinates | null) => Promise<void>;
   isOutsideUK: boolean;
   refreshLocation: () => Promise<Coordinates | null>;
+  services: DynamicService[];
+  fetchServices: () => Promise<DynamicService[]>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -167,6 +192,43 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [token, setTokenState] = useState<string | null>(null);
   const [user, setUserState] = useState<UserProfile | null>(null);
   const [userLocation, setUserLocationState] = useState<Coordinates | null>(null);
+  const [services, setServices] = useState<DynamicService[]>([]);
+
+  const fetchServices = async (): Promise<DynamicService[]> => {
+    try {
+      const res = await fetch(`${BASE_URL}/services`);
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.services || []);
+        if (list.length > 0) {
+          const mapped: DynamicService[] = list.map((s: any) => ({
+            id: (s._id || s.id || s.name).toString(),
+            _id: s._id,
+            name: s.name || s.title,
+            title: s.title || s.name,
+            category: s.category || 'Servicing',
+            price: s.price !== undefined ? Number(s.price) : 45,
+            minPrice: s.minPrice !== undefined ? Number(s.minPrice) : (s.price !== undefined ? Number(s.price) : 45),
+            maxPrice: s.maxPrice !== undefined ? Number(s.maxPrice) : undefined,
+            garageCount: s.garageCount !== undefined ? Number(s.garageCount) : undefined,
+            duration: s.duration || 45,
+            icon: s.icon || 'wrench',
+            iconBg: s.iconBg || '#1677FF15',
+            iconColor: s.iconColor || '#1677FF',
+            searchQuery: s.searchQuery || s.title || s.name,
+            description: s.description || '',
+            isActive: s.isActive !== false,
+            isFromGarage: s.isFromGarage,
+          }));
+          setServices(mapped);
+          return mapped;
+        }
+      }
+    } catch (e) {
+      console.log('[DATA CONTEXT] Error fetching dynamic services:', e);
+    }
+    return [];
+  };
 
   const setUserLocation = async (coords: Coordinates | null) => {
     setUserLocationState(coords);
@@ -274,6 +336,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
         setAudits([]); // Clear audits for customer
       }
+
+      // Fetch dynamic services
+      await fetchServices();
     } catch (error) {
       console.error('[DATA CONTEXT] Error fetching backend data:', error);
     }
@@ -308,6 +373,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         console.error('[DATA CONTEXT] Error loading stored auth details:', err);
       }
     };
+
+    fetchServices();
 
     const loadStoredLocation = async () => {
       try {
@@ -670,6 +737,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         setUserLocation,
         isOutsideUK,
         refreshLocation,
+        services,
+        fetchServices,
       }}
     >
       {children}

@@ -17,22 +17,22 @@ export default function MainTabNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ color, size, focused }) => {
-          let iconName = 'home';
+        tabBarIcon: ({ color, size }) => {
+          let iconName = 'circle-outline';
 
           if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
+            iconName = 'home-outline';
           } else if (route.name === 'Garages') {
-            iconName = focused ? 'store' : 'store-outline';
+            iconName = 'storefront-outline';
           } else if (route.name === 'Bookings' || route.name === 'History') {
-            iconName = focused ? 'calendar' : 'calendar-outline';
+            iconName = 'calendar-clock-outline';
           } else if (route.name === 'My Portal') {
-            iconName = focused ? 'car' : 'car-outline';
+            iconName = 'car-outline';
           } else if (route.name === 'Profile') {
-            iconName = focused ? 'account' : 'account-outline';
+            iconName = 'account-outline';
           }
 
-          return <MaterialCommunityIcons name={iconName} size={24} color={color} />;
+          return <MaterialCommunityIcons name={iconName} size={size || 24} color={color} />;
         },
         tabBarActiveTintColor: theme.colors.secondary,
         tabBarInactiveTintColor: theme.colors.placeholder,

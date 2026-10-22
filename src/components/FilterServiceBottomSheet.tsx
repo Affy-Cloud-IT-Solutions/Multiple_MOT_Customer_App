@@ -168,33 +168,46 @@ export const POPULAR_SERVICES: ServiceItem[] = [
 ];
 
 export const isServiceMatch = (service: any, filterKey: string): boolean => {
-  if (!service || service.isActive === false || !filterKey) return false;
+  if (!service || !filterKey) return false;
+  // If service is explicitly deactivated, don't match
+  if (service.isActive === false || service.isActive === 'false' || service.status === 'Inactive') return false;
 
   const key = filterKey.trim().toLowerCase();
   const name = (service.name || '').trim().toLowerCase();
   const category = (service.category || '').trim().toLowerCase();
 
+  // 0. Direct case-insensitive equality (exact match for any custom service e.g. Service A, Service B, Service C)
+  if (name === key) return true;
+
   // 1. MOT Specific matching (Word boundary or category, avoid matching words like 'motor' or descriptions)
-  if (key === 'mot' || key === 'mot test' || key.includes('mot')) {
+  if (key === 'mot' || key === 'mot test' || /\bmot\b/i.test(key)) {
     const isMotCategory = category === 'mot';
     const isMotName = /\bmot\b/i.test(name) || name === 'mot' || name.includes('mot test');
     return isMotCategory || isMotName;
   }
 
-  // 2. Full Service / Interim Service / Major Service specific matching
-  if (key.includes('full service')) {
+  // 2. Full Service specific matching
+  if (key.includes('full service') || key === 'full') {
     return name.includes('full') || category.includes('full');
   }
+
+  // 3. Interim Service specific matching
   if (key.includes('interim')) {
     return name.includes('interim') || category.includes('interim');
   }
+
+  // 4. Major Service specific matching
   if (key.includes('major')) {
     return name.includes('major') || category.includes('major');
   }
+
+  // 5. Brake specific matching
   if (key.includes('brake')) {
     return name.includes('brake') || category.includes('brake');
   }
-  if (key.includes('tyre')) {
+
+  // 6. Tyre / Tire specific matching
+  if (key.includes('tyre') || key.includes('tire')) {
     return (
       name.includes('tyre') ||
       name.includes('tire') ||
@@ -202,9 +215,13 @@ export const isServiceMatch = (service: any, filterKey: string): boolean => {
       category.includes('tire')
     );
   }
-  if (key.includes('diagnostic')) {
-    return name.includes('diag') || category.includes('diag');
+
+  // 7. Diagnostic specific matching
+  if (key.includes('diag') || key.includes('scan')) {
+    return name.includes('diag') || category.includes('diag') || name.includes('scan');
   }
+
+  // 8. Air Con / AC specific matching
   if (key.includes('air') || key.includes('ac')) {
     return (
       name.includes('air') ||
@@ -214,7 +231,22 @@ export const isServiceMatch = (service: any, filterKey: string): boolean => {
     );
   }
 
-  // 3. General match by name or category
+  // 9. Clutch / Gearbox
+  if (key.includes('clutch') || key.includes('gear')) {
+    return name.includes('clutch') || name.includes('gear') || category.includes('clutch');
+  }
+
+  // 10. Suspension / Steering
+  if (key.includes('suspension') || key.includes('steering') || key.includes('shock')) {
+    return name.includes('suspension') || name.includes('steering') || name.includes('shock') || category.includes('suspension');
+  }
+
+  // 11. Exhaust / Emission
+  if (key.includes('exhaust') || key.includes('dpf') || key.includes('emission')) {
+    return name.includes('exhaust') || name.includes('dpf') || category.includes('exhaust');
+  }
+
+  // 12. General match by name or category (case-insensitive)
   return (
     name.includes(key) ||
     key.includes(name) ||

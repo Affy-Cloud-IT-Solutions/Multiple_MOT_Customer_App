@@ -31,10 +31,11 @@ export default function BookingsScreen({ navigation }: any) {
     alerts = [],
     refreshData,
     cancelBooking,
+    acknowledgeAlert,
   } = useAppValues();
 
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'CONFIRMED' | 'PENDING' | 'REJECTED' | 'COMPLETED' | 'CANCELLED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [selectedBookingForDetails, setSelectedBookingForDetails] = useState<any | null>(null);
@@ -93,10 +94,28 @@ export default function BookingsScreen({ navigation }: any) {
       });
   }, [alerts, token, customerId, customer]);
 
+  // Active rejected bookings alerts for banner
+  const rejectedAlerts = useMemo(() => {
+    return alerts.filter((a) => {
+      if (a.status !== 'Rejected') return false;
+      if (a.type !== 'BOOKED') return false;
+      if (token && customerId) {
+        return (
+          !a.customerId ||
+          String(a.customerId).toLowerCase() === String(customerId).toLowerCase() ||
+          String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
+          String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
+        );
+      }
+      return true;
+    });
+  }, [alerts, token, customerId, customer]);
+
   // Counts for filter pills
   const counts = useMemo(() => {
     let pending = 0;
     let confirmed = 0;
+    let rejected = 0;
     let completed = 0;
     let cancelled = 0;
 
@@ -105,13 +124,15 @@ export default function BookingsScreen({ navigation }: any) {
       if (s === 'pending') pending++;
       else if (s === 'approved' || s === 'confirmed' || s === 'acknowledged') confirmed++;
       else if (s === 'completed') completed++;
-      else if (s === 'cancelled' || s === 'rejected') cancelled++;
+      else if (s === 'rejected') rejected++;
+      else if (s === 'cancelled') cancelled++;
     });
 
     return {
       ALL: allCustomerBookings.length,
-      PENDING: pending,
       CONFIRMED: confirmed,
+      PENDING: pending,
+      REJECTED: rejected,
       COMPLETED: completed,
       CANCELLED: cancelled,
     };
@@ -124,11 +145,13 @@ export default function BookingsScreen({ navigation }: any) {
       const isPending = s === 'pending';
       const isConfirmed = s === 'approved' || s === 'confirmed' || s === 'acknowledged';
       const isCompleted = s === 'completed';
-      const isCancelled = s === 'cancelled' || s === 'rejected';
+      const isRejected = s === 'rejected';
+      const isCancelled = s === 'cancelled';
 
       let matchFilter = true;
-      if (selectedFilter === 'PENDING') matchFilter = isPending;
-      else if (selectedFilter === 'CONFIRMED') matchFilter = isConfirmed;
+      if (selectedFilter === 'CONFIRMED') matchFilter = isConfirmed;
+      else if (selectedFilter === 'PENDING') matchFilter = isPending;
+      else if (selectedFilter === 'REJECTED') matchFilter = isRejected;
       else if (selectedFilter === 'COMPLETED') matchFilter = isCompleted;
       else if (selectedFilter === 'CANCELLED') matchFilter = isCancelled;
 
@@ -193,7 +216,10 @@ export default function BookingsScreen({ navigation }: any) {
     }
   };
 
-  const getSlotDisplay = (makeModel: string, slotTime?: string) => {
+  const getSlotDisplay = (makeModel: string, slotTime?: string, isDateOnly?: boolean, hasMot?: boolean) => {
+    if (isDateOnly || hasMot === false || slotTime === 'Drop-off (Full Day)' || slotTime === 'Full Day Drop-off') {
+      return 'Workshop Drop-off (Full Day)';
+    }
     if (slotTime) return slotTime;
     if (makeModel && makeModel.includes(' - Slot: ')) {
       return makeModel.split(' - Slot: ')[1];
@@ -221,7 +247,7 @@ export default function BookingsScreen({ navigation }: any) {
         color: '#10B981',
         bg: '#10B98115',
         icon: 'check-decagram-outline',
-        text: 'Confirmed',
+        text: 'Approved',
         desc: 'Appointment is confirmed. The test bay is reserved for your vehicle.',
       };
     }
@@ -263,7 +289,7 @@ export default function BookingsScreen({ navigation }: any) {
         color: '#DC2626',
         bg: '#DC262615',
         icon: 'alert-circle-outline',
-        text: 'Declined',
+        text: 'Rejected',
         desc: 'The garage was unable to accept this appointment slot.',
       };
     }
@@ -353,8 +379,9 @@ export default function BookingsScreen({ navigation }: any) {
         >
           {[
             { key: 'ALL', label: 'All', count: counts.ALL },
-            { key: 'CONFIRMED', label: 'Confirmed', count: counts.CONFIRMED },
+            { key: 'CONFIRMED', label: 'Approved', count: counts.CONFIRMED },
             { key: 'PENDING', label: 'Pending', count: counts.PENDING },
+            { key: 'REJECTED', label: 'Rejected', count: counts.REJECTED },
             { key: 'COMPLETED', label: 'Completed', count: counts.COMPLETED },
             { key: 'CANCELLED', label: 'Cancelled', count: counts.CANCELLED },
           ].map((f) => {
@@ -401,6 +428,44 @@ export default function BookingsScreen({ navigation }: any) {
           />
         }
       >
+        {/* Rejected Booking Notifications Banner with Dismiss button */}
+        {rejectedAlerts.length > 0 && (
+          <View style={styles.rejectedBannerContainer}>
+            {rejectedAlerts.map((alert) => (
+              <View
+                key={alert.id || (alert as any)._id}
+                style={[
+                  styles.notificationAlertBox,
+                  { backgroundColor: '#DC262612', borderColor: '#DC262635' },
+                ]}
+              >
+                <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#DC2626" style={{ marginTop: 2 }} />
+                <View style={{ flex: 1, marginHorizontal: 8 }}>
+                  <Text style={[styles.notificationAlertTitle, { color: '#DC2626' }]}>
+                    Booking Rejected by Garage
+                  </Text>
+                  <Text style={[styles.notificationAlertText, { color: theme.colors.text }]}>
+                    Booking request for <Text style={{ fontWeight: 'bold' }}>{alert.registrationNumber}</Text> was rejected: "{alert.rejectionReason || 'No reason provided'}"
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      if (acknowledgeAlert) {
+                        await acknowledgeAlert(alert.id || (alert as any)._id);
+                      }
+                    } catch (e) {
+                      console.error('Dismiss error:', e);
+                    }
+                  }}
+                  style={[styles.notificationDismissBtn, { backgroundColor: '#DC262620' }]}
+                >
+                  <Text style={[styles.notificationDismissText, { color: '#DC2626' }]}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
         {filteredBookings.length === 0 ? (
           <View style={[styles.emptyContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.secondary + '15' }]}>
@@ -446,7 +511,7 @@ export default function BookingsScreen({ navigation }: any) {
 
                   <View style={styles.headerRightActions}>
                     <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg, borderColor: statusCfg.color + '40' }]}>
-                      <MaterialCommunityIcons name={statusCfg.icon} size={13} color={statusCfg.color} style={{ marginRight: 4 }} />
+                      <MaterialCommunityIcons name={statusCfg.icon} size={11} color={statusCfg.color} style={{ marginRight: 3 }} />
                       <Text style={[styles.statusBadgeText, { color: statusCfg.color }]}>{statusCfg.text}</Text>
                     </View>
 
@@ -457,14 +522,14 @@ export default function BookingsScreen({ navigation }: any) {
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       activeOpacity={0.7}
                     >
-                      <MaterialCommunityIcons name="information-variant" size={17} color={theme.colors.secondary} />
+                      <MaterialCommunityIcons name="information-variant" size={15} color={theme.colors.secondary} />
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 {/* 2. Car Name */}
                 <View style={styles.vehicleRow}>
-                  <MaterialCommunityIcons name="car-sports" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                  <MaterialCommunityIcons name="car-sports" size={15} color={theme.colors.secondary} style={{ marginRight: 5 }} />
                   <Text style={[styles.vehicleName, { color: theme.colors.text }]} numberOfLines={1}>
                     {getVehicleDisplay(item.makeModel)}
                   </Text>
@@ -472,7 +537,7 @@ export default function BookingsScreen({ navigation }: any) {
 
                 {/* 3. Type of Service */}
                 <View style={styles.serviceRow}>
-                  <MaterialCommunityIcons name="wrench-clock-outline" size={14} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+                  <MaterialCommunityIcons name="wrench-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 5 }} />
                   <Text style={[styles.serviceNameText, { color: theme.colors.placeholder }]} numberOfLines={1}>
                     {item.serviceName || 'MOT Annual Safety Inspection (Class 4)'}
                   </Text>
@@ -483,13 +548,41 @@ export default function BookingsScreen({ navigation }: any) {
                   ) : null}
                 </View>
 
+                {/* Multiple Services tags if more than 1 service */}
+                {Array.isArray(item.services) && item.services.length > 1 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 4, marginBottom: 4 }}>
+                    {item.services.map((s: any, idx: number) => {
+                      const sName = typeof s === 'string' ? s : s?.name || '';
+                      return (
+                        <View
+                          key={idx}
+                          style={{
+                            backgroundColor: theme.colors.secondary + '15',
+                            paddingHorizontal: 7,
+                            paddingVertical: 2,
+                            borderRadius: 6,
+                            borderWidth: 1,
+                            borderColor: theme.colors.secondary + '30',
+                          }}
+                        >
+                          <Text style={{ fontSize: 10.5, fontWeight: '600', color: theme.colors.secondary }}>
+                            {sName}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+
                 {/* 4. Appointment Date & Time Slot */}
                 <View style={[styles.appointmentInfoBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
                   <View style={styles.dateSlotRow}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                      <MaterialCommunityIcons name="calendar-month-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                      <MaterialCommunityIcons name="calendar-month-outline" size={14} color={theme.colors.secondary} style={{ marginRight: 5 }} />
                       <View>
-                        <Text style={[styles.dateLabel, { color: theme.colors.placeholder }]}>APPOINTMENT DATE</Text>
+                        <Text style={[styles.dateLabel, { color: theme.colors.placeholder }]}>
+                          {item.isDateOnly || item.hasMot === false ? 'DROP-OFF DATE' : 'APPOINTMENT DATE'}
+                        </Text>
                         <Text style={[styles.dateValue, { color: theme.colors.text }]}>
                           {formatDisplayDate(item.date)}
                         </Text>
@@ -497,16 +590,38 @@ export default function BookingsScreen({ navigation }: any) {
                     </View>
 
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                      <MaterialCommunityIcons name="clock-time-four-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                      <MaterialCommunityIcons
+                        name={item.isDateOnly || item.hasMot === false ? 'car-clock' : 'clock-time-four-outline'}
+                        size={14}
+                        color={theme.colors.secondary}
+                        style={{ marginRight: 5 }}
+                      />
                       <View>
-                        <Text style={[styles.dateLabel, { color: theme.colors.placeholder }]}>TIME SLOT</Text>
+                        <Text style={[styles.dateLabel, { color: theme.colors.placeholder }]}>
+                          {item.isDateOnly || item.hasMot === false ? 'INTAKE' : 'TIME SLOT'}
+                        </Text>
                         <Text style={[styles.dateValue, { color: theme.colors.text }]}>
-                          {getSlotDisplay(item.makeModel, item.slotTime)}
+                          {getSlotDisplay(item.makeModel, item.slotTime, item.isDateOnly, item.hasMot)}
                         </Text>
                       </View>
                     </View>
                   </View>
                 </View>
+
+                {/* Rejection Details Callout on Card */}
+                {statusCfg.isRejected && (
+                  <View style={[styles.cardRejectionBox, { backgroundColor: '#DC262610', borderColor: '#DC262630' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                      <MaterialCommunityIcons name="alert-circle-outline" size={14} color="#DC2626" style={{ marginRight: 5 }} />
+                      <Text style={{ color: '#DC2626', fontWeight: 'bold', fontSize: 11.5 }}>
+                        Booking Rejected by Garage
+                      </Text>
+                    </View>
+                    <Text style={{ color: theme.colors.text, fontSize: 11.5, marginTop: 2, lineHeight: 16 }}>
+                      Reason: <Text style={{ fontWeight: '700', color: '#DC2626' }}>{item.rejectionReason || 'No specific reason provided.'}</Text>
+                    </Text>
+                  </View>
+                )}
 
                 {/* 5. Cancel Booking Button: Strictly when status is Pending */}
                 {statusCfg.isPending && (
@@ -521,7 +636,7 @@ export default function BookingsScreen({ navigation }: any) {
                         <ActivityIndicator size="small" color="#EF4444" />
                       ) : (
                         <>
-                          <MaterialCommunityIcons name="close-circle-outline" size={14} color="#EF4444" style={{ marginRight: 4 }} />
+                          <MaterialCommunityIcons name="close-circle-outline" size={13} color="#EF4444" style={{ marginRight: 4 }} />
                           <Text style={styles.cancelBookingBtnText}>Cancel Booking</Text>
                         </>
                       )}
@@ -634,21 +749,59 @@ export default function BookingsScreen({ navigation }: any) {
 
                         {/* Service & Schedule Box */}
                         <View style={[styles.sheetSectionBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                          <Text style={[styles.sheetSectionHeading, { color: theme.colors.placeholder }]}>SERVICE & APPOINTMENT</Text>
+                          <Text style={[styles.sheetSectionHeading, { color: theme.colors.placeholder }]}>SERVICES & APPOINTMENT</Text>
 
                           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, marginBottom: 8 }}>
-                            <MaterialCommunityIcons name="wrench-clock-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 8 }} />
+                            <MaterialCommunityIcons name="wrench-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 8 }} />
                             <View style={{ flex: 1 }}>
                               <Text style={[styles.sheetServiceName, { color: theme.colors.text }]}>
                                 {item.serviceName || 'MOT Annual Safety Inspection (Class 4)'}
                               </Text>
                               {item.price ? (
                                 <Text style={[styles.sheetPriceText, { color: theme.colors.secondary }]}>
-                                  Price: £{Number(item.price).toFixed(2)}
+                                  Total: £{Number(item.price).toFixed(2)}
                                 </Text>
                               ) : null}
                             </View>
                           </View>
+
+                          {Array.isArray(item.services) && item.services.length > 0 && (
+                            <View style={{ marginTop: 4, marginBottom: 8, gap: 6 }}>
+                              {item.services.map((s: any, idx: number) => {
+                                const sName = typeof s === 'string' ? s : s?.name || '';
+                                const sPrice = typeof s === 'object' && s?.price !== undefined ? Number(s.price).toFixed(2) : null;
+                                return (
+                                  <View
+                                    key={idx}
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      backgroundColor: theme.colors.card,
+                                      paddingHorizontal: 10,
+                                      paddingVertical: 6,
+                                      borderRadius: 8,
+                                      borderWidth: 1,
+                                      borderColor: theme.colors.border,
+                                    }}
+                                  >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                      <MaterialCommunityIcons
+                                        name={sName.toLowerCase().includes('mot') ? 'car-wrench' : 'wrench'}
+                                        size={14}
+                                        color={theme.colors.secondary}
+                                        style={{ marginRight: 6 }}
+                                      />
+                                      <Text style={{ fontSize: 12.5, fontWeight: '600', color: theme.colors.text }}>{sName}</Text>
+                                    </View>
+                                    {sPrice !== null && (
+                                      <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.secondary }}>£{sPrice}</Text>
+                                    )}
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          )}
 
                           <View style={styles.sheetDivider} />
 
@@ -656,7 +809,9 @@ export default function BookingsScreen({ navigation }: any) {
                             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                               <MaterialCommunityIcons name="calendar-month-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
                               <View>
-                                <Text style={[styles.sheetScheduleLabel, { color: theme.colors.placeholder }]}>DATE</Text>
+                                <Text style={[styles.sheetScheduleLabel, { color: theme.colors.placeholder }]}>
+                                  {item.isDateOnly || item.hasMot === false ? 'DROP-OFF DATE' : 'DATE'}
+                                </Text>
                                 <Text style={[styles.sheetScheduleVal, { color: theme.colors.text }]}>
                                   {formatDisplayDate(item.date)}
                                 </Text>
@@ -664,11 +819,18 @@ export default function BookingsScreen({ navigation }: any) {
                             </View>
 
                             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                              <MaterialCommunityIcons name="clock-time-four-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                              <MaterialCommunityIcons
+                                name={item.isDateOnly || item.hasMot === false ? 'car-clock' : 'clock-time-four-outline'}
+                                size={16}
+                                color={theme.colors.secondary}
+                                style={{ marginRight: 6 }}
+                              />
                               <View>
-                                <Text style={[styles.sheetScheduleLabel, { color: theme.colors.placeholder }]}>SLOT</Text>
+                                <Text style={[styles.sheetScheduleLabel, { color: theme.colors.placeholder }]}>
+                                  {item.isDateOnly || item.hasMot === false ? 'INTAKE' : 'SLOT'}
+                                </Text>
                                 <Text style={[styles.sheetScheduleVal, { color: theme.colors.text }]}>
-                                  {getSlotDisplay(item.makeModel, item.slotTime)}
+                                  {getSlotDisplay(item.makeModel, item.slotTime, item.isDateOnly, item.hasMot)}
                                 </Text>
                               </View>
                             </View>
@@ -868,14 +1030,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    gap: 12,
+    paddingHorizontal: 14,
+    paddingBottom: 20,
+    gap: 8,
   },
   bookingCard: {
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
-    padding: 14,
+    padding: 10,
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -886,17 +1048,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 5,
   },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   infoIconBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -905,11 +1067,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFD300',
-    borderRadius: 5,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: '#000000',
     overflow: 'hidden',
-    height: 28,
+    height: 24,
   },
   ukFlagBlock: {
     backgroundColor: '#0A4E9B',
@@ -920,60 +1082,61 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   ukFlagText: {
-    fontSize: 8,
+    fontSize: 7.5,
   },
   ukTagText: {
     color: '#FFFFFF',
-    fontSize: 8,
+    fontSize: 7.5,
     fontWeight: 'bold',
   },
   ukPlateNumber: {
     color: '#000000',
     fontWeight: 'bold',
-    fontSize: 12,
-    paddingHorizontal: 8,
-    letterSpacing: 0.8,
+    fontSize: 11,
+    paddingHorizontal: 6,
+    letterSpacing: 0.6,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 5,
     borderWidth: 1,
   },
   statusBadgeText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
   },
   vehicleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
-    marginBottom: 4,
+    marginTop: 1,
+    marginBottom: 2,
   },
   vehicleName: {
-    fontSize: 15,
+    fontSize: 13.5,
     fontWeight: 'bold',
     flex: 1,
   },
   serviceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   serviceNameText: {
-    fontSize: 12,
+    fontSize: 11.5,
     flexShrink: 1,
   },
   priceTag: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: 'bold',
     marginLeft: 4,
   },
   appointmentInfoBox: {
-    padding: 10,
-    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    borderRadius: 6,
     borderWidth: 1,
   },
   dateSlotRow: {
@@ -981,12 +1144,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dateLabel: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
   dateValue: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     marginTop: 1,
   },
@@ -1006,8 +1169,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     borderTopWidth: 1,
-    marginTop: 10,
-    paddingTop: 8,
+    marginTop: 6,
+    paddingTop: 5,
   },
   cancelBookingBtn: {
     flexDirection: 'row',
@@ -1017,7 +1180,7 @@ const styles = StyleSheet.create({
   },
   cancelBookingBtnText: {
     color: '#EF4444',
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '600',
   },
   // BottomSheet Modal Styles
@@ -1262,6 +1425,58 @@ const styles = StyleSheet.create({
   bookNowBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: 'bold',
+  },
+  rejectedBannerContainer: {
+    marginBottom: 12,
+  },
+  notificationAlertBox: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  notificationAlertTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  notificationAlertText: {
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 15,
+  },
+  notificationDismissBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  notificationDismissText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  cardRejectionBox: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 9,
+    marginTop: 8,
+  },
+  rebookBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    marginTop: 7,
+    alignSelf: 'flex-start',
+  },
+  rebookBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: 'bold',
   },
 });

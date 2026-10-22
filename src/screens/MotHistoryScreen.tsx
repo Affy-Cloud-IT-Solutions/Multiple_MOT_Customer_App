@@ -10,6 +10,7 @@ import {
   Platform,
   UIManager,
   Clipboard,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -101,11 +102,22 @@ const generateFallbackTests = (vehicle: any, regNumber: string) => {
 
 export default function MotHistoryScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { lookupVehicle } = useAppValues();
+  const {
+    lookupVehicle,
+    vehicles = [],
+    addVehicle,
+    addAlert,
+    addAudit,
+    user,
+    customers = [],
+    token,
+  } = useAppValues();
 
   const [loading, setLoading] = useState(false);
   const [vehicle, setVehicle] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [addingVehicle, setAddingVehicle] = useState(false);
+  const [locallyAddedVrn, setLocallyAddedVrn] = useState<string | null>(null);
   const [expandedTestIdxs, setExpandedTestIdxs] = useState<Record<number, boolean>>({ 0: true });
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'PASSED' | 'FAILED' | 'ADVISORIES'>('ALL');
 
@@ -238,6 +250,178 @@ export default function MotHistoryScreen({ route, navigation }: any) {
     return allMotTests;
   }, [allMotTests, activeFilter]);
 
+  // Check if this vehicle is already in customer's My Vehicles list
+  const cleanVrn = useMemo(() => {
+    return (regNumber || '').replace(/\s+/g, '').toUpperCase();
+  }, [regNumber]);
+
+  const isVehicleInMyList = useMemo(() => {
+    if (!cleanVrn) return false;
+    if (locallyAddedVrn && locallyAddedVrn === cleanVrn) return true;
+    if (!vehicles || vehicles.length === 0) return false;
+    return vehicles.some((v: any) => {
+      const vReg = (v.registrationNumber || v.registration || '').replace(/\s+/g, '').toUpperCase();
+      return vReg === cleanVrn;
+    });
+  }, [cleanVrn, vehicles, locallyAddedVrn]);
+
+  // Resolve customer record for adding vehicle
+  const customerId = user?.customerId || user?.id;
+  const customer: any = customers.find((c: any) =>
+    (customerId && (
+      String(c.id).toLowerCase() === String(customerId).toLowerCase() ||
+      String(c._id).toLowerCase() === String(customerId).toLowerCase()
+    )) ||
+    (user?.email && c.email && String(c.email).toLowerCase() === String(user.email).toLowerCase())
+  ) || (customers.length > 0 ? customers[0] : null);
+
+  const resolvedCustomerId = customer?.id || customer?._id || customerId || 'c1';
+
+  const formatToYyyyMmDd = (dateInput: any): string => {
+    if (!dateInput) {
+      const d = new Date();
+      d.setFullYear(d.getFullYear() + 1);
+      return d.toISOString().split('T')[0];
+    }
+    const str = String(dateInput).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str;
+    }
+    const parsed = new Date(dateInput);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().split('T')[0];
+  };
+
+  const proceedToBooking = () => {
+    const params = {
+      serviceFilter: 'MOT',
+      serviceTitle: 'MOT Test',
+      searchQuery: '',
+      nearMe: true,
+      selectedVehicle: vehicle,
+      vehicle: vehicle,
+    };
+
+    try {
+      navigation.navigate('Main', {
+        screen: 'Garages',
+        params,
+      });
+    } catch (_err) {
+      navigation.navigate('Garages', params);
+    }
+  };
+
+  const handleSaveVehicleToGarage = async (andProceedToBooking = false) => {
+    if (!user && !token) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in or create an account to save this vehicle to your garage and track its MOT expiry.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+        ]
+      );
+      return;
+    }
+
+    if (!vehicle) {
+      Alert.alert('Error', 'Vehicle details not available to add.');
+      return;
+    }
+
+    setAddingVehicle(true);
+    try {
+      const regClean = (vehicle.registrationNumber || vehicle.registration || regNumber || '').replace(/\s+/g, '').toUpperCase();
+      const makeClean = (vehicle.make || 'VEHICLE').trim().toUpperCase();
+      const modelClean = (vehicle.model || 'MODEL').trim().toUpperCase();
+      const yearClean = String(vehicle.year || '2018').trim();
+      const targetExpiry = stats.latest?.expiryDate || vehicle.motExpiryDate || vehicle.expiryDate;
+      const expiryFormatted = formatToYyyyMmDd(targetExpiry);
+
+      await addVehicle({
+        customerId: resolvedCustomerId,
+        registrationNumber: regClean,
+        make: makeClean,
+        model: modelClean,
+        year: yearClean,
+        motExpiryDate: expiryFormatted,
+        status: 'Active',
+      });
+
+      setLocallyAddedVrn(regClean);
+
+      try {
+        await addAlert({
+          type: 'NEW_VEHICLE',
+          customerName: `${customer?.firstName || user?.name || 'Customer'} ${customer?.lastName || ''}`.trim(),
+          customerId: resolvedCustomerId,
+          registrationNumber: regClean,
+          makeModel: `${makeClean} ${modelClean}`,
+          status: 'Approved',
+        });
+      } catch (_) {}
+
+      try {
+        await addAudit(
+          'Vehicle Added from MOT History',
+          `${customer?.firstName || user?.name || 'Customer'} added vehicle ${makeClean} ${modelClean} (${regClean}) to My Vehicles`
+        );
+      } catch (_) {}
+
+      if (andProceedToBooking) {
+        proceedToBooking();
+      } else {
+        Toast.show({
+          type: 'success',
+          text1: 'Vehicle Added to My Vehicles',
+          text2: `${regClean} is now in your garage. Reminders active!`,
+          visibilityTime: 3500,
+        });
+        Alert.alert(
+          'Vehicle Added ✅',
+          `${regClean} (${makeClean} ${modelClean}) has been added to your vehicles.\n\nAutomatic MOT expiry reminders (at 45, 30, 15 & 7 days) are now live!`
+        );
+      }
+    } catch (err: any) {
+      console.error('[MotHistoryScreen] failed to add vehicle:', err);
+      Alert.alert('Could Not Add Vehicle', err.message || 'Failed to add vehicle to your account.');
+    } finally {
+      setAddingVehicle(false);
+    }
+  };
+
+  const handleBookMotSlot = () => {
+    if (!isVehicleInMyList) {
+      Alert.alert(
+        'Add This Vehicle First?',
+        `Would you like to add ${regNumber} to your vehicles list to track its MOT and receive reminders before booking?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Book Without Adding',
+            style: 'default',
+            onPress: () => proceedToBooking(),
+          },
+          {
+            text: 'Add & Book Slot',
+            style: 'default',
+            onPress: () => handleSaveVehicleToGarage(true),
+          },
+        ]
+      );
+    } else {
+      proceedToBooking();
+    }
+  };
+
   if (loading) {
     return (
       <View style={[styles.centerContainer, { backgroundColor: theme.colors.background }]}>
@@ -346,6 +530,41 @@ export default function MotHistoryScreen({ route, navigation }: any) {
               </View>
             ) : null}
           </View>
+
+          {/* Garage status indicator / quick add banner */}
+          {isVehicleInMyList ? (
+            <View style={[styles.inGaragePill, { backgroundColor: '#10B98115', borderColor: '#10B98140' }]}>
+              <MaterialCommunityIcons name="check-circle" size={14} color="#10B981" style={{ marginRight: 5 }} />
+              <Text style={[styles.inGaragePillText, { color: '#10B981' }]}>Vehicle in My Vehicles (Reminders Active)</Text>
+            </View>
+          ) : (
+            <View style={[styles.notInGarageBanner, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                  <MaterialCommunityIcons name="plus" size={15} color={theme.colors.secondary} style={{ marginRight: 5 }} />
+                  <Text style={[styles.notInGarageTitle, { color: theme.colors.text }]}>Not in My Vehicles</Text>
+                </View>
+                <Text style={[styles.notInGarageDesc, { color: theme.colors.placeholder }]}>
+                  Add this car to get free MOT expiry reminders and easily book tests.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.addPromptBtn, { backgroundColor: theme.colors.secondary }]}
+                onPress={() => handleSaveVehicleToGarage(false)}
+                disabled={addingVehicle}
+                activeOpacity={0.85}
+              >
+                {addingVehicle ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="plus" size={14} color="#FFFFFF" style={{ marginRight: 3 }} />
+                    <Text style={styles.addPromptBtnText}>Add Vehicle</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Live MOT Status Hero Card */}
@@ -718,21 +937,58 @@ export default function MotHistoryScreen({ route, navigation }: any) {
 
       {/* Floating Bottom CTA Bar */}
       <View style={[styles.bottomBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
-        <View style={{ flex: 1, marginRight: 12 }}>
-          <Text style={[styles.bottomBarReg, { color: theme.colors.text }]}>{regNumber}</Text>
-          <Text style={[styles.bottomBarHint, { color: theme.colors.placeholder }]}>
-            {isCurrentlyValid ? 'Book next MOT early' : 'Urgent: test slot needed'}
-          </Text>
-        </View>
+        {!isVehicleInMyList ? (
+          <View style={styles.bottomBarUnaddedRow}>
+            <TouchableOpacity
+              style={[styles.addVehicleBtn, { borderColor: theme.colors.secondary, backgroundColor: theme.colors.card }]}
+              onPress={() => handleSaveVehicleToGarage(false)}
+              disabled={addingVehicle}
+              activeOpacity={0.85}
+            >
+              {addingVehicle ? (
+                <ActivityIndicator size="small" color={theme.colors.secondary} />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="plus" size={17} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                  <Text style={[styles.addVehicleBtnText, { color: theme.colors.secondary }]}>Add Vehicle</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.bookMotBtn, { backgroundColor: theme.colors.secondary }]}
-          onPress={() => navigation.navigate('Garages', { nearMe: true })}
-          activeOpacity={0.85}
-        >
-          <MaterialCommunityIcons name="calendar-check" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-          <Text style={styles.bookMotBtnText}>Book MOT Slot</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.bookMotBtnFlex, { backgroundColor: theme.colors.secondary }]}
+              onPress={handleBookMotSlot}
+              activeOpacity={0.85}
+            >
+              <MaterialCommunityIcons name="calendar-check" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.bookMotBtnText}>Book MOT Slot</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.bottomBarReg, { color: theme.colors.text }]}>{regNumber}</Text>
+                <View style={[styles.inListMiniPill, { backgroundColor: '#10B98118' }]}>
+                  <MaterialCommunityIcons name="check" size={11} color="#10B981" style={{ marginRight: 2 }} />
+                  <Text style={styles.inListMiniText}>In Vehicles</Text>
+                </View>
+              </View>
+              <Text style={[styles.bottomBarHint, { color: theme.colors.placeholder }]}>
+                {isCurrentlyValid ? 'Book next MOT early' : 'Urgent: test slot needed'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.bookMotBtn, { backgroundColor: theme.colors.secondary }]}
+              onPress={handleBookMotSlot}
+              activeOpacity={0.85}
+            >
+              <MaterialCommunityIcons name="calendar-check" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.bookMotBtnText}>Book MOT Slot</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -1240,6 +1496,91 @@ const styles = StyleSheet.create({
   bookMotBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  inGaragePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  inGaragePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  notInGarageBanner: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  notInGarageTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  notInGarageDesc: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  addPromptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  addPromptBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bottomBarUnaddedRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addVehicleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    marginRight: 8,
+  },
+  addVehicleBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  bookMotBtnFlex: {
+    flex: 1.25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  inListMiniPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  inListMiniText: {
+    color: '#10B981',
+    fontSize: 10,
     fontWeight: '700',
   },
 });

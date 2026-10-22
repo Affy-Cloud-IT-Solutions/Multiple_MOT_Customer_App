@@ -87,6 +87,11 @@ export default function RootNavigator() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="Garages"
+        component={GarageListScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="GarageDetail"
         component={GarageDetailScreen}
         options={{ headerShown: false }}

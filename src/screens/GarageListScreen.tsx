@@ -42,25 +42,26 @@ const getUserInitials = (name?: string, email?: string) => {
   return 'G';
 };
 
-const GarageLogo = ({ uri, name, style, theme }: any) => {
+const GarageLogo = ({ uri, name, theme }: any) => {
   const [error, setError] = useState(false);
 
-  if (error || !uri) {
-    return (
-      <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.secondary + '15' }]}>
-        <Text style={[styles.avatarText, { color: theme.colors.secondary }]}>
-          {name ? name[0].toUpperCase() : 'G'}
-        </Text>
-      </View>
-    );
-  }
-
   return (
-    <Image 
-      source={{ uri }} 
-      style={style} 
-      onError={() => setError(true)} 
-    />
+    <View style={[styles.imageContainer, { backgroundColor: theme.colors.secondary + '12' }]}>
+      {uri && !error ? (
+        <Image 
+          source={{ uri }} 
+          style={styles.cardImage} 
+          resizeMode="cover"
+          onError={() => setError(true)} 
+        />
+      ) : (
+        <View style={styles.avatarPlaceholder}>
+          <Text style={[styles.avatarText, { color: theme.colors.secondary }]}>
+            {getUserInitials(name)}
+          </Text>
+        </View>
+      )}
+    </View>
   );
 };
 
@@ -94,20 +95,32 @@ export default function GarageListScreen({ route, navigation }: any) {
     });
   }, []);
 
-  // Sync searchQuery, serviceFilter & nearMe when navigating with parameters
+  // Sync searchQuery, serviceFilter & nearMe when navigating with parameters, and refresh garage list
   useFocusEffect(
     useCallback(() => {
-      if (route?.params?.searchQuery !== undefined) {
-        setSearchQuery(route.params.searchQuery);
-      } else if (route?.params?.search !== undefined) {
-        setSearchQuery(route.params.search);
+      fetchGaragesList();
+
+      const pSearch = route?.params?.searchQuery !== undefined ? route.params.searchQuery : route?.params?.search;
+      const pFilter = route?.params?.serviceFilter;
+      const pTitle = route?.params?.serviceTitle;
+
+      if (pFilter !== undefined) {
+        setActiveServiceFilter(pFilter);
       }
-      if (route?.params?.serviceFilter !== undefined) {
-        setActiveServiceFilter(route.params.serviceFilter);
+      if (pTitle !== undefined) {
+        setActiveServiceTitle(pTitle);
       }
-      if (route?.params?.serviceTitle !== undefined) {
-        setActiveServiceTitle(route.params.serviceTitle);
+
+      // If a serviceFilter is provided, do NOT treat the service name as a garage name text search!
+      if (pFilter && pSearch && (
+        pSearch.trim().toLowerCase() === pFilter.trim().toLowerCase() ||
+        (pTitle && pSearch.trim().toLowerCase() === pTitle.trim().toLowerCase())
+      )) {
+        setSearchQuery('');
+      } else if (pSearch !== undefined) {
+        setSearchQuery(pSearch);
       }
+
       if (route?.params?.nearMe === true) {
         handleTriggerNearMe();
       }
@@ -125,7 +138,8 @@ export default function GarageListScreen({ route, navigation }: any) {
         throw new Error('Failed to load registered garages.');
       }
       const data = await response.json();
-      setGarages(data);
+      const approvedOnly = Array.isArray(data) ? data.filter((g: any) => g.status === 'Approved') : [];
+      setGarages(approvedOnly);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Could not connect to server.');
@@ -286,6 +300,11 @@ export default function GarageListScreen({ route, navigation }: any) {
       // 2. Text query matching (if search query is entered)
       if (!q) return true;
 
+      // If text query is identical to active service filter, it is already matched in step 1
+      if (filterKey && (q === filterKey || (activeServiceTitle && q === activeServiceTitle.toLowerCase().trim()))) {
+        return true;
+      }
+
       const nameMatch = (g.name || '').toLowerCase().includes(q);
       const addressMatch = (g.address || '').toLowerCase().includes(q);
       const cityMatch = (g.city || '').toLowerCase().includes(q);
@@ -294,7 +313,6 @@ export default function GarageListScreen({ route, navigation }: any) {
         : false;
 
       const queryServicesMatch =
-        !filterKey &&
         Array.isArray(g.services) &&
         g.services.some((s: any) => isServiceMatch(s, q));
 
@@ -317,9 +335,14 @@ export default function GarageListScreen({ route, navigation }: any) {
       : null;
 
     const filterTarget = activeServiceFilter || activeServiceTitle;
-    const matchingService = filterTarget && Array.isArray(item.services)
+    const hasServiceFilter = Boolean(filterTarget && filterTarget.trim());
+    const matchingService = hasServiceFilter && Array.isArray(item.services)
       ? item.services.find((s: any) => isServiceMatch(s, filterTarget))
       : null;
+
+    const priceNum = matchingService?.price ? Number(matchingService.price) : 45;
+    const displayPrice = isNaN(priceNum) ? '45' : priceNum.toFixed(0);
+    const serviceDisplayName = matchingService?.name || filterTarget || 'Service';
 
     return (
       <TouchableOpacity
@@ -327,77 +350,77 @@ export default function GarageListScreen({ route, navigation }: any) {
         activeOpacity={0.85}
         onPress={() => navigation.navigate('GarageDetail', { 
           garageId: item.id || item._id, 
-          serviceName: matchingService?.name || activeServiceFilter || activeServiceTitle || searchQuery, 
+          serviceName: hasServiceFilter ? serviceDisplayName : searchQuery, 
           serviceFilter: activeServiceFilter,
           serviceTitle: activeServiceTitle,
           searchQuery, 
+          vehicle: route?.params?.vehicle || route?.params?.selectedVehicle,
+          selectedVehicle: route?.params?.selectedVehicle || route?.params?.vehicle,
         })}
       >
         <GarageLogo 
-          uri={item.logoUrl || (item.images && item.images.length > 0 ? item.images[0] : null)} 
+          uri={item.coverImage || item.logoUrl || (item.images && item.images.length > 0 ? item.images[0] : null)} 
           name={item.name} 
-          style={styles.logoSmall} 
           theme={theme} 
         />
 
-        <View style={styles.infoContainer}>
-          <View style={styles.garageNameRow}>
-            <Text style={[styles.garageName, { color: theme.colors.text }]} numberOfLines={1}>
-              {item.name}
-            </Text>
-          </View>
-
-          <View style={styles.addressRow}>
-            <MaterialCommunityIcons name="map-marker-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
-            <Text style={[styles.garageAddress, { color: theme.colors.placeholder }]} numberOfLines={1}>
-              {locationText}
-            </Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
-            {distanceText ? (
-              <Text style={[styles.garageMiles, { color: theme.colors.secondary }]}>
-                {distanceText}
+        <View style={styles.cardContent}>
+          <View style={styles.infoContainer}>
+            <View style={styles.garageNameRow}>
+              <Text style={[styles.garageName, { color: theme.colors.text }]} numberOfLines={1}>
+                {item.name}
               </Text>
-            ) : null}
+            </View>
 
-            {matchingService && (
-              <View style={{ backgroundColor: theme.colors.primary + '15', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, flexDirection: 'row', alignItems: 'center' }}>
-                <MaterialCommunityIcons name="wrench-outline" size={11} color={theme.colors.primary} style={{ marginRight: 3 }} />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>
-                  {matchingService.name}: £{matchingService.price ? Number(matchingService.price).toFixed(0) : '45'}
+            <View style={styles.addressRow}>
+              <MaterialCommunityIcons name="map-marker-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
+              <Text style={[styles.garageAddress, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                {locationText}
+              </Text>
+            </View>
+
+            {distanceText ? (
+              <View style={styles.distanceRow}>
+                <MaterialCommunityIcons name="navigation-variant-outline" size={12} color={theme.colors.secondary} style={{ marginRight: 3 }} />
+                <Text style={[styles.garageMiles, { color: theme.colors.secondary }]}>
+                  {distanceText}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
-        </View>
 
-        {matchingService ? (
-          <TouchableOpacity
-            style={{
-              backgroundColor: theme.colors.primary,
-              paddingHorizontal: 12,
-              paddingVertical: 7,
-              borderRadius: 6,
-              flexDirection: 'row',
-              alignItems: 'center',
-              alignSelf: 'center',
-              marginLeft: 6,
-            }}
-            onPress={() => navigation.navigate('GarageDetail', {
-              garageId: item.id || item._id,
-              serviceName: matchingService.name,
-              serviceFilter: activeServiceFilter,
-              serviceTitle: activeServiceTitle,
-              autoOpenBooking: true,
-            })}
-          >
-            <MaterialCommunityIcons name="calendar-plus" size={14} color="#FFFFFF" style={{ marginRight: 3 }} />
-            <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: 'bold' }}>Book</Text>
-          </TouchableOpacity>
-        ) : (
-          <MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.placeholder} />
-        )}
+          {/* Show big price & Book button only when a service filter is applied; otherwise show chevron navigation indicator */}
+          {hasServiceFilter ? (
+            <View style={styles.priceActionCol}>
+              <View style={styles.priceRowBig}>
+                <Text style={[styles.priceCurrencyBig, { color: theme.colors.primary }]}>£</Text>
+                <Text style={[styles.priceAmountBig, { color: theme.colors.primary }]}>{displayPrice}</Text>
+              </View>
+              <Text style={[styles.priceServiceLabel, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                {serviceDisplayName}
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.cardBookBtn, { backgroundColor: theme.colors.primary }]}
+                onPress={() => navigation.navigate('GarageDetail', {
+                  garageId: item.id || item._id,
+                  serviceName: serviceDisplayName,
+                  serviceFilter: activeServiceFilter,
+                  serviceTitle: activeServiceTitle,
+                  autoOpenBooking: true,
+                  vehicle: route?.params?.vehicle || route?.params?.selectedVehicle,
+                  selectedVehicle: route?.params?.selectedVehicle || route?.params?.vehicle,
+                })}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="calendar-plus" size={13} color="#FFFFFF" style={{ marginRight: 3 }} />
+                <Text style={styles.cardBookBtnText}>Book</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.placeholder} style={{ marginLeft: 6 }} />
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -874,37 +897,54 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 10,
+    overflow: 'hidden',
+    position: 'relative',
     elevation: 0,
     shadowColor: 'transparent',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0,
     shadowRadius: 0,
   },
-  logoSmall: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
+  imageContainer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 90,
+    overflow: 'hidden',
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingRight: 12,
+    paddingLeft: 102,
+    minHeight: 92,
   },
   infoContainer: {
     flex: 1,
-    marginHorizontal: 10,
+    marginRight: 8,
     justifyContent: 'center',
   },
   garageNameRow: {
@@ -921,15 +961,65 @@ const styles = StyleSheet.create({
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 2,
   },
   garageAddress: {
     fontSize: 11,
     flex: 1,
   },
+  distanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+  },
   garageMiles: {
     fontSize: 11,
     fontWeight: '700',
-    marginTop: 3,
+  },
+  priceActionCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginLeft: 6,
+    minWidth: 72,
+  },
+  priceRowBig: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  priceCurrencyBig: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: 2,
+    marginRight: 1,
+  },
+  priceAmountBig: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+    lineHeight: 28,
+  },
+  priceServiceLabel: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginTop: 1,
+    marginBottom: 6,
+    maxWidth: 95,
+    textAlign: 'right',
+  },
+  cardBookBtn: {
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardBookBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   centerContainer: {
     flex: 1,
