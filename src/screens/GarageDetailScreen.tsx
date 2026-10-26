@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { openGarageDirections } from '../utils/mapUtils';
 import { isServiceMatch } from '../components/FilterServiceBottomSheet';
 import { validateMotExpiryDate } from '../utils/validationUtils';
+import LoginRequiredModal from '../components/LoginRequiredModal';
 
 const GarageLogo = ({ uri, name, style, theme }: any) => {
   const [error, setError] = useState(false);
@@ -78,6 +79,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
   // Booking Flow States
   const [isBookingModalVisible, setIsBookingModalVisible] = useState(false);
+  const [isLoginModalVisible, setIsLoginModalVisible] = useState(false);
   const [selectedServices, setSelectedServices] = useState<any[]>([]);
   const selectedMotService = selectedServices[0] || null;
   const setSelectedMotService = (svc: any) => {
@@ -120,18 +122,18 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   const isServiceSelected = useCallback((service: any) => {
     if (!service) return false;
     const targetId = service._id || service.id;
-    const targetName = service.name;
-    return selectedServices.some(s => (targetId && (s._id === targetId || s.id === targetId)) || s.name === targetName);
+    const targetName = (service.name || '').trim().toLowerCase();
+    return selectedServices.some(s => (targetId && (s._id === targetId || s.id === targetId)) || (s.name && s.name.trim().toLowerCase() === targetName));
   }, [selectedServices]);
 
   const toggleSelectService = useCallback((service: any) => {
     if (!service) return;
     const targetId = service._id || service.id;
-    const targetName = service.name;
+    const targetName = (service.name || '').trim().toLowerCase();
     setSelectedServices(prev => {
-      const exists = prev.some(s => (targetId && (s._id === targetId || s.id === targetId)) || s.name === targetName);
+      const exists = prev.some(s => (targetId && (s._id === targetId || s.id === targetId)) || (s.name && s.name.trim().toLowerCase() === targetName));
       if (exists) {
-        return prev.filter(s => !((targetId && (s._id === targetId || s.id === targetId)) || s.name === targetName));
+        return prev.filter(s => !((targetId && (s._id === targetId || s.id === targetId)) || (s.name && s.name.trim().toLowerCase() === targetName)));
       } else {
         return [...prev, service];
       }
@@ -139,9 +141,10 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   }, []);
 
   const removeServiceFromSelection = useCallback((service: any) => {
+    if (!service) return;
     const targetId = service._id || service.id;
-    const targetName = service.name;
-    setSelectedServices(prev => prev.filter(s => !((targetId && (s._id === targetId || s.id === targetId)) || s.name === targetName)));
+    const targetName = (service.name || '').trim().toLowerCase();
+    setSelectedServices(prev => prev.filter(s => !((targetId && (s._id === targetId || s.id === targetId)) || (s.name && s.name.trim().toLowerCase() === targetName))));
   }, []);
   const [isInfoModalVisible, setIsInfoModalVisible] = useState(false);
   const [isGalleryModalVisible, setIsGalleryModalVisible] = useState(false);
@@ -193,7 +196,23 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         throw new Error('Failed to load garage details.');
       }
       const data = await response.json();
-      setGarage(data);
+      let services = Array.isArray(data.services) && data.services.length > 0 ? data.services : [];
+      if (services.length === 0) {
+        try {
+          const sRes = await fetch(`${BASE_URL}/garages/${garageId}/services`, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          });
+          if (sRes.ok) {
+            const sData = await sRes.json();
+            if (Array.isArray(sData.services) && sData.services.length > 0) {
+              services = sData.services;
+            }
+          }
+        } catch (e) {
+          console.warn('Fallback garage services fetch failed:', e);
+        }
+      }
+      setGarage({ ...data, services });
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Could not connect to server.');
@@ -531,10 +550,21 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       }
     } catch (err: any) {
       console.error('[GarageDetailScreen] lookup error:', err);
-      Alert.alert(
-        'Lookup Failed',
-        err.message || `Could not find registration "${newRegNo.trim().toUpperCase()}". Please enter vehicle details manually.`
-      );
+      const isBusy = err.isBusy || (err.message && (
+        err.message.toLowerCase().includes('busy') ||
+        err.message.toLowerCase().includes('taking too long')
+      ));
+      if (isBusy) {
+        Alert.alert(
+          'Government API Busy',
+          'Government DVSA API is busy, please check again.'
+        );
+      } else {
+        Alert.alert(
+          'Vehicle Not Found',
+          'Vehicle details not found. Please check the registration plate and try again.'
+        );
+      }
     } finally {
       setIsSearchingNewPlate(false);
     }
@@ -563,10 +593,23 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       return;
     }
 
+    if (!token || !token.trim()) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to your account to add this vehicle.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+        ]
+      );
+      return;
+    }
+
     setIsAddingCar(true);
     try {
+      const targetCustId = customer.id || customer._id || user?.customerId || user?.id;
       const createdVeh = await addVehicle({
-        customerId: customer.id,
+        customerId: targetCustId,
         registrationNumber: regClean,
         make: makeClean,
         model: modelClean,
@@ -578,7 +621,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       await addAlert({
         type: 'NEW_VEHICLE',
         customerName: `${customer.firstName} ${customer.lastName}`.trim() || user?.name || 'Customer',
-        customerId: customer.id,
+        customerId: targetCustId,
         registrationNumber: regClean,
         makeModel: `${makeClean} ${modelClean}`,
         status: 'Approved',
@@ -592,7 +635,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       const targetObj = createdVeh || {
         id: `veh_${Date.now()}`,
         _id: `veh_${Date.now()}`,
-        customerId: customer.id,
+        customerId: targetCustId,
         registrationNumber: regClean,
         make: makeClean,
         model: modelClean,
@@ -617,26 +660,39 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       });
     } catch (err: any) {
       console.error('Failed to add vehicle in booking flow:', err);
-      Alert.alert('Registration Failed', err.message || 'Could not add vehicle. Please check the details and try again.');
+      const isAuthError = !token || (err?.message && (
+        err.message.toLowerCase().includes('token') ||
+        err.message.toLowerCase().includes('sign in') ||
+        err.message.toLowerCase().includes('unauthorized') ||
+        err.message.toLowerCase().includes('auth')
+      ));
+      if (isAuthError) {
+        Alert.alert(
+          'Sign In Required',
+          'Please sign in to your account to add this vehicle.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+          ]
+        );
+      } else {
+        Alert.alert('Registration Failed', err.message || 'Could not add vehicle. Please check the details and try again.');
+      }
     } finally {
       setIsAddingCar(false);
     }
   };
 
-  const handleOpenBookingModal = (service?: any) => {
-    if (!token) {
-      Alert.alert(
-        'Authentication Required',
-        'Please sign in to book your appointment.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => navigation.navigate('Login') }
-        ]
-      );
+  const handleOpenBookingModal = (service?: any, explicitServices?: any[]) => {
+    const isUserLoggedIn = Boolean(token && String(token).trim().length > 0 && user);
+    if (!isUserLoggedIn) {
+      setIsLoginModalVisible(true);
       return;
     }
 
-    if (service) {
+    if (explicitServices && Array.isArray(explicitServices) && explicitServices.length > 0) {
+      setSelectedServices(explicitServices);
+    } else if (service) {
       if (!isServiceSelected(service)) {
         setSelectedServices(prev => [...prev, service]);
       }
@@ -675,6 +731,13 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   };
 
   const handleConfirmBooking = async () => {
+    const isUserLoggedIn = Boolean(token && String(token).trim().length > 0 && user);
+    if (!isUserLoggedIn) {
+      setIsBookingModalVisible(false);
+      setIsLoginModalVisible(true);
+      return;
+    }
+
     if (selectedServices.length === 0) {
       Alert.alert('No Services Selected', 'Please select at least one service to book.');
       return;
@@ -762,10 +825,14 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       const targetDuration = totalSelectedDuration;
       const targetSlotTime = hasMot ? (selectedSlot?.time || selectedTime) : 'Full Day Drop-off';
 
+      const targetCustId = customer.id || customer._id || user?.customerId || user?.id;
+
       await addAlert({
         type: 'BOOKED',
         customerName: `${customer.firstName} ${customer.lastName}`.trim() || user?.name || 'Customer',
-        customerId: customer.id,
+        customerId: targetCustId,
+        customerEmail: customer.email || user?.email || '',
+        customerMobile: customer.mobile || '',
         garageId: targetGarageId,
         serviceName: selectedServiceNames,
         services: selectedServices.map((s: any) => ({
@@ -860,6 +927,10 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     return active.length > 0 ? active : garage.services;
   }, [garage?.services]);
 
+  const unselectedServices = useMemo(() => {
+    return allActiveServices.filter((s: any) => !isServiceSelected(s));
+  }, [allActiveServices, isServiceSelected]);
+
   // Unique categories list
   const availableCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -914,14 +985,45 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     if (garage && route?.params?.autoOpenBooking && !hasAutoOpened && allActiveServices.length > 0) {
       setHasAutoOpened(true);
       const targetQuery = route?.params?.serviceName || route?.params?.serviceFilter || '';
-      const matchedSvc = allActiveServices.find((s: any) =>
-        targetQuery ? isServiceMatch(s, targetQuery) : false
-      ) || allActiveServices[0];
-      if (matchedSvc) {
-        handleOpenBookingModal(matchedSvc);
+      const targetFilters: string[] = (route?.params?.serviceFilters && Array.isArray(route?.params?.serviceFilters))
+        ? route.params.serviceFilters
+        : targetQuery ? [targetQuery] : [];
+
+      let matchedServices: any[] = [];
+      if (targetFilters.length > 0) {
+        matchedServices = allActiveServices.filter((s: any) =>
+          targetFilters.some((tf: string) => isServiceMatch(s, tf))
+        );
+      }
+      if (matchedServices.length === 0 && targetQuery) {
+        const single = allActiveServices.find((s: any) => isServiceMatch(s, targetQuery));
+        if (single) matchedServices = [single];
+      }
+      if (matchedServices.length === 0) {
+        matchedServices = [allActiveServices[0]];
+      }
+
+      setSelectedServices(matchedServices);
+      handleOpenBookingModal(undefined, matchedServices);
+    }
+  }, [garage, route?.params?.autoOpenBooking, route?.params?.serviceName, route?.params?.serviceFilter, route?.params?.serviceFilters, hasAutoOpened, allActiveServices]);
+
+  // Pre-select matching services if arriving with service filters without autoOpen
+  useEffect(() => {
+    if (garage && allActiveServices.length > 0 && selectedServices.length === 0 && !route?.params?.autoOpenBooking) {
+      const targetFilters: string[] = (route?.params?.serviceFilters && Array.isArray(route?.params?.serviceFilters))
+        ? route.params.serviceFilters
+        : (route?.params?.serviceFilter ? [route.params.serviceFilter] : []);
+      if (targetFilters.length > 0) {
+        const matched = allActiveServices.filter((s: any) =>
+          targetFilters.some((tf: string) => isServiceMatch(s, tf))
+        );
+        if (matched.length > 0) {
+          setSelectedServices(matched);
+        }
       }
     }
-  }, [garage, route?.params?.autoOpenBooking, route?.params?.serviceName, route?.params?.serviceFilter, hasAutoOpened, allActiveServices]);
+  }, [garage, allActiveServices, route?.params?.serviceFilters, route?.params?.serviceFilter, route?.params?.autoOpenBooking]);
 
   if (loading) {
     return (
@@ -1080,7 +1182,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 const catTheme = getCategoryTheme(service.category, service.name);
                 const catIcon = getCategoryIcon(service.category, service.name);
                 const isMot = (service.category || '').toLowerCase().includes('mot') || (service.name || '').toLowerCase().includes('mot');
-                const isSelectedService = Boolean(targetServiceQuery && isServiceMatch(service, targetServiceQuery));
+                const isSelected = isServiceSelected(service);
 
                 return (
                   <View 
@@ -1088,24 +1190,34 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     style={[
                       styles.serviceCard, 
                       { 
-                        backgroundColor: theme.colors.card, 
-                        borderColor: isSelectedService ? theme.colors.primary : theme.colors.border,
-                        borderWidth: isSelectedService ? 1.5 : 1,
+                        backgroundColor: isSelected 
+                          ? (theme.dark ? theme.colors.primary + '14' : theme.colors.primary + '08') 
+                          : theme.colors.card, 
+                        borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                        borderWidth: isSelected ? 1.5 : 1,
+                        elevation: isSelected ? 0 : 1,
+                        shadowOpacity: isSelected ? 0 : 0.02,
+                        shadowRadius: isSelected ? 0 : 2,
+                        shadowOffset: isSelected ? { width: 0, height: 0 } : { width: 0, height: 1 },
                       }
                     ]}
                   >
                     {/* Selected Service Badge Indicator */}
-                    {isSelectedService && (
+                    {isSelected && (
                       <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{ backgroundColor: theme.colors.primary + '18', borderColor: theme.colors.primary + '40', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 6, flexDirection: 'row', alignItems: 'center' }}>
-                          <MaterialCommunityIcons name="star-circle" size={13} color={theme.colors.primary} style={{ marginRight: 4 }} />
-                          <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>Selected Service</Text>
+                        <View style={{ backgroundColor: theme.colors.primary + '18', borderColor: theme.colors.primary + '50', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 6, flexDirection: 'row', alignItems: 'center' }}>
+                          <MaterialCommunityIcons name="check-circle" size={13} color={theme.colors.primary} style={{ marginRight: 4 }} />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>Selected for Booking</Text>
                         </View>
                       </View>
                     )}
 
                     {/* Top Row: Icon, Name & Category Badge */}
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                    <TouchableOpacity 
+                      activeOpacity={0.8}
+                      onPress={() => toggleSelectService(service)}
+                      style={{ flexDirection: 'row', alignItems: 'flex-start' }}
+                    >
                       <View style={[styles.serviceIconCircle, { backgroundColor: catTheme.bg }]}>
                         <MaterialCommunityIcons name={catIcon} size={22} color={catTheme.text} />
                       </View>
@@ -1131,6 +1243,13 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                             </Text>
                           </View>
 
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <MaterialCommunityIcons name={isMot ? "clock-check-outline" : "calendar-today"} size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
+                            <Text style={[styles.serviceMeta, { color: theme.colors.placeholder }]}>
+                              {isMot ? '45-Min Slot' : 'Drop-off'}
+                            </Text>
+                          </View>
+
                           {service.availability && Array.isArray(service.availability) && service.availability.length > 0 && (
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <MaterialCommunityIcons name="calendar-check-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
@@ -1150,7 +1269,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           </Text>
                         ) : null}
                       </View>
-                    </View>
+                    </TouchableOpacity>
 
                     {/* Bottom Action Row: Pricing, Multi-Select Checkbox & Book Button */}
                     <View style={[styles.serviceCardBottomRow, { borderTopColor: theme.colors.border + '50' }]}>
@@ -1168,30 +1287,35 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           style={[
                             styles.serviceSelectToggleBtn,
                             {
-                              backgroundColor: isServiceSelected(service) ? theme.colors.primary + '18' : theme.colors.card,
-                              borderColor: isServiceSelected(service) ? theme.colors.primary : theme.colors.border,
+                              backgroundColor: isSelected ? theme.colors.primary : theme.colors.card,
+                              borderColor: isSelected ? theme.colors.primary : theme.colors.border,
                             }
                           ]}
                           onPress={() => toggleSelectService(service)}
                           activeOpacity={0.7}
                         >
                           <MaterialCommunityIcons
-                            name={isServiceSelected(service) ? "checkbox-marked-circle" : "plus-circle-outline"}
+                            name={isSelected ? "check" : "plus"}
                             size={16}
-                            color={isServiceSelected(service) ? theme.colors.primary : theme.colors.placeholder}
+                            color={isSelected ? "#FFFFFF" : theme.colors.primary}
                             style={{ marginRight: 4 }}
                           />
                           <Text style={[
                             styles.serviceSelectToggleText,
-                            { color: isServiceSelected(service) ? theme.colors.primary : theme.colors.text, fontWeight: isServiceSelected(service) ? '700' : '600' }
+                            { color: isSelected ? "#FFFFFF" : theme.colors.text, fontWeight: isSelected ? '700' : '600' }
                           ]}>
-                            {isServiceSelected(service) ? 'Selected' : 'Select'}
+                            {isSelected ? 'Selected' : 'Select'}
                           </Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
                           style={[styles.bookBtn, { backgroundColor: theme.colors.primary }]}
-                          onPress={() => handleOpenBookingModal(service)}
+                          onPress={() => {
+                            if (!isServiceSelected(service)) {
+                              toggleSelectService(service);
+                            }
+                            handleOpenBookingModal(service);
+                          }}
                           activeOpacity={0.8}
                         >
                           <MaterialCommunityIcons name="calendar-plus" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
@@ -1209,28 +1333,91 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         </View>
       </ScrollView>
 
-      {/* Floating Bottom Bar when services are selected */}
+      {/* Floating Bottom Bar when services are selected - Large amount display & Selected Services Breakdown */}
       {selectedServices.length > 0 && !isBookingModalVisible && (
         <View style={[styles.floatingBottomBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
-          <View style={{ flex: 1, paddingRight: 10 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="check-circle" size={16} color={theme.colors.primary} style={{ marginRight: 5 }} />
-              <Text style={[styles.floatingBarTitle, { color: theme.colors.text }]}>
-                {selectedServices.length} {selectedServices.length === 1 ? 'Service' : 'Services'} Selected
-              </Text>
+          {/* 1. Selected Services with Price Chips / Pills */}
+          <View style={styles.floatingBarServicesListWrap}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={[styles.floatingSelectedBadge, { backgroundColor: theme.colors.primary + '18' }]}>
+                  <MaterialCommunityIcons name="check-circle" size={11} color={theme.colors.primary} style={{ marginRight: 3 }} />
+                  <Text style={[styles.floatingSelectedBadgeText, { color: theme.colors.primary }]}>
+                    {selectedServices.length} {selectedServices.length === 1 ? 'SERVICE SELECTED' : 'SERVICES SELECTED'}
+                  </Text>
+                </View>
+                <Text style={[styles.floatingBarModeText, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                  {hasMot ? '• 45-Min MOT Slot' : '• Workshop Drop-off'}
+                </Text>
+              </View>
+              {selectedServices.length > 1 && (
+                <TouchableOpacity
+                  onPress={() => setSelectedServices([])}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.placeholder }}>Clear All</Text>
+                </TouchableOpacity>
+              )}
             </View>
-            <Text style={[styles.floatingBarSubtitle, { color: theme.colors.primary, fontWeight: '700' }]}>
-              Total: £{totalSelectedPrice.toFixed(2)} • {hasMot ? '45-Min MOT Slot' : 'Workshop Drop-off'}
-            </Text>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 6, paddingVertical: 2 }}
+            >
+              {selectedServices.map((srv: any, idx: number) => {
+                const srvPrice = Number(srv.price !== undefined ? srv.price : (srv.minPrice || 0));
+                return (
+                  <View
+                    key={srv.id || srv._id || srv.name || idx}
+                    style={[
+                      styles.selectedServiceItemPill,
+                      {
+                        backgroundColor: theme.colors.background,
+                        borderColor: theme.colors.primary + '40',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.selectedServiceItemName, { color: theme.colors.text }]}
+                      numberOfLines={1}
+                    >
+                      {srv.name || srv.title}
+                    </Text>
+                    <View style={[styles.selectedServicePillPriceBadge, { backgroundColor: theme.colors.primary + '15' }]}>
+                      <Text style={[styles.selectedServiceItemPrice, { color: theme.colors.primary }]}>
+                        £{srvPrice.toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
           </View>
-          <TouchableOpacity
-            style={[styles.floatingBarActionBtn, { backgroundColor: theme.colors.primary }]}
-            onPress={() => handleOpenBookingModal()}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.floatingBarActionText}>Book Garage</Text>
-            <MaterialCommunityIcons name="arrow-right" size={16} color="#FFFFFF" style={{ marginLeft: 4 }} />
-          </TouchableOpacity>
+
+          {/* 2. Total Price & Action Button Row */}
+          <View style={styles.floatingBottomMainRow}>
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <Text style={[styles.floatingBarTotalLabel, { color: theme.colors.placeholder }]}>
+                Total Payable:
+              </Text>
+              <View style={styles.floatingBarPriceRow}>
+                <Text style={[styles.floatingBarCurrency, { color: theme.colors.primary }]}>£</Text>
+                <Text style={[styles.floatingBarLargeAmount, { color: theme.colors.text }]}>
+                  {totalSelectedPrice.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.floatingBarActionBtn, { backgroundColor: theme.colors.primary }]}
+              onPress={() => handleOpenBookingModal()}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.floatingBarActionText}>Book Now</Text>
+              <MaterialCommunityIcons name="arrow-right" size={17} color="#FFFFFF" style={{ marginLeft: 5 }} />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -1656,10 +1843,18 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 {/* 0. Selected Services & Multi-Service Selection */}
                 <View style={styles.flowSection}>
                   <View style={styles.flowSectionHeader}>
-                    <MaterialCommunityIcons name="wrench-clock" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                    <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
-                      Selected Services ({selectedServices.length})
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialCommunityIcons name="wrench-clock" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                      <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
+                        Selected Services ({selectedServices.length})
+                      </Text>
+                    </View>
+                    <View style={[styles.bookingModeBadge, { backgroundColor: hasMot ? '#3B82F618' : '#10B98118', borderColor: hasMot ? '#3B82F640' : '#10B98140' }]}>
+                      <MaterialCommunityIcons name={hasMot ? "clock-check-outline" : "store-clock-outline"} size={12} color={hasMot ? "#3B82F6" : "#10B981"} style={{ marginRight: 3 }} />
+                      <Text style={[styles.bookingModeBadgeText, { color: hasMot ? "#3B82F6" : "#10B981" }]}>
+                        {hasMot ? "45-Min MOT Slot" : "Workshop Drop-off"}
+                      </Text>
+                    </View>
                   </View>
 
                   {/* List of Selected Service Cards */}
@@ -1727,10 +1922,10 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                             {selectedServices.length > 1 && (
                               <TouchableOpacity
                                 onPress={() => removeServiceFromSelection(svc)}
-                                style={{ padding: 4, borderRadius: 12, backgroundColor: theme.colors.border + '40' }}
+                                style={[styles.removeServicePillBtn, { backgroundColor: theme.colors.error + '14', borderColor: theme.colors.error + '30' }]}
                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               >
-                                <MaterialCommunityIcons name="close" size={14} color={theme.colors.placeholder} />
+                                <MaterialCommunityIcons name="close" size={14} color={theme.colors.error} />
                               </TouchableOpacity>
                             )}
                           </View>
@@ -1757,36 +1952,96 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     </Text>
                   </View>
 
-                  {/* Add More Services from Garage Quick Chips */}
-                  {allActiveServices.filter((s: any) => !isServiceSelected(s)).length > 0 && (
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6 }}>
-                        + Add more services to this booking:
+                  {/* Add More Services to This Booking */}
+                  {unselectedServices.length > 0 ? (
+                    <View style={[styles.addMoreSectionCard, { backgroundColor: theme.dark ? theme.colors.card : '#F8FAFC', borderColor: theme.colors.primary + '30' }]}>
+                      <View style={styles.addMoreHeaderRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <View style={[styles.addMoreIconBadge, { backgroundColor: theme.colors.primary }]}>
+                            <MaterialCommunityIcons name="plus" size={13} color="#FFFFFF" />
+                          </View>
+                          <Text style={[styles.addMoreHeaderTitle, { color: theme.colors.text }]}>
+                            Add More Services to This Booking
+                          </Text>
+                        </View>
+                        <View style={[styles.addMoreCountBadge, { backgroundColor: theme.colors.primary + '18' }]}>
+                          <Text style={[styles.addMoreCountBadgeText, { color: theme.colors.primary }]}>
+                            {unselectedServices.length} Available
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={[styles.addMoreSubtitleText, { color: theme.colors.placeholder }]}>
+                        Combine multiple services into a single visit with {garage.name}:
                       </Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                        {allActiveServices
-                          .filter((svc: any) => !isServiceSelected(svc))
-                          .map((svc: any) => (
-                            <TouchableOpacity
+
+                      <View style={styles.addMoreCardsList}>
+                        {unselectedServices.map((svc: any) => {
+                          const svcCatTheme = getCategoryTheme(svc.category, svc.name);
+                          const svcIcon = getCategoryIcon(svc.category, svc.name);
+                          const isMot = (svc.category || '').toLowerCase().includes('mot') || (svc.name || '').toLowerCase().includes('mot');
+
+                          return (
+                            <View
                               key={svc._id || svc.id || svc.name}
-                              onPress={() => toggleSelectService(svc)}
                               style={[
-                                styles.serviceSwitchChip,
+                                styles.addMoreItemRow,
                                 {
                                   backgroundColor: theme.colors.card,
                                   borderColor: theme.colors.border,
                                 }
                               ]}
                             >
-                              <MaterialCommunityIcons name="plus" size={12} color={theme.colors.primary} style={{ marginRight: 2 }} />
-                              <Text style={[styles.serviceSwitchChipText, { color: theme.colors.text }]}>
-                                {svc.name} • £{svc.price ? Number(svc.price).toFixed(0) : '0'}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                      </ScrollView>
+                              <View style={[styles.addMoreIconCircle, { backgroundColor: svcCatTheme.bg }]}>
+                                <MaterialCommunityIcons name={svcIcon} size={18} color={svcCatTheme.text} />
+                              </View>
+
+                              <View style={styles.addMoreDetailsCol}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                                  <Text style={[styles.addMoreItemName, { color: theme.colors.text }]} numberOfLines={1}>
+                                    {svc.name}
+                                  </Text>
+                                  <View style={[styles.addMoreCatBadge, { backgroundColor: svcCatTheme.bg, borderColor: svcCatTheme.border }]}>
+                                    <Text style={[styles.addMoreCatBadgeText, { color: svcCatTheme.text }]}>
+                                      {svc.category || (isMot ? 'MOT' : 'Servicing')}
+                                    </Text>
+                                  </View>
+                                </View>
+
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                                  <MaterialCommunityIcons name="clock-time-four-outline" size={11} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
+                                  <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                                    {svc.duration || 45} mins • {isMot ? '45-Min Bay Slot' : 'Workshop Drop-off'}
+                                  </Text>
+                                </View>
+                              </View>
+
+                              <View style={styles.addMoreActionsCol}>
+                                <Text style={[styles.addMoreItemPrice, { color: theme.colors.text }]}>
+                                  +£{svc.price ? Number(svc.price).toFixed(2) : '0.00'}
+                                </Text>
+                                <TouchableOpacity
+                                  style={[styles.addMoreAddBtn, { backgroundColor: theme.colors.primary }]}
+                                  onPress={() => toggleSelectService(svc)}
+                                  activeOpacity={0.8}
+                                >
+                                  <MaterialCommunityIcons name="plus" size={13} color="#FFFFFF" style={{ marginRight: 2 }} />
+                                  <Text style={styles.addMoreAddBtnText}>Add</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
                     </View>
-                  )}
+                  ) : allActiveServices.length > 1 ? (
+                    <View style={[styles.allIncludedCard, { backgroundColor: theme.colors.success + '12', borderColor: theme.colors.success + '35' }]}>
+                      <MaterialCommunityIcons name="check-all" size={16} color={theme.colors.success} style={{ marginRight: 6 }} />
+                      <Text style={[styles.allIncludedText, { color: theme.colors.success }]}>
+                        All {allActiveServices.length} garage services are included in this booking!
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 {/* 1. Vehicle Selection Section */}
@@ -2530,6 +2785,15 @@ export default function GarageDetailScreen({ route, navigation }: any) {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
+
+      {/* Login Required Modal */}
+      <LoginRequiredModal
+        visible={isLoginModalVisible}
+        onClose={() => setIsLoginModalVisible(false)}
+        onLogin={() => navigation.navigate('Login')}
+        title="Please Login First"
+        message={`You need to be logged in to book an appointment with ${garage?.name || 'this garage'}. Please sign in to your customer account to continue.`}
+      />
     </View>
   );
 }
@@ -2539,7 +2803,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 28,
+    paddingBottom: 130,
   },
   contentContainer: {
     paddingHorizontal: 16,
@@ -3658,35 +3922,103 @@ const styles = StyleSheet.create({
     right: 0,
     borderTopWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+  },
+  floatingBarServicesListWrap: {
+    marginBottom: 8,
+    width: '100%',
+  },
+  floatingBottomMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    width: '100%',
   },
-  floatingBarTitle: {
-    fontSize: 13,
+  selectedServiceItemPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 8,
+    paddingRight: 4,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  selectedServiceItemName: {
+    fontSize: 12,
     fontWeight: '700',
+    marginRight: 6,
+    maxWidth: 160,
   },
-  floatingBarSubtitle: {
+  selectedServicePillPriceBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  selectedServiceItemPrice: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  floatingBarTotalLabel: {
     fontSize: 11,
-    marginTop: 2,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  floatingBarPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  floatingBarCurrency: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginRight: 2,
+  },
+  floatingBarLargeAmount: {
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  floatingSelectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginRight: 4,
+  },
+  floatingSelectedBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  floatingBarModeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
   },
   floatingBarActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
   },
   floatingBarActionText: {
     color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
+    fontWeight: '800',
+    fontSize: 15,
+    letterSpacing: 0.2,
   },
   multiServiceTotalStrip: {
     flexDirection: 'row',
@@ -3719,5 +4051,131 @@ const styles = StyleSheet.create({
   dateOnlyCardBody: {
     fontSize: 12,
     lineHeight: 18,
+  },
+  bookingModeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  bookingModeBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  removeServicePillBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addMoreSectionCard: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  addMoreHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  addMoreIconBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
+  },
+  addMoreHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  addMoreCountBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  addMoreCountBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  addMoreSubtitleText: {
+    fontSize: 11,
+    marginBottom: 10,
+  },
+  addMoreCardsList: {
+    gap: 8,
+  },
+  addMoreItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  addMoreIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  addMoreDetailsCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+  addMoreItemName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  addMoreCatBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 0.5,
+  },
+  addMoreCatBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  addMoreActionsCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  addMoreItemPrice: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  addMoreAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  addMoreAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  allIncludedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  allIncludedText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

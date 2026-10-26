@@ -34,7 +34,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }: any) {
   const { theme } = useAppTheme();
-  const { setToken, setUser } = useAppValues();
+  const { setToken, setTokens, setUser } = useAppValues();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -111,7 +111,7 @@ export default function LoginScreen({ navigation }: any) {
         return;
       }
 
-      setToken(data.token);
+      setTokens(data.accessToken || data.token, data.refreshToken || null);
       setUser(data.user);
 
       if (

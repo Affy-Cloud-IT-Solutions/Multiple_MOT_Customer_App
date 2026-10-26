@@ -200,6 +200,40 @@ export default function BookingsScreen({ navigation }: any) {
     );
   };
 
+  const handleReschedule = (booking: any) => {
+    setSelectedBookingForDetails(null);
+    const isMot = booking.hasMot !== false && (
+      booking.hasMot === true ||
+      (booking.serviceName && booking.serviceName.toLowerCase().includes('mot')) ||
+      Boolean(booking.slotTime)
+    );
+
+    const vehicleObj = {
+      registrationNumber: booking.registrationNumber,
+      make: booking.makeModel ? booking.makeModel.split(' ')[0] : 'Vehicle',
+      model: booking.makeModel ? booking.makeModel.split(' ').slice(1).join(' ').replace(/ - Slot:.*$/, '').replace(/ - .*$/, '') : '',
+      customerId: booking.customerId || customer.id || customer._id,
+    };
+
+    const gId = typeof booking.garageId === 'object' ? (booking.garageId?._id || booking.garageId?.id) : booking.garageId;
+    const gName = booking.garageName || (typeof booking.garageId === 'object' ? (booking.garageId?.name || booking.garageId?.garageName) : '') || '';
+
+    navigation.navigate('Booking', {
+      isReschedule: true,
+      activeBooking: booking,
+      vehicle: vehicleObj,
+      garageId: gId,
+      garageName: gName,
+      serviceName: booking.serviceName || (isMot ? 'MOT Test' : 'Vehicle Service'),
+      hasMot: isMot,
+      isDateOnly: !isMot,
+      bookedDate: booking.date,
+      slotTime: booking.slotTime || '',
+      slotNumber: booking.slotNumber,
+      price: booking.price,
+    });
+  };
+
   const formatDisplayDate = (dateStr: string) => {
     if (!dateStr) return 'Selected Date';
     try {
@@ -216,7 +250,7 @@ export default function BookingsScreen({ navigation }: any) {
     }
   };
 
-  const getSlotDisplay = (makeModel: string, slotTime?: string, isDateOnly?: boolean, hasMot?: boolean) => {
+  const getSlotDisplay = (makeModel?: string, slotTime?: string, isDateOnly?: boolean, hasMot?: boolean) => {
     if (isDateOnly || hasMot === false || slotTime === 'Drop-off (Full Day)' || slotTime === 'Full Day Drop-off') {
       return 'Workshop Drop-off (Full Day)';
     }
@@ -227,7 +261,7 @@ export default function BookingsScreen({ navigation }: any) {
     return 'Regular Slot';
   };
 
-  const getVehicleDisplay = (makeModel: string) => {
+  const getVehicleDisplay = (makeModel?: string) => {
     if (!makeModel) return 'Vehicle MOT Inspection';
     if (makeModel.includes(' - Slot: ')) {
       return makeModel.split(' - Slot: ')[0];
@@ -623,24 +657,35 @@ export default function BookingsScreen({ navigation }: any) {
                   </View>
                 )}
 
-                {/* 5. Cancel Booking Button: Strictly when status is Pending */}
-                {statusCfg.isPending && (
+                {/* 5. Reschedule & Cancel Action Buttons */}
+                {(statusCfg.isPending || statusCfg.isConfirmed) && (
                   <View style={[styles.cardBottomRow, { borderTopColor: theme.colors.border + '50' }]}>
                     <TouchableOpacity
-                      onPress={() => handleCancel(item)}
-                      disabled={isCancelling}
-                      style={styles.cancelBookingBtn}
+                      onPress={() => handleReschedule(item)}
+                      style={[styles.rescheduleCardBtn, { borderColor: theme.colors.secondary + '40', backgroundColor: theme.colors.secondary + '12' }]}
                       activeOpacity={0.7}
                     >
-                      {isCancelling ? (
-                        <ActivityIndicator size="small" color="#EF4444" />
-                      ) : (
-                        <>
-                          <MaterialCommunityIcons name="close-circle-outline" size={13} color="#EF4444" style={{ marginRight: 4 }} />
-                          <Text style={styles.cancelBookingBtnText}>Cancel Booking</Text>
-                        </>
-                      )}
+                      <MaterialCommunityIcons name="calendar-edit" size={13} color={theme.colors.secondary} style={{ marginRight: 4 }} />
+                      <Text style={[styles.rescheduleCardBtnText, { color: theme.colors.secondary }]}>Reschedule</Text>
                     </TouchableOpacity>
+
+                    {statusCfg.isPending && (
+                      <TouchableOpacity
+                        onPress={() => handleCancel(item)}
+                        disabled={isCancelling}
+                        style={styles.cancelBookingBtn}
+                        activeOpacity={0.7}
+                      >
+                        {isCancelling ? (
+                          <ActivityIndicator size="small" color="#EF4444" />
+                        ) : (
+                          <>
+                            <MaterialCommunityIcons name="close-circle-outline" size={13} color="#EF4444" style={{ marginRight: 4 }} />
+                            <Text style={styles.cancelBookingBtnText}>Cancel</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
               </View>
@@ -917,25 +962,38 @@ export default function BookingsScreen({ navigation }: any) {
                           </View>
                         )}
 
-                        {/* Cancel Button inside bottomsheet if pending */}
-                        {statusCfg.isPending && (
-                          <TouchableOpacity
-                            onPress={() => {
-                              handleCancel(item);
-                            }}
-                            disabled={isCancelling}
-                            style={[styles.sheetCancelBtn, { borderColor: '#EF444440' }]}
-                            activeOpacity={0.7}
-                          >
-                            {isCancelling ? (
-                              <ActivityIndicator size="small" color="#EF4444" />
-                            ) : (
-                              <>
-                                <MaterialCommunityIcons name="close-circle-outline" size={16} color="#EF4444" style={{ marginRight: 6 }} />
-                                <Text style={styles.sheetCancelBtnText}>Cancel Booking</Text>
-                              </>
+                        {/* Action buttons inside bottomsheet */}
+                        {(statusCfg.isPending || statusCfg.isConfirmed) && (
+                          <View style={{ marginTop: 12, gap: 8 }}>
+                            <TouchableOpacity
+                              onPress={() => handleReschedule(item)}
+                              style={[styles.sheetRescheduleBtn, { backgroundColor: theme.colors.secondary }]}
+                              activeOpacity={0.8}
+                            >
+                              <MaterialCommunityIcons name="calendar-edit" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                              <Text style={styles.sheetRescheduleBtnText}>Reschedule Appointment</Text>
+                            </TouchableOpacity>
+
+                            {statusCfg.isPending && (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  handleCancel(item);
+                                }}
+                                disabled={isCancelling}
+                                style={[styles.sheetCancelBtn, { borderColor: '#EF444440' }]}
+                                activeOpacity={0.7}
+                              >
+                                {isCancelling ? (
+                                  <ActivityIndicator size="small" color="#EF4444" />
+                                ) : (
+                                  <>
+                                    <MaterialCommunityIcons name="close-circle-outline" size={16} color="#EF4444" style={{ marginRight: 6 }} />
+                                    <Text style={styles.sheetCancelBtnText}>Cancel Booking</Text>
+                                  </>
+                                )}
+                              </TouchableOpacity>
                             )}
-                          </TouchableOpacity>
+                          </View>
                         )}
                       </ScrollView>
                     </View>
@@ -1183,6 +1241,19 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontWeight: '600',
   },
+  rescheduleCardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2.5,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  rescheduleCardBtnText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
   // BottomSheet Modal Styles
   modalBackdrop: {
     flex: 1,
@@ -1372,6 +1443,19 @@ const styles = StyleSheet.create({
   sheetReasonText: {
     fontSize: 11,
     marginTop: 2,
+  },
+  sheetRescheduleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  sheetRescheduleBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '700',
   },
   sheetCancelBtn: {
     flexDirection: 'row',

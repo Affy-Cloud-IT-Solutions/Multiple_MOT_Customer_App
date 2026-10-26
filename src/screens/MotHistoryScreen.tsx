@@ -121,14 +121,16 @@ export default function MotHistoryScreen({ route, navigation }: any) {
   const [expandedTestIdxs, setExpandedTestIdxs] = useState<Record<number, boolean>>({ 0: true });
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'PASSED' | 'FAILED' | 'ADVISORIES'>('ALL');
 
-  const registration = route?.params?.registration || route?.params?.vehicleData?.registration;
+  const registration = route?.params?.registration || route?.params?.vehicleData?.registration || route?.params?.vehicleData?.registrationNumber;
   const initialVehicleData = route?.params?.vehicleData;
 
   useEffect(() => {
-    if (initialVehicleData) {
+    if (initialVehicleData && Array.isArray(initialVehicleData.motTests) && initialVehicleData.motTests.length > 0) {
       setVehicle(initialVehicleData);
     } else if (registration) {
       fetchHistory(registration);
+    } else if (initialVehicleData) {
+      setVehicle(initialVehicleData);
     } else {
       setError('No vehicle registration provided.');
     }
@@ -142,11 +144,11 @@ export default function MotHistoryScreen({ route, navigation }: any) {
       if (res && res.found && res.vehicle) {
         setVehicle(res.vehicle);
       } else {
-        setError('Vehicle details not found in official DVLA registry.');
+        setError('Vehicle details not found. Please check the registration plate and try again.');
       }
     } catch (err: any) {
       console.error('[MotHistoryScreen] error fetching:', err);
-      setError(err.message || 'Failed to fetch MOT history from registry.');
+      setError(err.message || 'Vehicle details not found. Please check the registration plate and try again.');
     } finally {
       setLoading(false);
     }
@@ -187,19 +189,86 @@ export default function MotHistoryScreen({ route, navigation }: any) {
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
-    const date = new Date(dateStr.replace(/\./g, '-'));
-    if (isNaN(date.getTime())) return dateStr;
+    const clean = String(dateStr).trim();
+    if (!clean || clean === 'N/A') return 'N/A';
+
+    // Normalize dots to hyphens and convert space before time to 'T'
+    let normalized = clean.replace(/\./g, '-');
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(normalized)) {
+      normalized = normalized.replace(/\s+/, 'T');
+    }
+
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
     ];
-    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+
+    const date = new Date(normalized);
+    if (!isNaN(date.getTime())) {
+      return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    }
+
+    // Direct match for YYYY-MM-DD or YYYY.MM.DD
+    const isoMatch = clean.match(/^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/);
+    if (isoMatch) {
+      const yr = isoMatch[1];
+      const mIdx = parseInt(isoMatch[2], 10) - 1;
+      const day = parseInt(isoMatch[3], 10);
+      if (mIdx >= 0 && mIdx < 12) {
+        return `${day} ${months[mIdx]} ${yr}`;
+      }
+    }
+
+    // Direct match for UK DD/MM/YYYY or DD-MM-YYYY
+    const ukMatch = clean.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+    if (ukMatch) {
+      const day = parseInt(ukMatch[1], 10);
+      const mIdx = parseInt(ukMatch[2], 10) - 1;
+      const yr = ukMatch[3];
+      if (mIdx >= 0 && mIdx < 12) {
+        return `${day} ${months[mIdx]} ${yr}`;
+      }
+    }
+
+    return clean;
+  };
+
+  const formatOdometerRecording = (test: any): string => {
+    if (!test) return 'Unrecorded';
+    if (test.odometerResultType === 'UNRECORDED' || test.odometerResultType === 'NO_ODOMETER') {
+      return 'Unrecorded';
+    }
+    const val = test.odometerValue;
+    if (!val || val === '0' || val === 'N/A') {
+      if (test.mileage && test.mileage !== 'N/A') return test.mileage;
+      return 'Unrecorded';
+    }
+    const num = parseInt(String(val).replace(/,/g, ''), 10);
+    if (isNaN(num)) return String(val);
+    const unitRaw = (test.odometerUnit || 'mi').toLowerCase();
+    const unit = (unitRaw === 'km' || unitRaw === 'kilometres') ? 'km' : 'miles';
+    return `${num.toLocaleString()} ${unit}`;
   };
 
   const getDaysRemaining = (expiryDateStr?: string) => {
     if (!expiryDateStr) return null;
-    const d = new Date(expiryDateStr.replace(/\./g, '-'));
-    if (isNaN(d.getTime())) return null;
+    let normalized = String(expiryDateStr).trim().replace(/\./g, '-');
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(normalized)) {
+      normalized = normalized.replace(/\s+/, 'T');
+    }
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) {
+      const match = normalized.match(/^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/);
+      if (match) {
+        const parsed = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+        if (!isNaN(parsed.getTime())) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          return Math.ceil((parsed.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        }
+      }
+      return null;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -229,9 +298,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
     });
 
     const latest = allMotTests[0];
-    const latestMileage = latest?.odometerValue
-      ? `${parseInt(latest.odometerValue).toLocaleString()} mi`
-      : 'N/A';
+    const latestMileage = formatOdometerRecording(latest);
 
     return { total, passed, failed, passRate, totalAdvisories, latestMileage, latest };
   }, [allMotTests]);
@@ -317,10 +384,10 @@ export default function MotHistoryScreen({ route, navigation }: any) {
   };
 
   const handleSaveVehicleToGarage = async (andProceedToBooking = false) => {
-    if (!user && !token) {
+    if (!token || !token.trim()) {
       Alert.alert(
         'Sign In Required',
-        'Please sign in or create an account to save this vehicle to your garage and track its MOT expiry.',
+        'Please sign in to your account to add this vehicle.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Sign In', onPress: () => navigation.navigate('Login') },
@@ -330,7 +397,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
     }
 
     if (!vehicle) {
-      Alert.alert('Error', 'Vehicle details not available to add.');
+      Alert.alert('Vehicle Not Found', 'Vehicle details not available to add.');
       return;
     }
 
@@ -389,7 +456,24 @@ export default function MotHistoryScreen({ route, navigation }: any) {
       }
     } catch (err: any) {
       console.error('[MotHistoryScreen] failed to add vehicle:', err);
-      Alert.alert('Could Not Add Vehicle', err.message || 'Failed to add vehicle to your account.');
+      const isAuthError = !token || (err.message && (
+        err.message.toLowerCase().includes('token') ||
+        err.message.toLowerCase().includes('sign in') ||
+        err.message.toLowerCase().includes('unauthorized') ||
+        err.message.toLowerCase().includes('auth')
+      ));
+      if (isAuthError) {
+        Alert.alert(
+          'Sign In Required',
+          'Please sign in to your account to add this vehicle.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+          ]
+        );
+      } else {
+        Alert.alert('Could Not Add Vehicle', err.message || 'Failed to add vehicle to your account.');
+      }
     } finally {
       setAddingVehicle(false);
     }
@@ -413,7 +497,20 @@ export default function MotHistoryScreen({ route, navigation }: any) {
           {
             text: 'Add & Book Slot',
             style: 'default',
-            onPress: () => handleSaveVehicleToGarage(true),
+            onPress: () => {
+              if (!token || !token.trim()) {
+                Alert.alert(
+                  'Sign In Required',
+                  'Please sign in to your account to add this vehicle.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+                  ]
+                );
+                return;
+              }
+              handleSaveVehicleToGarage(true);
+            },
           },
         ]
       );
@@ -437,14 +534,17 @@ export default function MotHistoryScreen({ route, navigation }: any) {
   }
 
   if (error || !vehicle) {
+    const isBusy = error && (error.toLowerCase().includes('busy') || error.toLowerCase().includes('taking too long') || error.toLowerCase().includes('dvsa'));
     return (
       <View style={[styles.centerContainer, { backgroundColor: theme.colors.background }]}>
         <View style={styles.errorIconCircle}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={54} color="#EF4444" />
+          <MaterialCommunityIcons name={isBusy ? "timer-sand" : "car-off"} size={54} color={isBusy ? "#F59E0B" : "#EF4444"} />
         </View>
-        <Text style={[styles.errorTitle, { color: theme.colors.text }]}>MOT Lookup Failed</Text>
+        <Text style={[styles.errorTitle, { color: theme.colors.text }]}>
+          {isBusy ? 'Government API Busy' : 'Vehicle Not Found'}
+        </Text>
         <Text style={[styles.errorSubtitle, { color: theme.colors.placeholder }]}>
-          {error || 'Could not load MOT history for this vehicle.'}
+          {error || 'Vehicle details not found. Please check the registration plate and try again.'}
         </Text>
         <TouchableOpacity
           onPress={() => registration && fetchHistory(registration)}
@@ -452,7 +552,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
           activeOpacity={0.8}
         >
           <MaterialCommunityIcons name="reload" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-          <Text style={styles.retryBtnText}>Retry DVSA Lookup</Text>
+          <Text style={styles.retryBtnText}>Check Again</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -794,16 +894,22 @@ export default function MotHistoryScreen({ route, navigation }: any) {
                             </Text>
                           </View>
 
-                          <Text style={[styles.testDateText, { color: theme.colors.text }]}>
-                            {formatDate(test.completedDate)}
-                          </Text>
+                          <View style={styles.dateBadgeWrap}>
+                            <MaterialCommunityIcons name="calendar-month-outline" size={13} color={theme.colors.secondary} style={{ marginRight: 4 }} />
+                            <Text style={[styles.testDateText, { color: theme.colors.text }]}>
+                              {formatDate(test.completedDate)}
+                            </Text>
+                          </View>
                         </View>
 
-                        {/* Mileage Row */}
+                        {/* Mileage / Odometer Recording Row */}
                         <View style={styles.mileageRow}>
-                          <MaterialCommunityIcons name="speedometer" size={14} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
-                          <Text style={[styles.mileageText, { color: theme.colors.placeholder }]}>
-                            {test.odometerValue ? `${parseInt(test.odometerValue).toLocaleString()} mi` : 'Mileage unrecorded'}
+                          <MaterialCommunityIcons name="speedometer" size={14} color={theme.colors.secondary} style={{ marginRight: 5 }} />
+                          <Text style={[styles.mileageLabel, { color: theme.colors.placeholder }]}>
+                            Recording:{' '}
+                          </Text>
+                          <Text style={[styles.mileageText, { color: theme.colors.text }]}>
+                            {formatOdometerRecording(test)}
                           </Text>
                           {mileageDelta !== null && (
                             <View style={styles.deltaBadge}>
@@ -825,7 +931,21 @@ export default function MotHistoryScreen({ route, navigation }: any) {
                       <View style={[styles.cardExpandedContent, { borderTopColor: theme.colors.border }]}>
                         {/* Summary Metadata Row */}
                         <View style={[styles.testMetaRow, { backgroundColor: theme.colors.background }]}>
-                          <View style={{ flex: 1, marginRight: 8 }}>
+                          <View style={styles.metaItemCol}>
+                            <Text style={[styles.metaLabel, { color: theme.colors.placeholder }]}>Date of Test</Text>
+                            <Text style={[styles.metaValue, { color: theme.colors.text, marginTop: 2 }]}>
+                              {formatDate(test.completedDate)}
+                            </Text>
+                          </View>
+
+                          <View style={styles.metaItemCol}>
+                            <Text style={[styles.metaLabel, { color: theme.colors.placeholder }]}>Odometer Recording</Text>
+                            <Text style={[styles.metaValue, { color: theme.colors.text, marginTop: 2, fontWeight: '700' }]}>
+                              {formatOdometerRecording(test)}
+                            </Text>
+                          </View>
+
+                          <View style={styles.metaItemCol}>
                             <Text style={[styles.metaLabel, { color: theme.colors.placeholder }]}>MOT Test Number</Text>
                             <TouchableOpacity
                               onPress={() => handleCopyTestNumber(test.motTestNumber)}
@@ -835,14 +955,14 @@ export default function MotHistoryScreen({ route, navigation }: any) {
                               <Text style={[styles.metaValue, { color: theme.colors.text }]}>
                                 {test.motTestNumber || 'N/A'}
                               </Text>
-                              <MaterialCommunityIcons name="content-copy" size={13} color={theme.colors.secondary} style={{ marginLeft: 6 }} />
+                              <MaterialCommunityIcons name="content-copy" size={12} color={theme.colors.secondary} style={{ marginLeft: 5 }} />
                             </TouchableOpacity>
                           </View>
 
                           {isPassed && test.expiryDate && (
-                            <View style={{ alignItems: 'flex-end' }}>
+                            <View style={styles.metaItemCol}>
                               <Text style={[styles.metaLabel, { color: theme.colors.placeholder }]}>Test Expiry</Text>
-                              <Text style={[styles.metaValue, { color: '#10B981', fontWeight: '800' }]}>
+                              <Text style={[styles.metaValue, { color: '#10B981', fontWeight: '800', marginTop: 2 }]}>
                                 {formatDate(test.expiryDate)}
                               </Text>
                             </View>
@@ -1345,12 +1465,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  mileageRow: {
+  dateBadgeWrap: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  mileageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+  },
+  mileageLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
   mileageText: {
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: '700',
   },
   deltaBadge: {
     backgroundColor: '#8B5CF618',
@@ -1370,10 +1500,18 @@ const styles = StyleSheet.create({
   },
   testMetaRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     padding: 10,
     borderRadius: 10,
     marginBottom: 10,
+    rowGap: 8,
+  },
+  metaItemCol: {
+    minWidth: 105,
+    flex: 1,
+    marginVertical: 2,
+    marginRight: 6,
   },
   copyTestNumberBtn: {
     flexDirection: 'row',

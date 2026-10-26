@@ -42,6 +42,71 @@ export default function ResultScreen({ route, navigation }: any) {
   const vehicle = route?.params?.vehicleData || defaultVehicle;
   const isPass = vehicle.status === 'PASS';
 
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    const clean = String(dateStr).trim();
+    if (!clean || clean === 'N/A') return 'N/A';
+
+    let normalized = clean.replace(/\./g, '-');
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(normalized)) {
+      normalized = normalized.replace(/\s+/, 'T');
+    }
+
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    const date = new Date(normalized);
+    if (!isNaN(date.getTime())) {
+      return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    }
+
+    const isoMatch = clean.match(/^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/);
+    if (isoMatch) {
+      const yr = isoMatch[1];
+      const mIdx = parseInt(isoMatch[2], 10) - 1;
+      const day = parseInt(isoMatch[3], 10);
+      if (mIdx >= 0 && mIdx < 12) {
+        return `${day} ${months[mIdx]} ${yr}`;
+      }
+    }
+    return clean;
+  };
+
+  const getDaysRemaining = (expiryDateStr?: string) => {
+    if (!expiryDateStr) return null;
+    let normalized = String(expiryDateStr).trim().replace(/\./g, '-');
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(normalized)) {
+      normalized = normalized.replace(/\s+/, 'T');
+    }
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) {
+      const match = normalized.match(/^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/);
+      if (match) {
+        const parsed = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+        if (!isNaN(parsed.getTime())) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          return Math.ceil((parsed.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        }
+      }
+      return null;
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  const formatMileage = (val?: string) => {
+    if (!val || val === 'N/A' || val === '0') return 'Unrecorded';
+    const clean = String(val).trim();
+    const num = parseInt(clean.replace(/[^0-9]/g, ''), 10);
+    if (isNaN(num)) return clean;
+    const isKm = clean.toLowerCase().includes('km');
+    return `${num.toLocaleString()} ${isKm ? 'km' : 'miles'}`;
+  };
+
 
 
   return (
@@ -112,13 +177,10 @@ export default function ResultScreen({ route, navigation }: any) {
           <Text style={[styles.expiryText, { color: theme.colors.text }]}>
             {isPass ? 'Expiry Date:' : 'Status Detail:'}{' '}
             <Text style={{ fontWeight: 'bold' }}>
-              {vehicle.expiryDate}
+              {formatDate(vehicle.expiryDate)}
               {isPass && vehicle.expiryDate ? (() => {
-                const d = new Date(vehicle.expiryDate);
-                if (!isNaN(d.getTime())) {
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  const diff = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                const diff = getDaysRemaining(vehicle.expiryDate);
+                if (diff !== null) {
                   return ` (${diff >= 0 ? `${diff} days left` : `${Math.abs(diff)} days ago`})`;
                 }
                 return '';
@@ -140,7 +202,7 @@ export default function ResultScreen({ route, navigation }: any) {
             <MaterialCommunityIcons name="calendar" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
             <Text style={{ color: theme.colors.placeholder }}>Test Date</Text>
           </View>
-          <Text style={[styles.detailValue, { color: theme.colors.text }]}>{vehicle.testDate}</Text>
+          <Text style={[styles.detailValue, { color: theme.colors.text, fontWeight: '700' }]}>{formatDate(vehicle.testDate)}</Text>
         </View>
         <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
         
@@ -156,9 +218,9 @@ export default function ResultScreen({ route, navigation }: any) {
         <View style={styles.detailRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="speedometer" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
-            <Text style={{ color: theme.colors.placeholder }}>Mileage</Text>
+            <Text style={{ color: theme.colors.placeholder }}>Odometer Recording</Text>
           </View>
-          <Text style={[styles.detailValue, { color: theme.colors.text }]}>{vehicle.mileage}</Text>
+          <Text style={[styles.detailValue, { color: theme.colors.text, fontWeight: '700' }]}>{formatMileage(vehicle.mileage)}</Text>
         </View>
       </View>
 

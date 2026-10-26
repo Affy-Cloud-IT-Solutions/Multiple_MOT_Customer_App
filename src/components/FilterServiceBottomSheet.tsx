@@ -29,8 +29,7 @@ export const SERVICE_CATEGORIES = [
   'All',
   'MOT',
   'Servicing',
-  'Brakes & Tyres',
-  'Diagnostics',
+  'Tyres',
   'Repairs',
 ] as const;
 
@@ -258,23 +257,49 @@ export const isServiceMatch = (service: any, filterKey: string): boolean => {
 export interface FilterServiceBottomSheetProps {
   visible: boolean;
   onClose: () => void;
-  selectedService: string;
+  selectedService?: string;
   selectedServiceTitle?: string;
-  onSelectService: (serviceKey: string, serviceTitle: string) => void;
+  selectedServices?: string[];
+  selectedServiceTitles?: string[];
+  onSelectService?: (serviceKey: string, serviceTitle: string) => void;
+  onApplyServices?: (serviceKeys: string[], serviceTitles: string[]) => void;
   garages?: any[];
 }
 
 export default function FilterServiceBottomSheet({
   visible,
   onClose,
-  selectedService,
-  selectedServiceTitle,
+  selectedService = '',
+  selectedServiceTitle = '',
+  selectedServices = [],
+  selectedServiceTitles = [],
   onSelectService,
+  onApplyServices,
   garages = [],
 }: FilterServiceBottomSheetProps) {
   const { theme } = useAppTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [tempSelected, setTempSelected] = useState<Array<{ keyword: string; title: string }>>([]);
+
+  // Sync tempSelected whenever the bottom sheet opens or props change
+  useEffect(() => {
+    if (!visible) return;
+    if (selectedServices && selectedServices.length > 0) {
+      const items = selectedServices.map((key, idx) => ({
+        keyword: key,
+        title: (selectedServiceTitles && selectedServiceTitles[idx]) || key,
+      }));
+      setTempSelected(items);
+    } else if (selectedService && selectedService.trim()) {
+      setTempSelected([{
+        keyword: selectedService.trim(),
+        title: selectedServiceTitle || selectedService.trim(),
+      }]);
+    } else {
+      setTempSelected([]);
+    }
+  }, [visible, selectedService, selectedServiceTitle, selectedServices, selectedServiceTitles]);
 
   // Count how many garages offer a given service
   const getGarageCountForService = useMemo(() => {
@@ -336,15 +361,16 @@ export default function FilterServiceBottomSheet({
     return list;
   }, [garages, theme.colors.primary]);
 
-  // Auto-switch category tab to match active selectedService if present
+  // Auto-switch category tab to match active selectedService if single
   useEffect(() => {
     if (!visible) return;
-    if (!selectedService) {
+    const firstTarget = tempSelected[0]?.keyword || selectedService;
+    if (!firstTarget) {
       setSelectedCategory('All');
       return;
     }
     const matched = allServices.find((s) =>
-      isServiceMatch({ name: s.keyword, category: s.category }, selectedService)
+      isServiceMatch({ name: s.keyword, category: s.category }, firstTarget)
     );
     if (matched && matched.category) {
       setSelectedCategory(matched.category);
@@ -373,20 +399,70 @@ export default function FilterServiceBottomSheet({
     return list;
   }, [allServices, selectedCategory, searchQuery]);
 
-  const handleSelect = (serviceKey: string, serviceTitle: string) => {
-    onSelectService(serviceKey, serviceTitle);
+  // Check if a service keyword is currently in tempSelected
+  const isItemSelected = (keyword: string) => {
+    return tempSelected.some((item) =>
+      item.keyword.toLowerCase().trim() === keyword.toLowerCase().trim() ||
+      isServiceMatch({ name: keyword }, item.keyword)
+    );
+  };
+
+  // Toggle selection for multiple services
+  const toggleSelect = (keyword: string, title: string) => {
+    setTempSelected((prev) => {
+      const exists = prev.some((item) =>
+        item.keyword.toLowerCase().trim() === keyword.toLowerCase().trim() ||
+        isServiceMatch({ name: keyword }, item.keyword)
+      );
+      if (exists) {
+        return prev.filter((item) =>
+          item.keyword.toLowerCase().trim() !== keyword.toLowerCase().trim() &&
+          !isServiceMatch({ name: keyword }, item.keyword)
+        );
+      } else {
+        return [...prev, { keyword, title }];
+      }
+    });
+  };
+
+  // Count garages matching the current tempSelected filter
+  const matchingGaragesCount = useMemo(() => {
+    if (tempSelected.length === 0) return garages.length;
+    const keys = tempSelected.map((s) => s.keyword);
+    const hasOfferingAll = garages.some((g) =>
+      Array.isArray(g.services) && keys.every((k) => g.services.some((s: any) => isServiceMatch(s, k)))
+    );
+    if (hasOfferingAll) {
+      return garages.filter((g) =>
+        Array.isArray(g.services) && keys.every((k) => g.services.some((s: any) => isServiceMatch(s, k)))
+      ).length;
+    }
+    return garages.filter((g) =>
+      Array.isArray(g.services) && keys.some((k) => g.services.some((s: any) => isServiceMatch(s, k)))
+    ).length;
+  }, [tempSelected, garages]);
+
+  const handleApply = () => {
+    const keys = tempSelected.map((s) => s.keyword);
+    const titles = tempSelected.map((s) => s.title);
+    if (onApplyServices) {
+      onApplyServices(keys, titles);
+    }
+    if (onSelectService) {
+      onSelectService(keys.join(','), titles.join(', '));
+    }
     onClose();
   };
 
-  const handleClear = () => {
-    onSelectService('', '');
+  const handleClearAll = () => {
+    setTempSelected([]);
+    if (onApplyServices) {
+      onApplyServices([], []);
+    }
+    if (onSelectService) {
+      onSelectService('', '');
+    }
     onClose();
-  };
-
-  const isCurrentSelection = (keyword: string) => {
-    if (!selectedService && !keyword) return true;
-    if (!selectedService || !keyword) return false;
-    return selectedService.toLowerCase().trim() === keyword.toLowerCase().trim();
   };
 
   return (
@@ -438,15 +514,17 @@ export default function FilterServiceBottomSheet({
                         style={[styles.headerSubtitle, { color: theme.colors.placeholder }]}
                         numberOfLines={1}
                       >
-                        Tap a category tab or service to filter
+                        {tempSelected.length > 0
+                          ? `${tempSelected.length} ${tempSelected.length === 1 ? 'service' : 'services'} selected • Tap Apply below`
+                          : 'Select one or more services to filter'}
                       </Text>
                     </View>
                   </View>
 
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {Boolean(selectedService) && (
+                    {tempSelected.length > 0 && (
                       <TouchableOpacity
-                        onPress={handleClear}
+                        onPress={() => setTempSelected([])}
                         style={[
                           styles.resetBtn,
                           { backgroundColor: theme.colors.primary + '15' },
@@ -456,7 +534,7 @@ export default function FilterServiceBottomSheet({
                         <Text
                           style={[styles.resetBtnText, { color: theme.colors.primary }]}
                         >
-                          Reset
+                          Clear
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -572,22 +650,22 @@ export default function FilterServiceBottomSheet({
                       style={[
                         styles.serviceItemTab,
                         {
-                          backgroundColor: !selectedService
+                          backgroundColor: tempSelected.length === 0
                             ? theme.colors.primary + '10'
                             : theme.colors.background,
-                          borderColor: !selectedService
+                          borderColor: tempSelected.length === 0
                             ? theme.colors.primary
                             : theme.colors.border,
                         },
                       ]}
                       activeOpacity={0.7}
-                      onPress={handleClear}
+                      onPress={handleClearAll}
                     >
                       <View
                         style={[
                           styles.serviceIconWrap,
                           {
-                            backgroundColor: !selectedService
+                            backgroundColor: tempSelected.length === 0
                               ? theme.colors.primary + '20'
                               : theme.colors.secondary + '15',
                           },
@@ -597,7 +675,7 @@ export default function FilterServiceBottomSheet({
                           name="apps"
                           size={18}
                           color={
-                            !selectedService
+                            tempSelected.length === 0
                               ? theme.colors.primary
                               : theme.colors.secondary
                           }
@@ -610,7 +688,7 @@ export default function FilterServiceBottomSheet({
                             style={[
                               styles.serviceTitle,
                               {
-                                color: !selectedService
+                                color: tempSelected.length === 0
                                   ? theme.colors.primary
                                   : theme.colors.text,
                               },
@@ -618,7 +696,7 @@ export default function FilterServiceBottomSheet({
                           >
                             All Garages (No Filter)
                           </Text>
-                          {!selectedService && (
+                          {tempSelected.length === 0 && (
                             <View
                               style={[
                                 styles.activeBadge,
@@ -656,21 +734,21 @@ export default function FilterServiceBottomSheet({
                         </View>
                         <View
                           style={[
-                            styles.radioCircle,
+                            styles.multiCheckbox,
                             {
-                              borderColor: !selectedService
+                              borderColor: tempSelected.length === 0
                                 ? theme.colors.primary
                                 : theme.colors.border,
-                              backgroundColor: !selectedService
+                              backgroundColor: tempSelected.length === 0
                                 ? theme.colors.primary
                                 : 'transparent',
                             },
                           ]}
                         >
-                          {!selectedService && (
+                          {tempSelected.length === 0 && (
                             <MaterialCommunityIcons
                               name="check"
-                              size={11}
+                              size={12}
                               color="#FFFFFF"
                             />
                           )}
@@ -699,7 +777,7 @@ export default function FilterServiceBottomSheet({
                     </View>
                   ) : (
                     filteredServices.map((item) => {
-                      const isSelected = isCurrentSelection(item.keyword);
+                      const isSelected = isItemSelected(item.keyword);
                       const count = getGarageCountForService(item.keyword);
 
                       return (
@@ -717,7 +795,7 @@ export default function FilterServiceBottomSheet({
                             },
                           ]}
                           activeOpacity={0.7}
-                          onPress={() => handleSelect(item.keyword, item.title)}
+                          onPress={() => toggleSelect(item.keyword, item.title)}
                         >
                           <View
                             style={[
@@ -760,7 +838,7 @@ export default function FilterServiceBottomSheet({
                                       { color: theme.colors.primary },
                                     ]}
                                   >
-                                    Active
+                                    Selected
                                   </Text>
                                 </View>
                               )}
@@ -796,7 +874,7 @@ export default function FilterServiceBottomSheet({
 
                             <View
                               style={[
-                                styles.radioCircle,
+                                styles.multiCheckbox,
                                 {
                                   borderColor: isSelected
                                     ? theme.colors.primary
@@ -810,7 +888,7 @@ export default function FilterServiceBottomSheet({
                               {isSelected && (
                                 <MaterialCommunityIcons
                                   name="check"
-                                  size={11}
+                                  size={12}
                                   color="#FFFFFF"
                                 />
                               )}
@@ -821,6 +899,31 @@ export default function FilterServiceBottomSheet({
                     })
                   )}
                 </ScrollView>
+
+                {/* Sticky Action Footer */}
+                <View style={[styles.sheetFooterBar, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.card }]}>
+                  {tempSelected.length > 0 && (
+                    <TouchableOpacity
+                      style={[styles.sheetResetBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                      onPress={() => setTempSelected([])}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.sheetResetText, { color: theme.colors.placeholder }]}>Clear ({tempSelected.length})</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.sheetApplyBtn, { backgroundColor: theme.colors.primary }]}
+                    onPress={handleApply}
+                    activeOpacity={0.85}
+                  >
+                    <MaterialCommunityIcons name="filter-check" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.sheetApplyText}>
+                      {tempSelected.length === 0
+                        ? `Show All Garages (${garages.length})`
+                        : `Apply (${tempSelected.length} Selected) • ${matchingGaragesCount} ${matchingGaragesCount === 1 ? 'Garage' : 'Garages'}`}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </KeyboardAvoidingView>
           </TouchableWithoutFeedback>
@@ -838,7 +941,49 @@ const styles = StyleSheet.create({
   },
   sheetWrapper: {
     width: '100%',
-    maxHeight: '62%',
+    maxHeight: '78%',
+  },
+  multiCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sheetFooterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    marginTop: 6,
+    gap: 10,
+  },
+  sheetResetBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetResetText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sheetApplyBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  sheetApplyText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
   sheetContent: {
     borderTopLeftRadius: 22,

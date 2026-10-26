@@ -32,9 +32,15 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, lookupVehicle, refreshData, setToken, setUser, token, user } = useAppValues();
 
   // Find active customer
-  const customerId = route?.params?.customerId || user?.customerId || 'c1';
-  const customer = customers.find((c) => c.id === customerId) || customers[0] || {
+  const customerId = route?.params?.customerId || user?.customerId;
+  const customer = customers.find((c) => 
+    (customerId && (
+      String(c.id).toLowerCase() === String(customerId).toLowerCase() ||
+      String(c._id).toLowerCase() === String(customerId).toLowerCase()
+    ))
+  ) || customers[0] || {
     id: customerId,
+    _id: customerId,
     firstName: user?.name?.split(' ')[0] || 'Customer',
     lastName: user?.name?.split(' ').slice(1).join(' ') || '',
     email: user?.email || '',
@@ -145,10 +151,18 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       }
     } catch (err: any) {
       console.error('[CustomerPortalScreen] lookup error:', err);
-      Alert.alert(
-        'Lookup Failed',
-        err.message || `Could not find registration "${regNo.trim().toUpperCase()}". Please verify the plate or enter the vehicle details manually.`
-      );
+      const isBusy = err.isBusy || (err.message && (
+        err.message.toLowerCase().includes('busy') ||
+        err.message.toLowerCase().includes('taking too long')
+      ));
+      if (isBusy) {
+        Alert.alert('Government API Busy', 'Government DVSA API is busy, please check again.');
+      } else {
+        Alert.alert(
+          'Vehicle Not Found',
+          'Vehicle details not found. Please check the registration plate or enter the vehicle details manually.'
+        );
+      }
     } finally {
       setIsSearchingPlate(false);
     }
@@ -342,11 +356,25 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       return;
     }
 
+    if (!token || !token.trim()) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to your account to add a vehicle.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+        ]
+      );
+      return;
+    }
+
     setLoadingAction('add_vehicle');
     try {
+      const targetCustId = customer.id || customer._id || user?.customerId || '';
+
       // 1. Create the vehicle in the database with Active status
       await addVehicle({
-        customerId: customer.id,
+        customerId: targetCustId,
         registrationNumber: regNo.trim().toUpperCase(),
         make: make.trim().toUpperCase(),
         model: model.trim().toUpperCase(),
@@ -359,7 +387,9 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       await addAlert({
         type: 'NEW_VEHICLE',
         customerName: `${customer.firstName} ${customer.lastName}`,
-        customerId: customer.id,
+        customerId: targetCustId,
+        customerEmail: customer.email || user?.email || '',
+        customerMobile: customer.mobile || '',
         registrationNumber: regNo.trim().toUpperCase(),
         makeModel: `${make.trim().toUpperCase()} ${model.trim().toUpperCase()}`,
         status: 'Approved'
@@ -388,7 +418,24 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
     } catch (error: any) {
       setLoadingAction(null);
       console.error('[PORTAL] handleAddNewVehicle error:', error);
-      Alert.alert('Registration Failed', error?.message || 'Could not register vehicle. Please verify registration plate is unique.');
+      const isAuthError = !token || (error?.message && (
+        error.message.toLowerCase().includes('token') ||
+        error.message.toLowerCase().includes('sign in') ||
+        error.message.toLowerCase().includes('unauthorized') ||
+        error.message.toLowerCase().includes('auth')
+      ));
+      if (isAuthError) {
+        Alert.alert(
+          'Sign In Required',
+          'Please sign in to your account to add a vehicle.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+          ]
+        );
+      } else {
+        Alert.alert('Registration Failed', error?.message || 'Could not register vehicle. Please verify registration plate is unique.');
+      }
     }
   };
 

@@ -48,12 +48,41 @@ const getUserInitials = (name?: string, email?: string) => {
 const mapBackendVehicleToFrontend = (v: any) => {
   const isPass = v.motStatus === 'Valid' || v.status === 'PASS' || v.status === 'Active';
   
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
+    const clean = String(dateStr).trim();
+    if (!clean || clean === 'N/A') return 'N/A';
+
+    let normalized = clean.replace(/\./g, '-');
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(normalized)) {
+      normalized = normalized.replace(/\s+/, 'T');
+    }
+
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    const date = new Date(normalized);
+    if (!isNaN(date.getTime())) {
+      return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    }
+
+    const isoMatch = clean.match(/^(\d{4})[.-](\d{1,2})[.-](\d{1,2})/);
+    if (isoMatch) {
+      const yr = isoMatch[1];
+      const mIdx = parseInt(isoMatch[2], 10) - 1;
+      const day = parseInt(isoMatch[3], 10);
+      if (mIdx >= 0 && mIdx < 12) {
+        return `${day} ${months[mIdx]} ${yr}`;
+      }
+    }
+    return clean;
+  };
+
+  const formatMileage = (val: any) => {
+    if (!val || val === 'N/A' || val === '0') return 'Unrecorded';
+    const str = String(val).trim();
+    const num = parseInt(str.replace(/[^0-9]/g, ''), 10);
+    if (isNaN(num)) return str;
+    const isKm = str.toLowerCase().includes('km');
+    return `${num.toLocaleString()} ${isKm ? 'km' : 'miles'}`;
   };
 
   const regUpper = (v.registrationNumber || v.registration || '').toUpperCase().trim();
@@ -93,6 +122,7 @@ const mapBackendVehicleToFrontend = (v: any) => {
 
   return {
     registration: regUpper,
+    registrationNumber: regUpper,
     make: v.make || '',
     model: v.model || '',
     year: v.year ? String(v.year) : '',
@@ -100,10 +130,13 @@ const mapBackendVehicleToFrontend = (v: any) => {
     fuelType: v.fuelType || 'Petrol',
     engineSize: v.engineSize || '1500cc',
     status: isPass ? 'PASS' : 'FAIL',
+    motStatus: v.motStatus || (isPass ? 'Valid' : 'Expired'),
+    motExpiryDate: v.motExpiryDate || v.expiryDate || '',
     expiryDate: formatDate(v.motExpiryDate || v.expiryDate),
+    lastServiceDate: v.lastServiceDate || v.testDate || '',
     testDate: formatDate(v.lastServiceDate || v.testDate || new Date().toISOString().split('T')[0]),
     testNumber: v.testNumber || '8910 2345 6789',
-    mileage: v.mileage || '45,000 miles',
+    mileage: formatMileage(v.mileage || (v.motTests && v.motTests[0]?.odometerValue ? `${v.motTests[0].odometerValue} ${v.motTests[0].odometerUnit || 'mi'}` : '45,000 miles')),
     advisories,
     failures,
     motTests: v.motTests || null
@@ -127,9 +160,9 @@ interface BookableServiceItem {
 
 const DEFAULT_BOOKABLE_SERVICES: BookableServiceItem[] = [
   {
-    id: 'mot_class_4',
-    title: 'MOT Test',
-    name: 'MOT Test',
+    id: 'cat_mot',
+    title: 'MOT',
+    name: 'MOT',
     category: 'MOT',
     icon: 'shield-check',
     iconBg: '#10B98115',
@@ -137,90 +170,46 @@ const DEFAULT_BOOKABLE_SERVICES: BookableServiceItem[] = [
     searchQuery: 'MOT',
     price: 45,
     duration: 45,
+    description: 'Annual DVSA Class 4 vehicle safety & roadworthiness inspection',
   },
   {
-    id: 'full_service',
-    title: 'Full Service',
-    name: 'Full Service',
+    id: 'cat_servicing',
+    title: 'Servicing',
+    name: 'Servicing',
     category: 'Servicing',
     icon: 'car-cog',
     iconBg: '#1677FF15',
     iconColor: '#1677FF',
-    searchQuery: 'Full Service',
-    price: 125,
-    duration: 120,
-  },
-  {
-    id: 'interim_service',
-    title: 'Interim Service',
-    name: 'Interim Service',
-    category: 'Servicing',
-    icon: 'oil',
-    iconBg: '#8B5CF615',
-    iconColor: '#8B5CF6',
-    searchQuery: 'Interim Service',
+    searchQuery: 'Servicing',
     price: 79,
     duration: 60,
+    description: 'Full, interim and major scheduled vehicle servicing',
   },
   {
-    id: 'brakes',
-    title: 'Brakes & Discs',
-    name: 'Brakes & Discs',
-    category: 'Repairs',
-    icon: 'car-brake-alert',
-    iconBg: '#EF444415',
-    iconColor: '#EF4444',
-    searchQuery: 'Brake',
-    price: 65,
-    duration: 60,
-  },
-  {
-    id: 'tyres',
-    title: 'Tyres & Tracking',
-    name: 'Tyres & Tracking',
+    id: 'cat_tyres',
+    title: 'Tyres',
+    name: 'Tyres',
     category: 'Tyres',
     icon: 'tire',
     iconBg: '#F59E0B15',
     iconColor: '#F59E0B',
-    searchQuery: 'Tyre',
+    searchQuery: 'Tyres',
     price: 65,
     duration: 45,
+    description: 'Tyre fitting, puncture repairs, balancing and wheel alignment',
   },
   {
-    id: 'diagnostics',
-    title: 'Diagnostics Scan',
-    name: 'Diagnostics Scan',
-    category: 'Diagnostics',
-    icon: 'engine',
-    iconBg: '#06B6D415',
-    iconColor: '#06B6D4',
-    searchQuery: 'Diagnostic',
-    price: 45,
-    duration: 30,
-  },
-  {
-    id: 'air_con',
-    title: 'Air Con Regas',
-    name: 'Air Con Regas',
-    category: 'Air Conditioning',
-    icon: 'snowflake',
-    iconBg: '#3B82F615',
-    iconColor: '#3B82F6',
-    searchQuery: 'Air Conditioning',
-    price: 55,
-    duration: 45,
-  },
-  {
-    id: 'repairs',
-    title: 'General Repairs',
-    name: 'General Repairs',
+    id: 'cat_repairs',
+    title: 'Repairs',
+    name: 'Repairs',
     category: 'Repairs',
-    icon: 'wrench',
+    icon: 'hammer-wrench',
     iconBg: '#EC489915',
     iconColor: '#EC4899',
-    searchQuery: 'Repair',
+    searchQuery: 'Repairs',
     price: 65,
     duration: 60,
+    description: 'Mechanical diagnostics, brakes, suspension and general repairs',
   },
 ];
 
@@ -315,6 +304,8 @@ export default function HomeScreen({ navigation }: any) {
     refreshLocation,
     services,
     fetchServices,
+    serviceCategories,
+    fetchServiceCategories,
   } = useAppValues();
   const [regNumber, setRegNumber] = useState('');
   const [garageSearchText, setGarageSearchText] = useState('');
@@ -323,16 +314,19 @@ export default function HomeScreen({ navigation }: any) {
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
   const [nearbyGarages, setNearbyGarages] = useState<any[]>([]);
   const [loadingGarages, setLoadingGarages] = useState(false);
-  const [loadingServices, setLoadingServices] = useState(services.length === 0);
+  const [loadingServices, setLoadingServices] = useState(services.length === 0 && serviceCategories.length === 0);
   const [areaModalVisible, setAreaModalVisible] = useState(false);
 
   const fetchDynamicServices = async (showMinLoader = false) => {
     const startTime = Date.now();
     try {
-      if (services.length === 0 || showMinLoader) {
+      if ((services.length === 0 && serviceCategories.length === 0) || showMinLoader) {
         setLoadingServices(true);
       }
-      await fetchServices();
+      await Promise.all([
+        fetchServices(),
+        fetchServiceCategories(),
+      ]);
       if (showMinLoader) {
         const elapsed = Date.now() - startTime;
         if (elapsed < 400) {
@@ -364,81 +358,26 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
-  // Dynamic Bookable Services derived from API + live nearby garages with case-insensitive deduplication
+  // Dynamic Service Categories from Super Admin (MOT, Servicing, Tyres, Repairs...)
   const dynamicBookableServices = useMemo<BookableServiceItem[]>(() => {
-    const serviceMap = new Map<string, BookableServiceItem>();
-
-    // 1. Gather all services fetched from backend /api/services
-    if (Array.isArray(services) && services.length > 0) {
-      services.forEach((s) => {
-        const rawName = (s.name || s.title || '').trim();
-        if (!rawName) return;
-        const key = rawName.toLowerCase();
-        const iconDetails = resolveServiceIcon(rawName, s.category);
-        const price = s.minPrice !== undefined ? Number(s.minPrice) : (s.price !== undefined ? Number(s.price) : 45);
-
-        serviceMap.set(key, {
-          id: s.id || s._id || `svc_${key.replace(/[^a-z0-9]/g, '_')}`,
-          title: s.title || rawName,
-          name: rawName,
-          category: s.category || 'Servicing',
-          price: price,
-          duration: s.duration || 45,
-          icon: s.icon && s.icon !== 'wrench' ? s.icon : iconDetails.icon,
-          iconBg: s.iconBg || iconDetails.iconBg,
-          iconColor: s.iconColor || iconDetails.iconColor,
-          searchQuery: s.searchQuery || rawName,
-          description: s.description || '',
-          garageCount: s.garageCount || 0,
-        });
-      });
-    }
-
-    // 2. Also incorporate any services directly from loaded nearbyGarages (e.g. Service A, B from Garage A, Service C from Garage B)
-    if (Array.isArray(nearbyGarages) && nearbyGarages.length > 0) {
-      nearbyGarages.forEach((garage) => {
-        if (!Array.isArray(garage.services)) return;
-        garage.services.forEach((s: any) => {
-          if (s.isActive === false) return;
-          const rawName = (s.name || '').trim();
-          if (!rawName) return;
-          const key = rawName.toLowerCase();
-          const sPrice = s.price !== undefined ? Number(s.price) : 45;
-
-          if (serviceMap.has(key)) {
-            const existing = serviceMap.get(key)!;
-            existing.garageCount = (existing.garageCount || 0) + 1;
-            // Reflect lowest starting price among offering garages
-            if (sPrice > 0 && (existing.price === 0 || sPrice < existing.price)) {
-              existing.price = sPrice;
-            }
-          } else {
-            const iconDetails = resolveServiceIcon(rawName, s.category);
-            serviceMap.set(key, {
-              id: s._id || s.id || `custom_${key.replace(/[^a-z0-9]/g, '_')}`,
-              title: rawName,
-              name: rawName,
-              category: s.category || 'Servicing',
-              price: sPrice,
-              duration: s.duration || 45,
-              icon: iconDetails.icon,
-              iconBg: iconDetails.iconBg,
-              iconColor: iconDetails.iconColor,
-              searchQuery: rawName,
-              description: s.description || '',
-              garageCount: 1,
-            });
-          }
-        });
-      });
-    }
-
-    if (serviceMap.size > 0) {
-      return Array.from(serviceMap.values());
+    if (Array.isArray(serviceCategories) && serviceCategories.length > 0) {
+      return serviceCategories.map((cat, idx) => ({
+        id: cat._id || cat.id || `cat_${idx}`,
+        title: cat.name,
+        name: cat.name,
+        category: cat.name,
+        icon: cat.icon || 'wrench',
+        iconBg: cat.iconBg || '#1677FF15',
+        iconColor: cat.iconColor || '#1677FF',
+        searchQuery: cat.name,
+        price: 45,
+        duration: 45,
+        description: cat.description || '',
+      }));
     }
 
     return DEFAULT_BOOKABLE_SERVICES;
-  }, [services, nearbyGarages]);
+  }, [serviceCategories]);
 
   const getGarageServices = (garage: any) => {
     if (Array.isArray(garage?.services) && garage.services.length > 0) {
@@ -598,19 +537,27 @@ export default function HomeScreen({ navigation }: any) {
       if (res && res.found && res.vehicle) {
         const mappedVehicle = mapBackendVehicleToFrontend(res.vehicle);
         await saveVehicleToHistory(mappedVehicle);
-        navigation.navigate('Result', { vehicleData: mappedVehicle });
+        navigation.navigate('MotHistory', { vehicleData: mappedVehicle, registration: mappedVehicle.registration });
       } else {
-        Alert.alert('Not Found', `Vehicle registration "${targetReg}" was not found in the DVLA registry.`);
+        Alert.alert('Vehicle Not Found', `Vehicle details not found for "${targetReg}". Please check the registration plate and try again.`);
       }
     } catch (err: any) {
       setLoading(false);
       console.error('[HomeScreen] lookup error:', err);
-      Alert.alert('Lookup Failed', err.message || 'Failed to fetch details from DVLA registry. Please verify the registration.');
+      const isBusy = err.isBusy || (err.message && (
+        err.message.toLowerCase().includes('busy') ||
+        err.message.toLowerCase().includes('taking too long')
+      ));
+      if (isBusy) {
+        Alert.alert('Government API Busy', 'Government DVSA API is busy, please check again.');
+      } else {
+        Alert.alert('Vehicle Not Found', err.message || 'Vehicle details not found. Please check the registration plate and try again.');
+      }
     }
   };
 
   const handleRecentCheckPress = (item: any) => {
-    navigation.navigate('Result', { vehicleData: item });
+    navigation.navigate('MotHistory', { vehicleData: item, registration: item.registration || item.registrationNumber });
   };
 
   const handleSearchGarages = () => {

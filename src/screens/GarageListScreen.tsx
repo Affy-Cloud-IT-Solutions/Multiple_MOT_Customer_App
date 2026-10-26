@@ -10,6 +10,8 @@ import {
   FlatList,
   Image,
   RefreshControl,
+  Alert,
+  Platform,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
@@ -27,6 +29,7 @@ import {
 import CustomerHeader from '../components/CustomerHeader';
 import SelectAreaBottomSheet from '../components/SelectAreaBottomSheet';
 import FilterServiceBottomSheet, { isServiceMatch } from '../components/FilterServiceBottomSheet';
+import LoginRequiredModal from '../components/LoginRequiredModal';
 
 const getUserInitials = (name?: string, email?: string) => {
   if (name && name.trim()) {
@@ -73,6 +76,24 @@ export default function GarageListScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState(route?.params?.searchQuery || route?.params?.search || '');
+  const [activeServiceFilters, setActiveServiceFilters] = useState<string[]>(() => {
+    if (route?.params?.serviceFilters && Array.isArray(route?.params?.serviceFilters)) {
+      return route.params.serviceFilters;
+    }
+    if (route?.params?.serviceFilter) {
+      return [route.params.serviceFilter];
+    }
+    return [];
+  });
+  const [activeServiceTitles, setActiveServiceTitles] = useState<string[]>(() => {
+    if (route?.params?.serviceTitles && Array.isArray(route?.params?.serviceTitles)) {
+      return route.params.serviceTitles;
+    }
+    if (route?.params?.serviceTitle) {
+      return [route.params.serviceTitle];
+    }
+    return [];
+  });
   const [activeServiceFilter, setActiveServiceFilter] = useState<string>(route?.params?.serviceFilter || '');
   const [activeServiceTitle, setActiveServiceTitle] = useState<string>(route?.params?.serviceTitle || '');
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +104,7 @@ export default function GarageListScreen({ route, navigation }: any) {
   const [fetchingLocation, setFetchingLocation] = useState<boolean>(false);
   const [areaModalVisible, setAreaModalVisible] = useState(false);
   const [serviceModalVisible, setServiceModalVisible] = useState(false);
+  const [loginModalVisible, setLoginModalVisible] = useState(false);
 
   const activeCoordinates = userLocation || userCoordinates;
 
@@ -101,13 +123,26 @@ export default function GarageListScreen({ route, navigation }: any) {
       fetchGaragesList();
 
       const pSearch = route?.params?.searchQuery !== undefined ? route.params.searchQuery : route?.params?.search;
+      const pFilters = route?.params?.serviceFilters;
+      const pTitles = route?.params?.serviceTitles;
       const pFilter = route?.params?.serviceFilter;
       const pTitle = route?.params?.serviceTitle;
 
-      if (pFilter !== undefined) {
+      if (pFilters !== undefined && Array.isArray(pFilters)) {
+        setActiveServiceFilters(pFilters);
+        setActiveServiceFilter(pFilters.join(','));
+      } else if (pFilter !== undefined) {
+        const arr = pFilter ? [pFilter] : [];
+        setActiveServiceFilters(arr);
         setActiveServiceFilter(pFilter);
       }
-      if (pTitle !== undefined) {
+
+      if (pTitles !== undefined && Array.isArray(pTitles)) {
+        setActiveServiceTitles(pTitles);
+        setActiveServiceTitle(pTitles.join(', '));
+      } else if (pTitle !== undefined) {
+        const arr = pTitle ? [pTitle] : [];
+        setActiveServiceTitles(arr);
         setActiveServiceTitle(pTitle);
       }
 
@@ -124,7 +159,7 @@ export default function GarageListScreen({ route, navigation }: any) {
       if (route?.params?.nearMe === true) {
         handleTriggerNearMe();
       }
-    }, [route?.params?.searchQuery, route?.params?.search, route?.params?.serviceFilter, route?.params?.serviceTitle, route?.params?.nearMe])
+    }, [route?.params?.searchQuery, route?.params?.search, route?.params?.serviceFilter, route?.params?.serviceFilters, route?.params?.serviceTitle, route?.params?.serviceTitles, route?.params?.nearMe])
   );
 
   const fetchGaragesList = async () => {
@@ -174,6 +209,8 @@ export default function GarageListScreen({ route, navigation }: any) {
   };
 
   const handleClearServiceFilter = () => {
+    setActiveServiceFilters([]);
+    setActiveServiceTitles([]);
     setActiveServiceFilter('');
     setActiveServiceTitle('');
     if (
@@ -183,16 +220,31 @@ export default function GarageListScreen({ route, navigation }: any) {
       setSearchQuery('');
       navigation.setParams({ searchQuery: '', search: '' });
     }
-    navigation.setParams({ serviceFilter: '', serviceTitle: '' });
+    navigation.setParams({
+      serviceFilter: '',
+      serviceTitle: '',
+      serviceFilters: [],
+      serviceTitles: [],
+    });
+  };
+
+  const handleApplyServiceFilters = (serviceKeys: string[], serviceTitles: string[]) => {
+    setActiveServiceFilters(serviceKeys);
+    setActiveServiceTitles(serviceTitles);
+    setActiveServiceFilter(serviceKeys.join(','));
+    setActiveServiceTitle(serviceTitles.join(', '));
+    navigation.setParams({
+      serviceFilters: serviceKeys,
+      serviceTitles: serviceTitles,
+      serviceFilter: serviceKeys.join(','),
+      serviceTitle: serviceTitles.join(', '),
+    });
   };
 
   const handleSelectServiceFilter = (serviceKey: string, serviceTitle: string) => {
-    setActiveServiceFilter(serviceKey);
-    setActiveServiceTitle(serviceTitle);
-    navigation.setParams({
-      serviceFilter: serviceKey,
-      serviceTitle: serviceTitle,
-    });
+    const keys = serviceKey ? serviceKey.split(',').filter(Boolean) : [];
+    const titles = serviceTitle ? serviceTitle.split(',').filter(Boolean) : [];
+    handleApplyServiceFilters(keys, titles);
   };
 
   const handleResetNearMe = () => {
@@ -205,6 +257,8 @@ export default function GarageListScreen({ route, navigation }: any) {
     setRefreshing(true);
     // 1. Reset all filter and search states
     setSearchQuery('');
+    setActiveServiceFilters([]);
+    setActiveServiceTitles([]);
     setActiveServiceFilter('');
     setActiveServiceTitle('');
     setIsNearMeActive(false);
@@ -216,6 +270,8 @@ export default function GarageListScreen({ route, navigation }: any) {
       search: '',
       serviceFilter: '',
       serviceTitle: '',
+      serviceFilters: [],
+      serviceTitles: [],
       nearMe: false,
     });
 
@@ -263,6 +319,9 @@ export default function GarageListScreen({ route, navigation }: any) {
     const q = (searchQuery || '').toLowerCase().trim();
     const cleanQ = q.replace(/\s+/g, '');
     const filterKey = (activeServiceFilter || '').toLowerCase().trim();
+    const effectiveFilters = activeServiceFilters.length > 0
+      ? activeServiceFilters
+      : filterKey ? [filterKey] : [];
 
     // Map each registered garage with dynamic calculated distance in miles
     const mapped = garages.map((g) => {
@@ -284,24 +343,33 @@ export default function GarageListScreen({ route, navigation }: any) {
       };
     });
 
-    // Filter by search query (name, address, city, postcode) AND service filter
-    const filtered = mapped.filter((g) => {
-      // 1. Service filter matching (if activeServiceFilter is set)
-      if (filterKey) {
-        const hasMatchingService =
-          Array.isArray(g.services) &&
-          g.services.some((s: any) => isServiceMatch(s, filterKey));
+    // Check if any garage matches all selected filters
+    const hasAnyMatchingAll = effectiveFilters.length > 0 && mapped.some((g) =>
+      effectiveFilters.every((fk) => Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk)))
+    );
 
-        if (!hasMatchingService) {
-          return false;
+    // Filter by search query (name, address, city, postcode) AND service filters
+    const filtered = mapped.filter((g) => {
+      // 1. Service filter matching (if activeServiceFilters are set)
+      if (effectiveFilters.length > 0) {
+        if (hasAnyMatchingAll) {
+          const matchesAll = effectiveFilters.every((fk) =>
+            Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))
+          );
+          if (!matchesAll) return false;
+        } else {
+          const matchesAny = effectiveFilters.some((fk) =>
+            Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))
+          );
+          if (!matchesAny) return false;
         }
       }
 
       // 2. Text query matching (if search query is entered)
       if (!q) return true;
 
-      // If text query is identical to active service filter, it is already matched in step 1
-      if (filterKey && (q === filterKey || (activeServiceTitle && q === activeServiceTitle.toLowerCase().trim()))) {
+      // If text query is identical to any active service filter, it is already matched in step 1
+      if (effectiveFilters.some(fk => q === fk.toLowerCase().trim() || activeServiceTitles.some(st => q === st.toLowerCase().trim()))) {
         return true;
       }
 
@@ -324,7 +392,7 @@ export default function GarageListScreen({ route, navigation }: any) {
       return filtered.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
     }
     return filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  }, [garages, searchQuery, activeServiceFilter, isNearMeActive, activeCoordinates]);
+  }, [garages, searchQuery, activeServiceFilter, activeServiceFilters, activeServiceTitles, isNearMeActive, activeCoordinates]);
 
   const renderGarageItem = ({ item }: { item: any }) => {
     const locationParts = [item.address, item.city, item.postcode].filter(Boolean);
@@ -335,14 +403,25 @@ export default function GarageListScreen({ route, navigation }: any) {
       : null;
 
     const filterTarget = activeServiceFilter || activeServiceTitle;
-    const hasServiceFilter = Boolean(filterTarget && filterTarget.trim());
-    const matchingService = hasServiceFilter && Array.isArray(item.services)
-      ? item.services.find((s: any) => isServiceMatch(s, filterTarget))
-      : null;
+    const hasServiceFilter = activeServiceFilters.length > 0 || Boolean(filterTarget && filterTarget.trim());
+    const effectiveFilters = activeServiceFilters.length > 0
+      ? activeServiceFilters
+      : filterTarget ? [filterTarget] : [];
 
-    const priceNum = matchingService?.price ? Number(matchingService.price) : 45;
-    const displayPrice = isNaN(priceNum) ? '45' : priceNum.toFixed(0);
-    const serviceDisplayName = matchingService?.name || filterTarget || 'Service';
+    const matchingServices = hasServiceFilter && Array.isArray(item.services)
+      ? effectiveFilters.map((fk) => item.services.find((s: any) => isServiceMatch(s, fk))).filter(Boolean)
+      : [];
+
+    const totalPriceNum = matchingServices.reduce((sum: number, s: any) => sum + (Number(s.price) || 0), 0);
+    const displayPrice = totalPriceNum > 0
+      ? totalPriceNum.toFixed(0)
+      : (matchingServices[0]?.price ? Number(matchingServices[0].price).toFixed(0) : '45');
+
+    const serviceDisplayName = matchingServices.length === 1
+      ? matchingServices[0].name
+      : matchingServices.length > 1
+        ? `${matchingServices.length} Services`
+        : activeServiceTitle || filterTarget || 'Service';
 
     return (
       <TouchableOpacity
@@ -352,7 +431,9 @@ export default function GarageListScreen({ route, navigation }: any) {
           garageId: item.id || item._id, 
           serviceName: hasServiceFilter ? serviceDisplayName : searchQuery, 
           serviceFilter: activeServiceFilter,
+          serviceFilters: activeServiceFilters,
           serviceTitle: activeServiceTitle,
+          serviceTitles: activeServiceTitles,
           searchQuery, 
           vehicle: route?.params?.vehicle || route?.params?.selectedVehicle,
           selectedVehicle: route?.params?.selectedVehicle || route?.params?.vehicle,
@@ -396,21 +477,47 @@ export default function GarageListScreen({ route, navigation }: any) {
                 <Text style={[styles.priceCurrencyBig, { color: theme.colors.primary }]}>£</Text>
                 <Text style={[styles.priceAmountBig, { color: theme.colors.primary }]}>{displayPrice}</Text>
               </View>
-              <Text style={[styles.priceServiceLabel, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                {serviceDisplayName}
-              </Text>
+              {matchingServices.length > 1 ? (
+                <View style={{ alignItems: 'flex-end', marginTop: 2, marginBottom: 4 }}>
+                  {matchingServices.map((ms: any, sIdx: number) => {
+                    const p = Number(ms.price || 0);
+                    return (
+                      <Text
+                        key={ms.name || sIdx}
+                        style={{ fontSize: 10, fontWeight: '600', color: theme.colors.placeholder, textAlign: 'right' }}
+                        numberOfLines={1}
+                      >
+                        {ms.name}: £{p > 0 ? p.toFixed(0) : '45'}
+                      </Text>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={[styles.priceServiceLabel, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                  {serviceDisplayName}
+                </Text>
+              )}
 
               <TouchableOpacity
                 style={[styles.cardBookBtn, { backgroundColor: theme.colors.primary }]}
-                onPress={() => navigation.navigate('GarageDetail', {
-                  garageId: item.id || item._id,
-                  serviceName: serviceDisplayName,
-                  serviceFilter: activeServiceFilter,
-                  serviceTitle: activeServiceTitle,
-                  autoOpenBooking: true,
-                  vehicle: route?.params?.vehicle || route?.params?.selectedVehicle,
-                  selectedVehicle: route?.params?.selectedVehicle || route?.params?.vehicle,
-                })}
+                onPress={() => {
+                  if (!token || !String(token).trim() || !user) {
+                    setLoginModalVisible(true);
+                    return;
+                  }
+
+                  navigation.navigate('GarageDetail', {
+                    garageId: item.id || item._id,
+                    serviceName: serviceDisplayName,
+                    serviceFilter: activeServiceFilter,
+                    serviceFilters: activeServiceFilters,
+                    serviceTitle: activeServiceTitle,
+                    serviceTitles: activeServiceTitles,
+                    autoOpenBooking: true,
+                    vehicle: route?.params?.vehicle || route?.params?.selectedVehicle,
+                    selectedVehicle: route?.params?.selectedVehicle || route?.params?.vehicle,
+                  });
+                }}
                 activeOpacity={0.8}
               >
                 <MaterialCommunityIcons name="calendar-plus" size={13} color="#FFFFFF" style={{ marginRight: 3 }} />
@@ -496,18 +603,18 @@ export default function GarageListScreen({ route, navigation }: any) {
           <TouchableOpacity
             style={[
               styles.filterInsideButton,
-              activeServiceFilter ? { backgroundColor: theme.colors.primary + '18' } : null,
+              (activeServiceFilter || activeServiceFilters.length > 0) ? { backgroundColor: theme.colors.primary + '18' } : null,
             ]}
             onPress={() => setServiceModalVisible(true)}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <MaterialCommunityIcons
-              name={activeServiceFilter ? 'filter' : 'filter-variant'}
+              name={(activeServiceFilter || activeServiceFilters.length > 0) ? 'filter' : 'filter-variant'}
               size={19}
-              color={activeServiceFilter ? theme.colors.primary : theme.colors.placeholder}
+              color={(activeServiceFilter || activeServiceFilters.length > 0) ? theme.colors.primary : theme.colors.placeholder}
             />
-            {Boolean(activeServiceFilter) && (
+            {Boolean(activeServiceFilter || activeServiceFilters.length > 0) && (
               <View style={[styles.activeFilterDot, { backgroundColor: theme.colors.primary }]} />
             )}
           </TouchableOpacity>
@@ -527,8 +634,8 @@ export default function GarageListScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* Active Service Filter Banner - Compact */}
-      {(activeServiceTitle.length > 0 || activeServiceFilter.length > 0) && !loading && !error && (
+      {/* Active Service Filter Banner - Compact with multi-service support */}
+      {(activeServiceFilters.length > 0 || activeServiceTitle.length > 0 || activeServiceFilter.length > 0) && !loading && !error && (
         <View
           style={[
             styles.serviceFilterPillBanner,
@@ -553,9 +660,11 @@ export default function GarageListScreen({ route, navigation }: any) {
               style={[styles.serviceFilterCompactText, { color: theme.colors.text }]}
               numberOfLines={1}
             >
-              <Text style={{ fontWeight: '500', color: theme.colors.placeholder }}>Service: </Text>
+              <Text style={{ fontWeight: '500', color: theme.colors.placeholder }}>
+                {activeServiceFilters.length > 1 ? `${activeServiceFilters.length} Services: ` : 'Service: '}
+              </Text>
               <Text style={{ fontWeight: '700', color: theme.colors.text }}>
-                {activeServiceTitle || activeServiceFilter}
+                {activeServiceTitles.join(', ') || activeServiceTitle || activeServiceFilter}
               </Text>
             </Text>
           </TouchableOpacity>
@@ -709,8 +818,8 @@ export default function GarageListScreen({ route, navigation }: any) {
           <Text style={[styles.errorText, { color: theme.colors.placeholder, textAlign: 'center' }]}>
             {searchQuery.trim() 
               ? `No registered garages match "${searchQuery.trim()}".` 
-              : activeServiceFilter.trim()
-              ? `No registered garages found offering "${activeServiceTitle || activeServiceFilter}".`
+              : (activeServiceFilters.length > 0 || activeServiceFilter.trim())
+              ? `No registered garages found offering "${activeServiceTitles.join(', ') || activeServiceTitle || activeServiceFilter}".`
               : 'No registered garages found in this area.'}
           </Text>
           <Text style={[styles.reloadHintText, { color: theme.colors.placeholder }]}>
@@ -753,8 +862,52 @@ export default function GarageListScreen({ route, navigation }: any) {
         onClose={() => setServiceModalVisible(false)}
         selectedService={activeServiceFilter}
         selectedServiceTitle={activeServiceTitle}
+        selectedServices={activeServiceFilters}
+        selectedServiceTitles={activeServiceTitles}
         onSelectService={handleSelectServiceFilter}
+        onApplyServices={handleApplyServiceFilters}
         garages={garages}
+      />
+      {/* Floating Bottom Bar showing which services are selected in GarageListScreen */}
+      {activeServiceFilters.length > 0 && (
+        <View style={[styles.bottomSelectedServicesBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+              <MaterialCommunityIcons name="check-circle" size={13} color={theme.colors.primary} style={{ marginRight: 4 }} />
+              <Text style={[styles.bottomSelectedServicesTitle, { color: theme.colors.primary }]}>
+                {activeServiceFilters.length} {activeServiceFilters.length === 1 ? 'SERVICE SELECTED' : 'SERVICES SELECTED'}
+              </Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+              {activeServiceFilters.map((fk: string, idx: number) => {
+                const title = activeServiceTitles[idx] || fk;
+                return (
+                  <View key={fk} style={[styles.bottomServiceFilterPill, { backgroundColor: theme.colors.primary + '15', borderColor: theme.colors.primary + '30' }]}>
+                    <Text style={[styles.bottomServiceFilterPillText, { color: theme.colors.primary }]}>
+                      {title}
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+          <TouchableOpacity
+            style={[styles.bottomEditFilterBtn, { backgroundColor: theme.colors.primary }]}
+            onPress={() => setServiceModalVisible(true)}
+            activeOpacity={0.85}
+          >
+            <MaterialCommunityIcons name="filter-variant" size={14} color="#FFFFFF" style={{ marginRight: 3 }} />
+            <Text style={styles.bottomEditFilterBtnText}>Change</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <LoginRequiredModal
+        visible={loginModalVisible}
+        onClose={() => setLoginModalVisible(false)}
+        onLogin={() => navigation.navigate('Login')}
+        title="Please Login First"
+        message="You need to be logged in to book an appointment with a garage. Please sign in to your customer account to continue."
       />
     </View>
   );
@@ -893,8 +1046,53 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 85,
     flexGrow: 1,
+  },
+  bottomSelectedServicesBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+  },
+  bottomSelectedServicesTitle: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  bottomServiceFilterPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  bottomServiceFilterPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  bottomEditFilterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  bottomEditFilterBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   card: {
     borderRadius: 12,

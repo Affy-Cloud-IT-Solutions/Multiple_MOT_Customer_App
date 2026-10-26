@@ -19,10 +19,10 @@ import { validateMotExpiryDate } from '../utils/validationUtils';
 
 export default function BookingScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addAudit, addVehicle, lookupVehicle, user, token, cancelBooking } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addAudit, addVehicle, lookupVehicle, user, token, cancelBooking, rescheduleBooking } = useAppValues();
 
   // Find active customer
-  const customerId = user?.customerId || 'c1';
+  const customerId = user?.customerId || (customers.length > 0 ? (customers[0].id || customers[0]._id) : user?.id) || '';
 
   // Find active customer vehicles
   const activeCustomerVehicles = vehicles.filter(v => 
@@ -60,13 +60,14 @@ export default function BookingScreen({ route, navigation }: any) {
 
   // Active booking alert if rescheduling
   const activeBookingAlert = React.useMemo(() => {
+    if (route?.params?.activeBooking) return route.params.activeBooking;
     if (!isReschedule || !selectedVehicle?.registrationNumber) return null;
     return alerts.find(a => 
       a.type === 'BOOKED' && 
       a.registrationNumber?.toUpperCase() === selectedVehicle?.registrationNumber?.toUpperCase() &&
       (a.status === 'Pending' || a.status === 'Approved')
     ) || null;
-  }, [isReschedule, selectedVehicle?.registrationNumber, alerts]);
+  }, [isReschedule, selectedVehicle?.registrationNumber, alerts, route?.params?.activeBooking]);
 
   const alertAny = activeBookingAlert as any;
   const targetGarageId = route?.params?.garageId || 
@@ -216,15 +217,20 @@ export default function BookingScreen({ route, navigation }: any) {
     return () => { isMounted = false; };
   }, [selectedGarage?.id, selectedGarage?._id, targetGarageId, token]);
 
-  const customer = customers.find((c) => 
-    selectedVehicle && selectedVehicle.customerId && (
+  const customer = customers.find((c: any) => 
+    (selectedVehicle && selectedVehicle.customerId && (
       String(c.id).toLowerCase() === String(selectedVehicle.customerId || '').toLowerCase() ||
       String(c._id).toLowerCase() === String(selectedVehicle.customerId || '').toLowerCase()
-    )
+    )) ||
+    (customerId && (
+      String(c.id).toLowerCase() === String(customerId).toLowerCase() ||
+      String(c._id).toLowerCase() === String(customerId).toLowerCase()
+    ))
   ) || customers[0] || {
-    id: user?.customerId || 'c1',
-    firstName: user?.name?.split(' ')[0] || 'Customer',
-    lastName: user?.name?.split(' ').slice(1).join(' ') || '',
+    id: customerId || user?.customerId || user?.id || '',
+    _id: customerId || user?.customerId || user?.id || '',
+    firstName: user?.name ? user.name.split(' ')[0] : 'Customer',
+    lastName: user?.name ? user.name.split(' ').slice(1).join(' ') : '',
     email: user?.email || '',
     mobile: '',
   };
@@ -420,10 +426,21 @@ export default function BookingScreen({ route, navigation }: any) {
       }
     } catch (err: any) {
       console.error('[BookingScreen] lookup error:', err);
-      Alert.alert(
-        'Lookup Failed',
-        err.message || `Could not find registration "${newRegNo.trim().toUpperCase()}". Please enter vehicle details manually.`
-      );
+      const isBusy = err.isBusy || (err.message && (
+        err.message.toLowerCase().includes('busy') ||
+        err.message.toLowerCase().includes('taking too long')
+      ));
+      if (isBusy) {
+        Alert.alert(
+          'Government API Busy',
+          'Government DVSA API is busy, please check again.'
+        );
+      } else {
+        Alert.alert(
+          'Vehicle Not Found',
+          'Vehicle details not found. Please check the registration plate and try again.'
+        );
+      }
     } finally {
       setIsSearchingNewPlate(false);
     }
@@ -452,10 +469,23 @@ export default function BookingScreen({ route, navigation }: any) {
       return;
     }
 
+    if (!token || !token.trim()) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to your account to add this vehicle.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+        ]
+      );
+      return;
+    }
+
     setIsAddingCar(true);
     try {
+      const targetCustId = customer.id || customer._id || user?.customerId || user?.id || '';
       const createdVeh = await addVehicle({
-        customerId: customer.id,
+        customerId: targetCustId,
         registrationNumber: regClean,
         make: makeClean,
         model: modelClean,
@@ -467,7 +497,9 @@ export default function BookingScreen({ route, navigation }: any) {
       await addAlert({
         type: 'NEW_VEHICLE',
         customerName: `${customer.firstName} ${customer.lastName}`.trim() || user?.name || 'Customer',
-        customerId: customer.id,
+        customerId: targetCustId,
+        customerEmail: customer.email || user?.email || '',
+        customerMobile: customer.mobile || '',
         registrationNumber: regClean,
         makeModel: `${makeClean} ${modelClean}`,
         status: 'Approved',
@@ -506,7 +538,24 @@ export default function BookingScreen({ route, navigation }: any) {
       });
     } catch (err: any) {
       console.error('Failed to add vehicle in booking flow:', err);
-      Alert.alert('Error', err.message || 'Failed to add vehicle. Please try again.');
+      const isAuthError = !token || (err?.message && (
+        err.message.toLowerCase().includes('token') ||
+        err.message.toLowerCase().includes('sign in') ||
+        err.message.toLowerCase().includes('unauthorized') ||
+        err.message.toLowerCase().includes('auth')
+      ));
+      if (isAuthError) {
+        Alert.alert(
+          'Sign In Required',
+          'Please sign in to your account to add this vehicle.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+          ]
+        );
+      } else {
+        Alert.alert('Could Not Add Vehicle', err.message || 'Failed to add vehicle. Please try again.');
+      }
     } finally {
       setIsAddingCar(false);
     }
@@ -644,38 +693,50 @@ export default function BookingScreen({ route, navigation }: any) {
 
       const isAdmin = route?.params?.isAdmin || false;
       const targetSlotTime = hasMot ? (selectedSlot?.time || selectedTime) : 'Full Day Drop-off';
+      const targetCustId = customer.id || customer._id || user?.customerId || user?.id || '';
 
-      // Add BOOKED alert notification to Admin alerts list
-      await addAlert({
-        type: 'BOOKED',
-        customerName: `${customer.firstName} ${customer.lastName}`,
-        customerId: customer.id,
-        garageId: selectedGarage.id || selectedGarage._id,
-        serviceName: selectedService.name,
-        services: [{
-          name: selectedService.name,
-          category: selectedService.category || (hasMot ? 'MOT' : 'Servicing'),
+      if (isReschedule && activeBookingAlert && (activeBookingAlert.id || (activeBookingAlert as any)._id)) {
+        const targetAlertId = activeBookingAlert.id || (activeBookingAlert as any)._id;
+        await rescheduleBooking(
+          targetAlertId,
+          selectedDate,
+          hasMot ? (selectedSlot?.time || selectedTime) : ''
+        );
+      } else {
+        // Add BOOKED alert notification to Admin alerts list
+        await addAlert({
+          type: 'BOOKED',
+          customerName: `${customer.firstName} ${customer.lastName}`.trim() || user?.name || 'Customer',
+          customerId: targetCustId,
+          customerEmail: customer.email || user?.email || '',
+          customerMobile: customer.mobile || '',
+          garageId: selectedGarage.id || selectedGarage._id,
+          serviceName: selectedService.name,
+          services: [{
+            name: selectedService.name,
+            category: selectedService.category || (hasMot ? 'MOT' : 'Servicing'),
+            price: selectedService.price,
+            duration: selectedService.duration || 45,
+          }],
+          hasMot,
+          isDateOnly,
           price: selectedService.price,
-          duration: selectedService.duration || 45,
-        }],
-        hasMot,
-        isDateOnly,
-        price: selectedService.price,
-        duration: selectedSlot?.slotDuration || selectedService.duration || 45,
-        slotTime: targetSlotTime,
-        slotNumber: hasMot ? selectedSlot?.slotNumber : undefined,
-        registrationNumber: selectedVehicle.registrationNumber,
-        makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}`,
-        status: isAdmin ? 'Approved' : 'Pending',
-        date: selectedDate,
-      });
+          duration: selectedSlot?.slotDuration || selectedService.duration || 45,
+          slotTime: targetSlotTime,
+          slotNumber: hasMot ? selectedSlot?.slotNumber : undefined,
+          registrationNumber: selectedVehicle.registrationNumber,
+          makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}`,
+          status: isAdmin ? 'Approved' : 'Pending',
+          date: selectedDate,
+        });
+      }
 
       // Log to audit history
       await addAudit(
         isReschedule ? 'MOT Booking Rescheduled' : (isAdmin ? 'MOT Booking Booked' : 'MOT Booking Requested'),
         isAdmin
-          ? `Garage staff booked MOT booking slot for ${customer.firstName} ${customer.lastName}'s ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
-          : `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} MOT booking slot for ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
+          ? `Garage staff booked MOT booking slot for ${customer.firstName} ${customer.lastName}'s ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${targetSlotTime}`
+          : `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} MOT booking slot for ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${targetSlotTime}`
       );
 
       setLoading(false);
