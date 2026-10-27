@@ -76,6 +76,8 @@ export default function CustomerHeader({
   );
 }
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   safeArea: {
     shadowColor: '#000',
@@ -117,13 +119,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '700',
     letterSpacing: -0.2,
   },
   subtitle: {
+    fontFamily: fonts.medium,
     fontSize: 11,
-    fontWeight: '500',
     marginTop: 1,
   },
   rightContent: {

@@ -15,6 +15,7 @@ import ResultScreen from '../screens/ResultScreen';
 import MotHistoryScreen from '../screens/MotHistoryScreen';
 import BookingsScreen from '../screens/BookingsScreen';
 import { useAppTheme } from '../context/ThemeContext';
+import { fonts } from '../theme/theme';
 
 const Stack = createNativeStackNavigator();
 
@@ -31,7 +32,7 @@ export default function RootNavigator() {
         },
         headerTintColor: theme.colors.text,
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontFamily: fonts.bold,
         },
         headerShadowVisible: false,
       }}

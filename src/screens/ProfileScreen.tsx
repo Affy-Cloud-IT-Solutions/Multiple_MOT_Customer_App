@@ -406,7 +406,7 @@ export default function ProfileScreen({ navigation }: any) {
         />
         <SettingRow
           icon="bell-ring-outline"
-          title="MOT Expiry Alerts"
+          title="Service & MOT Alerts"
           subtitle="Receive automatic push notifications"
           control={
             <Switch
@@ -553,7 +553,7 @@ export default function ProfileScreen({ navigation }: any) {
       </TouchableOpacity>
 
       <Text style={[styles.versionText, { color: theme.colors.placeholder }]}>
-        MOT Reminder System • Version 1.0.0
+        Ondoor Car Service • Version 1.0.0
       </Text>
     </ScrollView>
   </View>
@@ -762,6 +762,8 @@ const InputField = ({
 
 // ===== Styles =====
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -792,16 +794,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarText: {
+    fontFamily: fonts.bold,
     fontSize: 22,
-    fontWeight: '700',
   },
   headerMeta: {
     flex: 1,
     marginLeft: 16,
   },
   userName: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: '700',
     marginBottom: 2,
   },
   userEmailRow: {
@@ -810,6 +812,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   userEmail: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     marginLeft: 6,
   },
@@ -823,8 +826,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   roleBadgeText: {
+    fontFamily: fonts.semiBold,
     fontSize: 10,
-    fontWeight: '600',
   },
   statsGrid: {
     flexDirection: 'row',
@@ -854,19 +857,19 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   statNumber: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: '700',
     marginBottom: 2,
   },
   statNumberText: {
+    fontFamily: fonts.semiBold,
     fontSize: 13,
-    fontWeight: '600',
     marginBottom: 2,
     textAlign: 'center',
   },
   statLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 9,
-    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -874,8 +877,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   sectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '700',
     marginBottom: 12,
     letterSpacing: 0.3,
   },
@@ -907,15 +910,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   infoLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 10,
-    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
     marginBottom: 1,
   },
   infoValue: {
+    fontFamily: fonts.semiBold,
     fontSize: 14,
-    fontWeight: '600',
   },
   settingRow: {
     flexDirection: 'row',
@@ -938,10 +941,11 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   settingTitle: {
+    fontFamily: fonts.semiBold,
     fontSize: 14,
-    fontWeight: '600',
   },
   settingSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginTop: 1,
   },
@@ -958,10 +962,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   adminTitle: {
+    fontFamily: fonts.semiBold,
     fontSize: 15,
-    fontWeight: '600',
   },
   adminSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     marginBottom: 14,
     paddingHorizontal: 14,
@@ -981,6 +986,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   adminInput: {
+    fontFamily: fonts.regular,
     flex: 1,
     height: '100%',
     fontSize: 14,
@@ -1002,8 +1008,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   createStaffText: {
+    fontFamily: fonts.semiBold,
     color: '#FFFFFF',
-    fontWeight: '600',
     fontSize: 14,
   },
   viewStaffButton: {
@@ -1019,7 +1025,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   viewStaffText: {
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
     fontSize: 14,
   },
   actionButtonContainer: {
@@ -1034,10 +1040,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButtonText: {
+    fontFamily: fonts.semiBold,
     fontSize: 15,
-    fontWeight: '600',
   },
   versionText: {
+    fontFamily: fonts.regular,
     textAlign: 'center',
     fontSize: 11,
     marginBottom: 20,

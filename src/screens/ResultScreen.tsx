@@ -120,7 +120,7 @@ export default function ResultScreen({ route, navigation }: any) {
           >
             <MaterialCommunityIcons name="arrow-left" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.navTitle, { color: theme.colors.text }]}>MOT Check Results</Text>
+          <Text style={[styles.navTitle, { color: theme.colors.text }]}>Vehicle & MOT Check Results</Text>
           <View style={{ width: 40 }} />
         </View>
       </SafeAreaView>
@@ -176,7 +176,7 @@ export default function ResultScreen({ route, navigation }: any) {
 
           <Text style={[styles.expiryText, { color: theme.colors.text }]}>
             {isPass ? 'Expiry Date:' : 'Status Detail:'}{' '}
-            <Text style={{ fontWeight: 'bold' }}>
+            <Text style={{ fontFamily: fonts.bold }}>
               {formatDate(vehicle.expiryDate)}
               {isPass && vehicle.expiryDate ? (() => {
                 const diff = getDaysRemaining(vehicle.expiryDate);
@@ -200,16 +200,16 @@ export default function ResultScreen({ route, navigation }: any) {
         <View style={styles.detailRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="calendar" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
-            <Text style={{ color: theme.colors.placeholder }}>Test Date</Text>
+            <Text style={{ fontFamily: fonts.medium, color: theme.colors.placeholder }}>Test Date</Text>
           </View>
-          <Text style={[styles.detailValue, { color: theme.colors.text, fontWeight: '700' }]}>{formatDate(vehicle.testDate)}</Text>
+          <Text style={[styles.detailValue, { color: theme.colors.text, fontFamily: fonts.bold }]}>{formatDate(vehicle.testDate)}</Text>
         </View>
         <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
         
         <View style={styles.detailRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="barcode-scan" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
-            <Text style={{ color: theme.colors.placeholder }}>Test Number</Text>
+            <Text style={{ fontFamily: fonts.medium, color: theme.colors.placeholder }}>Test Number</Text>
           </View>
           <Text style={[styles.detailValue, { color: theme.colors.text }]}>{vehicle.testNumber}</Text>
         </View>
@@ -218,9 +218,9 @@ export default function ResultScreen({ route, navigation }: any) {
         <View style={styles.detailRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <MaterialCommunityIcons name="speedometer" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
-            <Text style={{ color: theme.colors.placeholder }}>Odometer Recording</Text>
+            <Text style={{ fontFamily: fonts.medium, color: theme.colors.placeholder }}>Odometer Recording</Text>
           </View>
-          <Text style={[styles.detailValue, { color: theme.colors.text, fontWeight: '700' }]}>{formatMileage(vehicle.mileage)}</Text>
+          <Text style={[styles.detailValue, { color: theme.colors.text, fontFamily: fonts.bold }]}>{formatMileage(vehicle.mileage)}</Text>
         </View>
       </View>
 
@@ -278,7 +278,7 @@ export default function ResultScreen({ route, navigation }: any) {
               style={{ marginRight: 8 }} 
             />
             <Text style={[styles.saveButtonText, { color: '#FFFFFF' }]}>
-              View Full MOT History & Test Records
+              View Full Vehicle & MOT History
             </Text>
           </View>
         </TouchableOpacity>
@@ -287,6 +287,8 @@ export default function ResultScreen({ route, navigation }: any) {
   </View>
   );
 }
+
+import { fonts } from '../theme/theme';
 
 const styles = StyleSheet.create({
   container: {
@@ -307,7 +309,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 12,
     alignItems: 'center',
-    // elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
@@ -322,23 +323,24 @@ const styles = StyleSheet.create({
   },
   ukText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     fontSize: 8,
   },
   plateText: {
+    fontFamily: fonts.bold,
     fontSize: 20,
-    fontWeight: 'bold',
     color: '#000000',
     paddingHorizontal: 16,
     letterSpacing: 1.5,
   },
   vehicleTitle: {
+    fontFamily: fonts.bold,
     fontSize: 22,
-    fontWeight: 'bold',
     marginBottom: 4,
     textAlign: 'center',
   },
   vehicleSpec: {
+    fontFamily: fonts.regular,
     fontSize: 14,
     textAlign: 'center',
   },
@@ -348,7 +350,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     padding: 16,
-    // elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -367,16 +368,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   statusText: {
+    fontFamily: fonts.bold,
     fontSize: 24,
-    fontWeight: 'bold',
     marginBottom: 8,
   },
   expiryText: {
+    fontFamily: fonts.medium,
     fontSize: 15,
   },
   cardTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 12,
   },
   detailRow: {
@@ -385,7 +387,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   detailValue: {
-    fontWeight: '500',
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
   },
   divider: {
     height: 1,
@@ -417,6 +420,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   itemText: {
+    fontFamily: fonts.regular,
     fontSize: 14,
     lineHeight: 20,
     flex: 1,
@@ -437,9 +441,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: 'bold',
   },
   topNavRow: {
     height: 52,
@@ -456,8 +460,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   navTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
   },
   scrollContent: {
     paddingBottom: 24,

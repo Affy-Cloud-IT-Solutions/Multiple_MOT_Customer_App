@@ -30,6 +30,7 @@ import CustomerHeader from '../components/CustomerHeader';
 import SelectAreaBottomSheet from '../components/SelectAreaBottomSheet';
 import FilterServiceBottomSheet, { isServiceMatch } from '../components/FilterServiceBottomSheet';
 import LoginRequiredModal from '../components/LoginRequiredModal';
+import { fonts } from '../theme/theme';
 
 const getUserInitials = (name?: string, email?: string) => {
   if (name && name.trim()) {
@@ -484,7 +485,7 @@ export default function GarageListScreen({ route, navigation }: any) {
                     return (
                       <Text
                         key={ms.name || sIdx}
-                        style={{ fontSize: 10, fontWeight: '600', color: theme.colors.placeholder, textAlign: 'right' }}
+                        style={{ fontFamily: fonts.semiBold, fontSize: 10, color: theme.colors.placeholder, textAlign: 'right' }}
                         numberOfLines={1}
                       >
                         {ms.name}: £{p > 0 ? p.toFixed(0) : '45'}
@@ -660,10 +661,10 @@ export default function GarageListScreen({ route, navigation }: any) {
               style={[styles.serviceFilterCompactText, { color: theme.colors.text }]}
               numberOfLines={1}
             >
-              <Text style={{ fontWeight: '500', color: theme.colors.placeholder }}>
+              <Text style={{ fontFamily: fonts.medium, color: theme.colors.placeholder }}>
                 {activeServiceFilters.length > 1 ? `${activeServiceFilters.length} Services: ` : 'Service: '}
               </Text>
-              <Text style={{ fontWeight: '700', color: theme.colors.text }}>
+              <Text style={{ fontFamily: fonts.bold, color: theme.colors.text }}>
                 {activeServiceTitles.join(', ') || activeServiceTitle || activeServiceFilter}
               </Text>
             </Text>
@@ -767,7 +768,7 @@ export default function GarageListScreen({ route, navigation }: any) {
             </Text>
 
             <Text style={[styles.unavailableDesc, { color: theme.colors.placeholder }]}>
-              Multiple MOT operates exclusively across the United Kingdom (England, Scotland, Wales & Northern Ireland). No registered MOT testing stations are available in your selected area.
+              Our service network operates exclusively across the United Kingdom (England, Scotland, Wales & Northern Ireland). No registered garages or service centres are available in your selected area.
             </Text>
 
             {/* Action: Select UK Area */}
@@ -923,8 +924,8 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   title: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
   },
   registeredShieldBadge: {
     flexDirection: 'row',
@@ -935,8 +936,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   registeredShieldText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: '700',
     color: '#10B981',
   },
   headerLocationCol: {
@@ -948,8 +949,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerLocationLabel: {
+    fontFamily: fonts.bold,
     fontSize: 9.5,
-    fontWeight: '700',
     marginBottom: 1,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
@@ -960,8 +961,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerLocationCity: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '800',
     lineHeight: 16,
     flex: 1,
     flexShrink: 1,
@@ -976,8 +977,8 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   topProfileInitialsText: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   searchRow: {
@@ -1005,6 +1006,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   searchInput: {
+    fontFamily: fonts.medium,
     flex: 1,
     height: '100%',
     fontSize: 13,
@@ -1041,8 +1043,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   nearMeActiveText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   listContent: {
     paddingHorizontal: 16,
@@ -1068,8 +1070,8 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
   },
   bottomSelectedServicesTitle: {
+    fontFamily: fonts.bold,
     fontSize: 10.5,
-    fontWeight: '800',
     letterSpacing: 0.3,
   },
   bottomServiceFilterPill: {
@@ -1079,8 +1081,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   bottomServiceFilterPillText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
   bottomEditFilterBtn: {
     flexDirection: 'row',
@@ -1090,9 +1092,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   bottomEditFilterBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '700',
   },
   card: {
     borderRadius: 12,
@@ -1128,8 +1130,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarText: {
+    fontFamily: fonts.bold,
     fontSize: 22,
-    fontWeight: '800',
     letterSpacing: 0.8,
   },
   cardContent: {
@@ -1152,8 +1154,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   garageName: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
     flex: 1,
   },
   addressRow: {
@@ -1162,6 +1164,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   garageAddress: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     flex: 1,
   },
@@ -1171,8 +1174,8 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   garageMiles: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
   priceActionCol: {
     alignItems: 'flex-end',
@@ -1185,20 +1188,20 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   priceCurrencyBig: {
+    fontFamily: fonts.bold,
     fontSize: 15,
-    fontWeight: '800',
     marginTop: 2,
     marginRight: 1,
   },
   priceAmountBig: {
+    fontFamily: fonts.extraBold,
     fontSize: 24,
-    fontWeight: '900',
     letterSpacing: -0.5,
     lineHeight: 28,
   },
   priceServiceLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 9.5,
-    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
     marginTop: 1,
@@ -1215,9 +1218,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardBookBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: 'bold',
   },
   centerContainer: {
     flex: 1,
@@ -1232,15 +1235,18 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   reloadHintText: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     marginTop: 6,
     textAlign: 'center',
   },
   loadingText: {
+    fontFamily: fonts.medium,
     marginTop: 12,
     fontSize: 14,
   },
   errorText: {
+    fontFamily: fonts.regular,
     marginTop: 10,
     fontSize: 14,
     textAlign: 'center',
@@ -1253,8 +1259,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   retryButtonText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 12,
   },
   searchFilterBadge: {
@@ -1268,12 +1274,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   searchFilterText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   clearFilterLink: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
     marginLeft: 8,
   },
   // Unavailable / Blinkit-style View Styles
@@ -1312,17 +1318,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   detectedPillText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
     color: '#D97706',
   },
   unavailableTitle: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 8,
   },
   unavailableDesc: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 19,
@@ -1338,13 +1345,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   primaryActionBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: 'bold',
   },
   presetHeading: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
     marginBottom: 10,
   },
   presetRow: {
@@ -1360,8 +1367,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   presetChipText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   serviceFilterPillBanner: {
     flexDirection: 'row',
@@ -1374,6 +1381,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   serviceFilterCompactText: {
+    fontFamily: fonts.regular,
     fontSize: 12,
   },
   serviceCountBadge: {
@@ -1383,7 +1391,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   serviceCountText: {
+    fontFamily: fonts.bold,
     fontSize: 10.5,
-    fontWeight: '700',
   },
 });

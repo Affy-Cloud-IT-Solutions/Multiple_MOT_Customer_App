@@ -19,7 +19,7 @@ export default function AdminAlertsScreen() {
     } else if (alertType === 'SOLD') {
       message = 'Vehicle status updated to Sold. Future reminders stopped.';
     } else if (alertType === 'BOOKED') {
-      message = 'MOT Booking confirmed!';
+      message = 'Service Booking confirmed!';
     }
     Alert.alert('Approved', message);
   };
@@ -96,7 +96,7 @@ export default function AdminAlertsScreen() {
             } else if (item.type === 'BOOKED') {
               iconName = 'calendar-check';
               iconColor = theme.colors.secondary; // Blue
-              typeText = 'MOT Booking Requested';
+              typeText = 'Service Booking Requested';
             }
 
             return (
@@ -109,15 +109,15 @@ export default function AdminAlertsScreen() {
                     <MaterialCommunityIcons name={iconName} size={22} color={iconColor} style={{ marginRight: 8 }} />
                     <Text style={[styles.typeText, { color: theme.colors.text }]}>{typeText}</Text>
                   </View>
-                  <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>{item.date}</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.colors.placeholder }}>{item.date}</Text>
                 </View>
 
                 <View style={styles.cardBody}>
                   <Text style={[styles.bodyText, { color: theme.colors.text }]}>
-                    Customer <Text style={{ fontWeight: 'bold' }}>{item.customerName}</Text>{' '}
+                    Customer <Text style={{ fontFamily: fonts.bold }}>{item.customerName}</Text>{' '}
                     {item.type === 'NEW_VEHICLE' && 'wishes to register a new vehicle:'}
                     {item.type === 'SOLD' && 'reported they sold their vehicle:'}
-                    {item.type === 'BOOKED' && 'requested MOT booking for:'}
+                    {item.type === 'BOOKED' && 'requested service booking for:'}
                   </Text>
 
                   <View style={styles.vehicleRow}>
@@ -211,6 +211,8 @@ export default function AdminAlertsScreen() {
   );
 }
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -220,11 +222,12 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: {
+    fontFamily: fonts.bold,
     fontSize: 24,
-    fontWeight: '800',
     marginBottom: 4,
   },
   subtitle: {
+    fontFamily: fonts.regular,
     fontSize: 13,
   },
   listContainer: {
@@ -236,6 +239,7 @@ const styles = StyleSheet.create({
     paddingVertical: 64,
   },
   emptyText: {
+    fontFamily: fonts.medium,
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -258,7 +262,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   typeText: {
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     fontSize: 14,
   },
   cardBody: {
@@ -266,6 +270,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   bodyText: {
+    fontFamily: fonts.regular,
     fontSize: 13.5,
     lineHeight: 18,
   },
@@ -287,13 +292,13 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   plateText: {
+    fontFamily: fonts.bold,
     color: '#000',
-    fontWeight: 'bold',
     fontSize: 11,
     letterSpacing: 0.5,
   },
   makeModelText: {
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     fontSize: 13,
   },
   divider: {
@@ -318,8 +323,8 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   actionBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
   },
   modalOverlay: {
     flex: 1,
@@ -341,16 +346,18 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
   },
   modalTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 8,
   },
   modalSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 16,
     marginBottom: 14,
   },
   modalInput: {
+    fontFamily: fonts.regular,
     borderWidth: 1,
     borderRadius: 8,
     padding: 10,
@@ -378,7 +385,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   modalBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
   },
 });

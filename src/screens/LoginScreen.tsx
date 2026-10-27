@@ -14,9 +14,10 @@ import {
   StatusBar,
 } from 'react-native';
 import { useAppTheme } from '../context/ThemeContext';
-import { useAppValues, BASE_URL } from '../context/DataContext';
+import { useAppValues, BASE_URL, isTokenExpired } from '../context/DataContext';
 import { validateEmail, validatePassword } from '../utils/validationUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fonts } from '../theme/theme';
 import {
   MotHeroLogo,
   EmailIcon,
@@ -26,7 +27,6 @@ import {
   AlertCircleIcon,
   ArrowRightIcon,
   HeaderBackgroundSvg,
-  SparkleSvg,
   TrustShieldSvg,
 } from '../components/SvgIcons';
 
@@ -52,19 +52,53 @@ export default function LoginScreen({ navigation }: any) {
       setLoading(true);
       try {
         const storedToken = await AsyncStorage.getItem('user_token');
+        const storedRefreshToken = await AsyncStorage.getItem('user_refresh_token');
         const storedUserJson = await AsyncStorage.getItem('user_profile');
-        if (storedToken && storedUserJson) {
-          const storedUser = JSON.parse(storedUserJson);
-          setToken(storedToken);
-          setUser(storedUser);
 
-          if (
-            storedUser.role === 'admin' ||
-            storedUser.role === 'staff' ||
-            storedUser.role === 'customer'
-          ) {
-            navigation.replace('Main');
+        if (storedToken && storedUserJson) {
+          if (!isTokenExpired(storedToken)) {
+            const storedUser = JSON.parse(storedUserJson);
+            setToken(storedToken);
+            setUser(storedUser);
+
+            if (
+              storedUser.role === 'admin' ||
+              storedUser.role === 'staff' ||
+              storedUser.role === 'customer'
+            ) {
+              navigation.replace('Main');
+              return;
+            }
+          } else if (storedRefreshToken) {
+            // Attempt silent token refresh before deciding
+            try {
+              const res = await fetch(`${BASE_URL}/auth/refresh-token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: storedRefreshToken })
+              });
+              if (res.ok) {
+                const data = await res.json();
+                const newAccess = data.accessToken || data.token;
+                const newRefresh = data.refreshToken || storedRefreshToken;
+                setTokens(newAccess, newRefresh);
+                if (data.user) {
+                  setUser(data.user);
+                }
+                navigation.replace('Main');
+                return;
+              }
+            } catch (_) {}
           }
+
+          // If expired and cannot be refreshed, silently clear stale credentials
+          await Promise.all([
+            AsyncStorage.removeItem('user_token'),
+            AsyncStorage.removeItem('user_refresh_token'),
+            AsyncStorage.removeItem('user_profile'),
+          ]);
+          setTokens(null, null);
+          setUser(null);
         }
       } catch (err) {
         console.error('Error reading persisted session:', err);
@@ -166,31 +200,7 @@ export default function LoginScreen({ navigation }: any) {
               />
             </View>
 
-            {/* Official Badge Pill */}
-            <View
-              style={[
-                styles.badgePill,
-                {
-                  backgroundColor: isDark ? 'rgba(56, 189, 248, 0.15)' : 'rgba(22, 119, 255, 0.08)',
-                  borderColor: isDark ? 'rgba(56, 189, 248, 0.3)' : 'rgba(22, 119, 255, 0.2)',
-                },
-              ]}
-            >
-              <SparkleSvg size={14} color={isDark ? '#38BDF8' : '#1677FF'} />
-              <Text
-                style={[
-                  styles.badgePillText,
-                  { color: isDark ? '#38BDF8' : '#1677FF' },
-                ]}
-              >
-                UK OFFICIAL MOT PLATFORM
-              </Text>
-            </View>
-
-            <Text style={[styles.title, { color: theme.colors.text }]}>MOT Reminders</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.placeholder }]}>
-              Automated vehicle MOT alerts & multi-garage network
-            </Text>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Ondoor Car Service</Text>
           </View>
 
           {/* Form Card */}
@@ -268,7 +278,7 @@ export default function LoginScreen({ navigation }: any) {
                   }}
                   onFocus={() => setEmailFocused(true)}
                   onBlur={() => setEmailFocused(false)}
-                  placeholder="e.g. driver@example.co.uk"
+                  placeholder="abc@gmail.com"
                   placeholderTextColor={theme.colors.placeholder}
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -450,22 +460,16 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   badgePillText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '800',
     letterSpacing: 0.8,
   },
   title: {
+    fontFamily: fonts.bold,
     fontSize: 27,
-    fontWeight: '900',
     letterSpacing: 0.3,
-    marginBottom: 4,
+    marginBottom: 8,
     textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-    maxWidth: 290,
   },
   card: {
     borderRadius: 24,
@@ -480,12 +484,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   cardTitle: {
+    fontFamily: fonts.bold,
     fontSize: 21,
-    fontWeight: '800',
     letterSpacing: 0.2,
     marginBottom: 3,
   },
   cardSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     lineHeight: 17,
   },
@@ -500,8 +505,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   errorText: {
+    fontFamily: fonts.semiBold,
     fontSize: 13,
-    fontWeight: '600',
     color: '#EF4444',
     flex: 1,
     lineHeight: 17,
@@ -516,8 +521,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   inputLabel: {
+    fontFamily: fonts.bold,
     fontSize: 13.5,
-    fontWeight: '700',
     marginBottom: 6,
     marginLeft: 2,
     letterSpacing: 0.2,
@@ -536,11 +541,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   input: {
+    fontFamily: fonts.medium,
     flex: 1,
     height: '100%',
     fontSize: 15,
     paddingVertical: 0,
-    fontWeight: '500',
   },
   eyeButton: {
     padding: 6,
@@ -564,9 +569,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   buttonText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '800',
     letterSpacing: 0.3,
   },
   footerSection: {
@@ -576,16 +581,16 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   footerText: {
+    fontFamily: fonts.medium,
     fontSize: 14,
-    fontWeight: '500',
   },
   signUpPill: {
     paddingVertical: 4,
     paddingHorizontal: 6,
   },
   signUpLink: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '800',
   },
   trustBadgesRow: {
     flexDirection: 'row',
@@ -601,8 +606,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   trustBadgeText: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '600',
   },
   dotDivider: {
     width: 3,

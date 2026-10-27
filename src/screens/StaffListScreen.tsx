@@ -114,7 +114,7 @@ export default function StaffListScreen({ navigation }: any) {
                 <View style={styles.staffMeta}>
                   <Text style={[styles.staffName, { color: theme.colors.text }]}>{staff.username}</Text>
                   <Text style={[styles.staffEmail, { color: theme.colors.placeholder }]}>{staff.email}</Text>
-                  <Text style={{ fontSize: 10, color: theme.colors.placeholder, marginTop: 4 }}>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 10, color: theme.colors.placeholder, marginTop: 4 }}>
                     Registered: {new Date(staff.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </Text>
                 </View>
@@ -139,6 +139,8 @@ export default function StaffListScreen({ navigation }: any) {
   );
 }
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -160,8 +162,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   navTitle: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: 'bold',
     flex: 1,
   },
   badgeCount: {
@@ -171,8 +173,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.03)',
   },
   badgeText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
   },
   centered: {
     flex: 1,
@@ -189,8 +191,8 @@ const styles = StyleSheet.create({
     paddingVertical: 80,
   },
   emptyText: {
+    fontFamily: fonts.medium,
     fontSize: 14,
-    fontWeight: '500',
   },
   staffCard: {
     flexDirection: 'row',
@@ -213,17 +215,18 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   avatarText: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
   },
   staffMeta: {
     flex: 1,
   },
   staffName: {
+    fontFamily: fonts.bold,
     fontSize: 15,
-    fontWeight: 'bold',
   },
   staffEmail: {
+    fontFamily: fonts.regular,
     fontSize: 12.5,
     marginTop: 1,
   },

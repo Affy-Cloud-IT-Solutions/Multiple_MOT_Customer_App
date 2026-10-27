@@ -9,9 +9,9 @@ export default function AdminRemindersScreen() {
   const { audits, vehicles, customers, alerts, token } = useAppValues();
   const [activeTab, setActiveTab] = useState<'logs' | 'reports' | 'templates'>('logs');
 
-  // MOT Due Template state (DVSA 30-day window)
+  // Service & MOT Due Template state
   const [motTemplate, setMotTemplate] = useState(
-    'Dear [Name], Your [Vehicle] ([Reg]) MOT is due for renewal on [Expiry]. Book your MOT test today under the DVSA 30-day early renewal window.'
+    'Dear [Name], Your [Vehicle] ([Reg]) is due for service / MOT renewal on [Expiry]. Book your service or MOT appointment today with our accredited garage network.'
   );
 
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -28,9 +28,9 @@ export default function AdminRemindersScreen() {
         },
         body: JSON.stringify({ motDue: motTemplate, template: motTemplate, t30: motTemplate })
       });
-      Alert.alert('Success', 'MOT Due Reminder Template updated successfully!');
+      Alert.alert('Success', 'Service & MOT Due Reminder Template updated successfully!');
     } catch (error) {
-      Alert.alert('Success', 'MOT Due Reminder Template updated successfully!');
+      Alert.alert('Success', 'Service & MOT Due Reminder Template updated successfully!');
     } finally {
       setSavingTemplate(false);
     }
@@ -38,10 +38,10 @@ export default function AdminRemindersScreen() {
 
   const handleExport = async (reportName: string, format: 'PDF' | 'Excel' | 'CSV') => {
     let endpoint = '';
-    if (reportName === 'MOT Due Report') endpoint = 'due-mots';
+    if (reportName === 'MOT Due Report' || reportName === 'Service & MOT Due Report') endpoint = 'due-mots';
     else if (reportName === 'Reminder Sent Report') endpoint = 'reminder-sent';
     else if (reportName === 'Customer Response Report') endpoint = 'customer-response';
-    else if (reportName === 'Booked MOT Report') endpoint = 'booked-mots';
+    else if (reportName === 'Booked MOT Report' || reportName === 'Booked Services Report') endpoint = 'booked-mots';
 
     const formatParam = format.toLowerCase();
     const backendFormat = format === 'Excel' ? 'excel' : formatParam;
@@ -166,10 +166,10 @@ export default function AdminRemindersScreen() {
           <View style={styles.tabContent}>
             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Garage Reporting Engine</Text>
             <Text style={[styles.sectionDesc, { color: theme.colors.placeholder }]}>
-              Generate, preview, and export critical MOT operations reports.
+              Generate, preview, and export critical service and MOT operations reports.
             </Text>
 
-            {/* Report 1: MOT Due Report */}
+            {/* Report 1: Service & MOT Due Report */}
             <View style={[styles.reportCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <View style={styles.reportHeader}>
                 <View style={[styles.reportIconContainer, { backgroundColor: theme.colors.primary + '15' }]}>
@@ -177,12 +177,12 @@ export default function AdminRemindersScreen() {
                 </View>
                 <View style={styles.reportMeta}>
                   <View style={styles.reportTitleRow}>
-                    <Text style={[styles.reportTitle, { color: theme.colors.text }]}>MOT Due Report</Text>
+                    <Text style={[styles.reportTitle, { color: theme.colors.text }]}>Service & MOT Due Report</Text>
                     <View style={[styles.metricBadge, { backgroundColor: theme.colors.primary + '15' }]}>
                       <Text style={[styles.metricText, { color: theme.colors.primary }]}>{activeVehiclesCount} active</Text>
                     </View>
                   </View>
-                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>Active vehicles scheduled for MOT soon</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>Active vehicles scheduled for service or MOT soon</Text>
                 </View>
               </View>
               <View style={styles.exportDivider} />
@@ -209,11 +209,11 @@ export default function AdminRemindersScreen() {
                   return (
                     <TouchableOpacity
                       key={format}
-                      onPress={() => handleExport('MOT Due Report', format)}
+                      onPress={() => handleExport('Service & MOT Due Report', format)}
                       disabled={exportingReport !== null}
                       style={[styles.exportBtn, btnStyle]}
                     >
-                      {exportingReport === `MOT Due Report_${format}` ? (
+                      {exportingReport === `Service & MOT Due Report_${format}` ? (
                         <ActivityIndicator size="small" color={color} />
                       ) : (
                         <View style={styles.exportBtnContent}>
@@ -240,7 +240,7 @@ export default function AdminRemindersScreen() {
                       <Text style={[styles.metricText, { color: theme.colors.primary }]}>{remindersSentCount} sent</Text>
                     </View>
                   </View>
-                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>Log of automated reminders sent by system</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>Log of automated reminders sent by system</Text>
                 </View>
               </View>
               <View style={styles.exportDivider} />
@@ -298,7 +298,7 @@ export default function AdminRemindersScreen() {
                       <Text style={[styles.metricText, { color: theme.colors.primary }]}>{customerResponsesCount} responses</Text>
                     </View>
                   </View>
-                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>Customer actions following automated reminders</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>Customer actions following automated reminders</Text>
                 </View>
               </View>
               <View style={styles.exportDivider} />
@@ -351,12 +351,12 @@ export default function AdminRemindersScreen() {
                 </View>
                 <View style={styles.reportMeta}>
                   <View style={styles.reportTitleRow}>
-                    <Text style={[styles.reportTitle, { color: theme.colors.text }]}>Booked MOT Report</Text>
+                    <Text style={[styles.reportTitle, { color: theme.colors.text }]}>Booked Services Report</Text>
                     <View style={[styles.metricBadge, { backgroundColor: theme.colors.primary + '15' }]}>
                       <Text style={[styles.metricText, { color: theme.colors.primary }]}>{bookedMotsCount} booked</Text>
                     </View>
                   </View>
-                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>List of scheduled MOT appointments and slot usage</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.colors.placeholder, marginTop: 1 }}>List of scheduled appointments and slot usage</Text>
                 </View>
               </View>
               <View style={styles.exportDivider} />
@@ -383,11 +383,11 @@ export default function AdminRemindersScreen() {
                   return (
                     <TouchableOpacity
                       key={format}
-                      onPress={() => handleExport('Booked MOT Report', format)}
+                      onPress={() => handleExport('Booked Services Report', format)}
                       disabled={exportingReport !== null}
                       style={[styles.exportBtn, btnStyle]}
                     >
-                      {exportingReport === `Booked MOT Report_${format}` ? (
+                      {exportingReport === `Booked Services Report_${format}` ? (
                         <ActivityIndicator size="small" color={color} />
                       ) : (
                         <View style={styles.exportBtnContent}>
@@ -406,7 +406,7 @@ export default function AdminRemindersScreen() {
         {activeTab === 'templates' && (
           // REMINDER TEMPLATE CONFIGURATION (DVSA 30-DAY WINDOW)
           <View style={styles.tabContent}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>MOT Expiry Reminder Template</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Service & MOT Reminder Template</Text>
             <Text style={[styles.sectionDesc, { color: theme.colors.placeholder }]}>
               Configure the automated notification dispatched to customers when their vehicle enters the DVSA 30-day early renewal eligibility window.
             </Text>
@@ -427,9 +427,9 @@ export default function AdminRemindersScreen() {
               <View style={styles.templateHeader}>
                 <View style={styles.templateTitleRow}>
                   <MaterialCommunityIcons name="calendar-clock" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-                  <Text style={[styles.templateDaysText, { color: theme.colors.text }]}>MOT Due Notification (Within 30 Days)</Text>
+                  <Text style={[styles.templateDaysText, { color: theme.colors.text }]}>Service & MOT Due Notification (Within 30 Days)</Text>
                 </View>
-                <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginTop: 4 }}>
+                <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.colors.placeholder, marginTop: 4 }}>
                   Dispatched via SMS, WhatsApp, or Email according to each customer's communication preferences.
                 </Text>
               </View>
@@ -479,6 +479,8 @@ export default function AdminRemindersScreen() {
   );
 }
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -507,8 +509,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   tabText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   scrollContent: {
     padding: 16,
@@ -518,11 +520,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: 'bold',
     marginBottom: 4,
   },
   sectionDesc: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 16,
@@ -533,8 +536,8 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyText: {
+    fontFamily: fonts.medium,
     fontSize: 14,
-    fontWeight: '500',
   },
   logCard: {
     borderWidth: 1,
@@ -561,13 +564,15 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   logActivity: {
-    fontWeight: '700',
+    fontFamily: fonts.bold,
     fontSize: 12.5,
   },
   logDate: {
+    fontFamily: fonts.regular,
     fontSize: 10.5,
   },
   logDetails: {
+    fontFamily: fonts.regular,
     fontSize: 11.5,
     lineHeight: 16,
   },
@@ -603,8 +608,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   reportTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '700',
   },
   metricBadge: {
     paddingHorizontal: 8,
@@ -612,8 +617,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   metricText: {
+    fontFamily: fonts.bold,
     fontSize: 10.5,
-    fontWeight: '700',
   },
   exportDivider: {
     height: 1,
@@ -622,8 +627,8 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   exportLabel: {
+    fontFamily: fonts.bold,
     fontSize: 9.5,
-    fontWeight: '700',
     letterSpacing: 0.5,
     marginBottom: 8,
   },
@@ -645,8 +650,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   exportBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
   pdfBtn: {
     backgroundColor: '#EF444410',
@@ -680,11 +685,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   dvsaBannerTitle: {
+    fontFamily: fonts.bold,
     fontSize: 12.5,
-    fontWeight: '700',
     marginBottom: 2,
   },
   dvsaBannerText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     lineHeight: 16,
   },
@@ -696,10 +702,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   templateDaysText: {
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     fontSize: 13.5,
   },
   templateInput: {
+    fontFamily: fonts.regular,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
@@ -713,8 +720,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   placeholderLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '600',
     marginBottom: 6,
   },
   placeholderScroll: {
@@ -726,8 +733,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   placeholderPillText: {
+    fontFamily: fonts.semiBold,
     fontSize: 10.5,
-    fontWeight: '600',
   },
   saveBtn: {
     height: 40,
@@ -741,8 +748,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 12.5,
   },
 });

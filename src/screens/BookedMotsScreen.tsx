@@ -69,7 +69,7 @@ export default function BookedMotsScreen({ navigation }: any) {
     setLoadingAction(alertId);
     try {
       await approveAlert(alertId);
-      Alert.alert('Approved', 'MOT Booking has been confirmed successfully!');
+      Alert.alert('Approved', 'Service Booking has been confirmed successfully!');
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Could not approve booking.');
     } finally {
@@ -119,7 +119,7 @@ export default function BookedMotsScreen({ navigation }: any) {
           <MaterialCommunityIcons name="arrow-left" size={22} color={theme.colors.text} />
           {/* <Text style={[styles.backBtnText, { color: theme.colors.text }]}>Back</Text> */}
         </TouchableOpacity> 
-        <Text style={[styles.navTitle, { color: theme.colors.text }]}>Booked MOT's</Text>
+        <Text style={[styles.navTitle, { color: theme.colors.text }]}>Booked Services</Text>
         <View style={styles.countBadge}>
           <Text style={[styles.countText, { color: theme.colors.secondary }]}>{bookedMots.length}</Text>
         </View>
@@ -134,7 +134,7 @@ export default function BookedMotsScreen({ navigation }: any) {
         {groupedList.length === 0 ? (
           <View style={styles.emptyContainer}>
             <MaterialCommunityIcons name="calendar-blank" size={54} color={theme.colors.placeholder} style={{ marginBottom: 12 }} />
-            <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>No MOT bookings found.</Text>
+            <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>No bookings found.</Text>
           </View>
         ) : (
           groupedList.map((group) => {
@@ -152,7 +152,7 @@ export default function BookedMotsScreen({ navigation }: any) {
                     </Text>
                   </View>
                   <View style={[styles.badgeCount, { backgroundColor: theme.colors.secondary + '20' }]}>
-                    <Text style={{ fontSize: 11, fontWeight: 'bold', color: theme.colors.secondary }}>
+                    <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: theme.colors.secondary }}>
                       {group.alerts.length} {group.alerts.length === 1 ? 'Booking' : 'Bookings'}
                     </Text>
                   </View>
@@ -190,7 +190,7 @@ export default function BookedMotsScreen({ navigation }: any) {
                       >
                         {/* Sub Card Header: Date & Status */}
                         <View style={styles.subCardHeader}>
-                          <Text style={{ fontSize: 10, color: theme.colors.placeholder }}>
+                          <Text style={{ fontFamily: fonts.regular, fontSize: 10, color: theme.colors.placeholder }}>
                             Requested: {new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                           </Text>
                           <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor + '40' }]}>
@@ -214,7 +214,7 @@ export default function BookedMotsScreen({ navigation }: any) {
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 6, borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
                                 <MaterialCommunityIcons name="storefront-outline" size={15} color={theme.colors.secondary} style={{ marginRight: 4 }} />
-                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text }} numberOfLines={1}>
+                                <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: theme.colors.text }} numberOfLines={1}>
                                   {item.garageName || item.stationName || item.garage?.name}
                                 </Text>
                               </View>
@@ -230,15 +230,15 @@ export default function BookedMotsScreen({ navigation }: any) {
                                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.secondary + '15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 }}
                               >
                                 <MaterialCommunityIcons name="navigation-variant" size={12} color={theme.colors.secondary} style={{ marginRight: 3 }} />
-                                <Text style={{ fontSize: 10, fontWeight: 'bold', color: theme.colors.secondary }}>Directions</Text>
+                                <Text style={{ fontFamily: fonts.bold, fontSize: 10, color: theme.colors.secondary }}>Directions</Text>
                               </TouchableOpacity>
                             </View>
                           )}
 
                           {isRejected && item.rejectionReason && (
                             <View style={{ marginTop: 8, padding: 8, borderRadius: 6, backgroundColor: theme.colors.error + '10', borderWidth: 0.5, borderColor: theme.colors.error }}>
-                              <Text style={{ fontSize: 11, fontWeight: 'bold', color: theme.colors.error }}>Rejection Reason:</Text>
-                              <Text style={{ fontSize: 12, color: theme.colors.text, marginTop: 2 }}>{item.rejectionReason}</Text>
+                              <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: theme.colors.error }}>Rejection Reason:</Text>
+                              <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: theme.colors.text, marginTop: 2 }}>{item.rejectionReason}</Text>
                             </View>
                           )}
                         </View>
@@ -251,7 +251,7 @@ export default function BookedMotsScreen({ navigation }: any) {
                               disabled={loadingAction !== null}
                               style={[styles.subActionBtn, styles.subDismissBtn, { borderColor: theme.colors.error + '30' }]}
                             >
-                              <Text style={{ fontSize: 11, fontWeight: 'bold', color: theme.colors.error }}>Reject</Text>
+                              <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: theme.colors.error }}>Reject</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                               onPress={() => handleConfirm(item.id)}
@@ -261,7 +261,7 @@ export default function BookedMotsScreen({ navigation }: any) {
                               {loadingAction === item.id ? (
                                 <ActivityIndicator color={theme.dark ? theme.colors.background : '#FFFFFF'} size="small" />
                               ) : (
-                                <Text style={{ fontSize: 11, fontWeight: 'bold', color: theme.dark ? theme.colors.background : '#FFFFFF' }}>Confirm Booking</Text>
+                                <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: theme.dark ? theme.colors.background : '#FFFFFF' }}>Confirm Booking</Text>
                               )}
                             </TouchableOpacity>
                           </View>
@@ -321,6 +321,8 @@ export default function BookedMotsScreen({ navigation }: any) {
   );
 }
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -339,13 +341,13 @@ const styles = StyleSheet.create({
     width: 80,
   },
   backBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
     marginLeft: 4,
   },
   navTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
     textAlign: 'center',
   },
   countBadge: {
@@ -358,7 +360,7 @@ const styles = StyleSheet.create({
     width: 80,
   },
   countText: {
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     fontSize: 12,
   },
   scrollContent: {
@@ -371,6 +373,7 @@ const styles = StyleSheet.create({
     paddingVertical: 128,
   },
   emptyText: {
+    fontFamily: fonts.medium,
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -399,8 +402,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   statusText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: 'bold',
   },
   cardBody: {
     padding: 12,
@@ -413,8 +416,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   customerName: {
+    fontFamily: fonts.medium,
     fontSize: 13,
-    fontWeight: '500',
   },
   vehicleRow: {
     flexDirection: 'row',
@@ -433,13 +436,13 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   plateText: {
+    fontFamily: fonts.bold,
     color: '#000',
-    fontWeight: 'bold',
     fontSize: 11,
     letterSpacing: 0.5,
   },
   makeModelText: {
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     fontSize: 13,
     flex: 1,
   },
@@ -465,8 +468,8 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   actionBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
   },
   customerContainerCard: {
     borderWidth: 1,
@@ -488,8 +491,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   customerGroupName: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
   },
   badgeCount: {
     paddingHorizontal: 8,
@@ -555,16 +558,18 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
   },
   modalTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 8,
   },
   modalSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 16,
     marginBottom: 14,
   },
   modalInput: {
+    fontFamily: fonts.regular,
     borderWidth: 1,
     borderRadius: 8,
     padding: 10,
@@ -592,7 +597,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   modalBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
   },
 });

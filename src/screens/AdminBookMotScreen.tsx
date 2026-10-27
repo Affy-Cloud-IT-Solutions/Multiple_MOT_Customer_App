@@ -155,15 +155,15 @@ export default function AdminBookMotScreen({ route, navigation }: any) {
 
       // Log to audit history
       await addAudit(
-        'MOT Booking Booked',
-        `Garage staff booked MOT booking slot for ${customer.firstName} ${customer.lastName}'s ${vehicle.make} ${vehicle.model} (${vehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
+        'Service Booking Booked',
+        `Garage staff booked service slot for ${customer.firstName} ${customer.lastName}'s ${vehicle.make} ${vehicle.model} (${vehicle.registrationNumber}) on ${displayDateStr} at ${selectedTime}`
       );
 
       await refreshData();
       setLoading(false);
 
       // Show Toast Notification
-      const successMessage = `MOT Booking confirmed and approved for ${customer.firstName} ${customer.lastName}!`;
+      const successMessage = `Service Booking confirmed and approved for ${customer.firstName} ${customer.lastName}!`;
       Toast.show({
         type: 'success',
         text1: 'Success',
@@ -186,7 +186,7 @@ export default function AdminBookMotScreen({ route, navigation }: any) {
           <MaterialCommunityIcons name="arrow-left" size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={[styles.navTitle, { color: theme.colors.text }]}>
-          Book MOT (Admin Flow)
+          Book Service (Admin Flow)
         </Text>
         <View style={{ width: 60 }} />
       </View>
@@ -197,7 +197,7 @@ export default function AdminBookMotScreen({ route, navigation }: any) {
           <View style={styles.summaryRow}>
             <MaterialCommunityIcons name="account" size={18} color={theme.colors.secondary} />
             <Text style={[styles.summaryLabel, { color: theme.colors.text }]}>
-              Customer: <Text style={{ fontWeight: 'bold' }}>{customer.firstName} {customer.lastName}</Text>
+              Customer: <Text style={{ fontFamily: fonts.bold }}>{customer.firstName} {customer.lastName}</Text>
             </Text>
           </View>
           <View style={[styles.summaryRow, { marginTop: 4 }]}>
@@ -215,7 +215,7 @@ export default function AdminBookMotScreen({ route, navigation }: any) {
               <Text style={[styles.vehicleMakeModel, { color: theme.colors.text }]}>
                 {vehicle.make} {vehicle.model} {vehicle.year ? `(${vehicle.year})` : ''}
               </Text>
-              <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+              <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.colors.placeholder }}>
                 Booking appointment directly to Confirmed status
               </Text>
             </View>
@@ -307,7 +307,7 @@ export default function AdminBookMotScreen({ route, navigation }: any) {
             }}
           >
             <MaterialCommunityIcons name="clock-alert-outline" size={24} color={theme.colors.error} />
-            <Text style={{ marginLeft: 8, color: theme.colors.placeholder, fontSize: 13 }}>
+            <Text style={{ marginLeft: 8, color: theme.colors.placeholder, fontSize: 13, fontFamily: fonts.medium }}>
               No slots available for today. Please choose a future date.
             </Text>
           </View>
@@ -380,6 +380,8 @@ export default function AdminBookMotScreen({ route, navigation }: any) {
   );
 }
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -398,8 +400,8 @@ const styles = StyleSheet.create({
     width: 60,
   },
   navTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
   },
   scrollContent: {
     padding: 16,
@@ -421,10 +423,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   summaryLabel: {
+    fontFamily: fonts.regular,
     fontSize: 13.5,
     marginLeft: 6,
   },
   summarySubLabel: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     marginLeft: 24,
   },
@@ -441,19 +445,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   plateText: {
+    fontFamily: fonts.bold,
     color: '#000',
-    fontWeight: 'bold',
     fontSize: 13,
     letterSpacing: 0.5,
   },
   vehicleMakeModel: {
+    fontFamily: fonts.bold,
     fontSize: 15,
-    fontWeight: 'bold',
     marginBottom: 2,
   },
   sectionHeading: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -479,8 +483,8 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   calendarTitle: {
+    fontFamily: fonts.bold,
     fontSize: 15,
-    fontWeight: 'bold',
   },
   weekdayRow: {
     flexDirection: 'row',
@@ -491,10 +495,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   weekdayText: {
+    fontFamily: fonts.semiBold,
     width: '14.2%',
     textAlign: 'center',
     fontSize: 11,
-    fontWeight: '600',
   },
   daysGrid: {
     flexDirection: 'row',
@@ -508,6 +512,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dayCellText: {
+    fontFamily: fonts.medium,
     fontSize: 13,
   },
   timePickerContainer: {
@@ -525,14 +530,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   timeLabel: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
   },
   timeText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginTop: 1,
   },
   notesInput: {
+    fontFamily: fonts.regular,
     borderWidth: 1,
     borderRadius: 10,
     padding: 12,
@@ -560,7 +567,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitBtnText: {
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     fontSize: 14,
   },
 });

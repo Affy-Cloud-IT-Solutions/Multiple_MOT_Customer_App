@@ -19,6 +19,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import Toast from 'react-native-toast-message';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
+import { fonts } from '../theme/theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { openGarageDirections } from '../utils/mapUtils';
 import { isServiceMatch } from '../components/FilterServiceBottomSheet';
@@ -691,13 +692,34 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     }
 
     if (explicitServices && Array.isArray(explicitServices) && explicitServices.length > 0) {
-      setSelectedServices(explicitServices);
+      // Deduplicate explicit services by id/name to avoid double entries
+      const seen = new Set<string>();
+      const uniqueExplicit = explicitServices.filter((s: any) => {
+        if (!s) return false;
+        const key = (s._id || s.id || (s.name || '').trim().toLowerCase()).toString();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setSelectedServices(uniqueExplicit);
     } else if (service) {
-      if (!isServiceSelected(service)) {
-        setSelectedServices(prev => [...prev, service]);
-      }
-    } else if (selectedServices.length === 0 && allActiveServices.length > 0) {
-      setSelectedServices([allActiveServices[0]]);
+      const targetId = service._id || service.id;
+      const targetName = (service.name || '').trim().toLowerCase();
+      setSelectedServices(prev => {
+        const exists = prev.some(s =>
+          (targetId && (s._id === targetId || s.id === targetId)) ||
+          (targetName && s.name && s.name.trim().toLowerCase() === targetName)
+        );
+        if (exists) {
+          return prev;
+        }
+        return [...prev, service];
+      });
+    } else if (allActiveServices.length > 0) {
+      setSelectedServices(prev => {
+        if (prev.length > 0) return prev;
+        return [allActiveServices[0]];
+      });
     }
 
     setBookingSuccess(false);
@@ -814,7 +836,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     }
 
     if (hasMot && !selectedTime) {
-      Alert.alert('Error', 'Please select an available MOT test slot.');
+      Alert.alert('Error', 'Please select an available test slot.');
       return;
     }
 
@@ -866,7 +888,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         type: 'success',
         text1: 'Booking Requested!',
         text2: hasMot 
-          ? `MOT slot requested for ${selectedDate} at ${targetSlotTime}`
+          ? `Appointment slot requested for ${selectedDate} at ${targetSlotTime}`
           : `Workshop drop-off requested for ${selectedDate}`,
       });
     } catch (err: any) {
@@ -918,13 +940,24 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   const [selectedServiceCategory, setSelectedServiceCategory] = useState<string>('All');
   const [serviceSearchText, setServiceSearchText] = useState<string>('');
 
-  // Extract all active garage services
+  // Extract all active garage services (deduplicated by id/name)
   const allActiveServices = useMemo(() => {
     if (!garage?.services || !Array.isArray(garage.services) || garage.services.length === 0) {
       return [];
     }
-    const active = garage.services.filter((s: any) => s.isActive !== false);
-    return active.length > 0 ? active : garage.services;
+    const rawActive = garage.services.filter((s: any) => s.isActive !== false);
+    const candidateList = rawActive.length > 0 ? rawActive : garage.services;
+    const seen = new Set<string>();
+    const unique: any[] = [];
+    candidateList.forEach((s: any) => {
+      if (!s) return;
+      const key = (s._id || s.id || (s.name || '').trim().toLowerCase()).toString();
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(s);
+      }
+    });
+    return unique;
   }, [garage?.services]);
 
   const unselectedServices = useMemo(() => {
@@ -991,9 +1024,10 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
       let matchedServices: any[] = [];
       if (targetFilters.length > 0) {
-        matchedServices = allActiveServices.filter((s: any) =>
-          targetFilters.some((tf: string) => isServiceMatch(s, tf))
-        );
+        // Pick AT MOST ONE best matching service per filter category (prevents selecting Class 4 + Class 7 MOT together)
+        matchedServices = targetFilters
+          .map((tf: string) => allActiveServices.find((s: any) => isServiceMatch(s, tf)))
+          .filter(Boolean);
       }
       if (matchedServices.length === 0 && targetQuery) {
         const single = allActiveServices.find((s: any) => isServiceMatch(s, targetQuery));
@@ -1002,6 +1036,16 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       if (matchedServices.length === 0) {
         matchedServices = [allActiveServices[0]];
       }
+
+      // Deduplicate matched services by id/name
+      const seen = new Set<string>();
+      matchedServices = matchedServices.filter((s: any) => {
+        if (!s) return false;
+        const key = (s._id || s.id || (s.name || '').trim().toLowerCase()).toString();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
 
       setSelectedServices(matchedServices);
       handleOpenBookingModal(undefined, matchedServices);
@@ -1015,9 +1059,20 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         ? route.params.serviceFilters
         : (route?.params?.serviceFilter ? [route.params.serviceFilter] : []);
       if (targetFilters.length > 0) {
-        const matched = allActiveServices.filter((s: any) =>
-          targetFilters.some((tf: string) => isServiceMatch(s, tf))
-        );
+        let matched = targetFilters
+          .map((tf: string) => allActiveServices.find((s: any) => isServiceMatch(s, tf)))
+          .filter(Boolean);
+        
+        // Deduplicate
+        const seen = new Set<string>();
+        matched = matched.filter((s: any) => {
+          if (!s) return false;
+          const key = (s._id || s.id || (s.name || '').trim().toLowerCase()).toString();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
         if (matched.length > 0) {
           setSelectedServices(matched);
         }
@@ -1037,7 +1092,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={{ marginTop: 12, color: theme.colors.text }}>Loading garage details...</Text>
+          <Text style={{ marginTop: 12, color: theme.colors.text, fontFamily: fonts.medium }}>Loading garage details...</Text>
         </View>
       </SafeAreaView>
     );
@@ -1055,11 +1110,11 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
           <MaterialCommunityIcons name="alert-circle-outline" size={48} color={theme.colors.error} />
-          <Text style={{ marginTop: 12, fontSize: 16, color: theme.colors.text, textAlign: 'center' }}>
+          <Text style={{ marginTop: 12, fontSize: 16, color: theme.colors.text, textAlign: 'center', fontFamily: fonts.semiBold }}>
             {error || 'Garage details not found.'}
           </Text>
           <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={fetchGarageDetails}>
-            <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Retry</Text>
+            <Text style={{ color: '#FFFFFF', fontFamily: fonts.bold }}>Retry</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -1103,13 +1158,13 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 2 }]}>
                   Services & Pricing
                 </Text>
-                <Text style={{ fontSize: 12, color: theme.colors.placeholder }}>
+                <Text style={{ fontSize: 12, color: theme.colors.placeholder, fontFamily: fonts.regular }}>
                   {allActiveServices.length} {allActiveServices.length === 1 ? 'service' : 'services'} available to book
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.primary + '15', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
                 <MaterialCommunityIcons name="shield-check" size={14} color={theme.colors.primary} style={{ marginRight: 4 }} />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>DVSA Certified</Text>
+                <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: theme.colors.primary }}>DVSA Certified</Text>
               </View>
             </View>
 
@@ -1157,7 +1212,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 <TextInput
                   value={serviceSearchText}
                   onChangeText={setServiceSearchText}
-                  placeholder="Search services (e.g. Brake, Service, MOT, AC)..."
+                  placeholder="Search services (e.g. Full Service, MOT, Brakes, AC)..."
                   placeholderTextColor={theme.colors.placeholder}
                   style={[styles.serviceSearchInput, { color: theme.colors.text }]}
                 />
@@ -1207,7 +1262,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
                         <View style={{ backgroundColor: theme.colors.primary + '18', borderColor: theme.colors.primary + '50', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 6, flexDirection: 'row', alignItems: 'center' }}>
                           <MaterialCommunityIcons name="check-circle" size={13} color={theme.colors.primary} style={{ marginRight: 4 }} />
-                          <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>Selected for Booking</Text>
+                          <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: theme.colors.primary }}>Selected for Booking</Text>
                         </View>
                       </View>
                     )}
@@ -1274,7 +1329,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     {/* Bottom Action Row: Pricing, Multi-Select Checkbox & Book Button */}
                     <View style={[styles.serviceCardBottomRow, { borderTopColor: theme.colors.border + '50' }]}>
                       <View>
-                        <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase' }}>
+                        <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase' }}>
                           Standard Rate
                         </Text>
                         <Text style={[styles.servicePriceText, { color: theme.colors.text }]}>
@@ -1310,12 +1365,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
                         <TouchableOpacity
                           style={[styles.bookBtn, { backgroundColor: theme.colors.primary }]}
-                          onPress={() => {
-                            if (!isServiceSelected(service)) {
-                              toggleSelectService(service);
-                            }
-                            handleOpenBookingModal(service);
-                          }}
+                          onPress={() => handleOpenBookingModal(service)}
                           activeOpacity={0.8}
                         >
                           <MaterialCommunityIcons name="calendar-plus" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
@@ -1338,26 +1388,16 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         <View style={[styles.floatingBottomBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
           {/* 1. Selected Services with Price Chips / Pills */}
           <View style={styles.floatingBarServicesListWrap}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={[styles.floatingSelectedBadge, { backgroundColor: theme.colors.primary + '18' }]}>
-                  <MaterialCommunityIcons name="check-circle" size={11} color={theme.colors.primary} style={{ marginRight: 3 }} />
-                  <Text style={[styles.floatingSelectedBadgeText, { color: theme.colors.primary }]}>
-                    {selectedServices.length} {selectedServices.length === 1 ? 'SERVICE SELECTED' : 'SERVICES SELECTED'}
-                  </Text>
-                </View>
-                <Text style={[styles.floatingBarModeText, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                  {hasMot ? '• 45-Min MOT Slot' : '• Workshop Drop-off'}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <View style={[styles.floatingSelectedBadge, { backgroundColor: theme.colors.primary + '18' }]}>
+                <MaterialCommunityIcons name="check-circle" size={11} color={theme.colors.primary} style={{ marginRight: 3 }} />
+                <Text style={[styles.floatingSelectedBadgeText, { color: theme.colors.primary }]}>
+                  {selectedServices.length} {selectedServices.length === 1 ? 'SERVICE SELECTED' : 'SERVICES SELECTED'}
                 </Text>
               </View>
-              {selectedServices.length > 1 && (
-                <TouchableOpacity
-                  onPress={() => setSelectedServices([])}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                >
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.placeholder }}>Clear All</Text>
-                </TouchableOpacity>
-              )}
+              <Text style={[styles.floatingBarModeText, { color: theme.colors.placeholder, flexShrink: 1 }]} numberOfLines={1}>
+                {hasMot ? '• 45-Min MOT Slot' : '• Workshop Drop-off'}
+              </Text>
             </View>
 
             <ScrollView
@@ -1485,7 +1525,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}
                   >
                     <MaterialCommunityIcons name="image-multiple-outline" size={13} color={theme.colors.primary} />
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary, marginLeft: 3 }}>
+                    <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: theme.colors.primary, marginLeft: 3 }}>
                       {displayGarageImages.length > 1 ? `View all ${displayGarageImages.length} photos` : 'View photo'}
                     </Text>
                   </TouchableOpacity>
@@ -1495,7 +1535,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       {garage.rating ? garage.rating.toFixed(1) : '4.5'}
                     </Text>
                     {garage.city ? (
-                      <Text style={{ color: theme.colors.placeholder, marginLeft: 8, fontSize: 12 }}>
+                      <Text style={{ color: theme.colors.placeholder, marginLeft: 8, fontSize: 12, fontFamily: fonts.regular }}>
                         • {garage.city}
                       </Text>
                     ) : null}
@@ -1503,7 +1543,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   {garage.vtsNumber ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                       <MaterialCommunityIcons name="shield-check" size={13} color="#10B981" style={{ marginRight: 4 }} />
-                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981' }}>
+                      <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: '#10B981' }}>
                         DVLA VTS: {garage.vtsNumber}
                       </Text>
                     </View>
@@ -1525,7 +1565,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       }}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={{ fontSize: 11, fontWeight: '700', color: theme.colors.primary }}>
+                      <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: theme.colors.primary }}>
                         See All
                       </Text>
                     </TouchableOpacity>
@@ -1900,13 +1940,13 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 10 }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <MaterialCommunityIcons name="clock-time-four-outline" size={12} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
-                                <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: '600' }}>
+                                <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontFamily: fonts.semiBold }}>
                                   {svc.duration || 45} mins
                                 </Text>
                               </View>
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <MaterialCommunityIcons name={isMotSvc ? "clock-check" : "calendar-today"} size={12} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
-                                <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                                <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontFamily: fonts.regular }}>
                                   {isMotSvc ? '45-Min Bay Slot' : 'Workshop Drop-off'}
                                 </Text>
                               </View>
@@ -1943,11 +1983,11 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         color={hasMot ? "#3B82F6" : "#10B981"} 
                         style={{ marginRight: 6 }} 
                       />
-                      <Text style={{ fontSize: 12, color: theme.colors.text, fontWeight: '600' }}>
+                      <Text style={{ fontSize: 12, color: theme.colors.text, fontFamily: fonts.semiBold }}>
                         {hasMot ? 'Includes 45-Min MOT Test Slot' : 'Date-Only Workshop Drop-off'}
                       </Text>
                     </View>
-                    <Text style={{ fontSize: 13, fontWeight: '800', color: theme.colors.primary }}>
+                    <Text style={{ fontSize: 13, fontFamily: fonts.extraBold, color: theme.colors.primary }}>
                       £{totalSelectedPrice.toFixed(2)}
                     </Text>
                   </View>
@@ -2010,7 +2050,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
                                   <MaterialCommunityIcons name="clock-time-four-outline" size={11} color={theme.colors.placeholder} style={{ marginRight: 3 }} />
-                                  <Text style={{ fontSize: 11, color: theme.colors.placeholder }}>
+                                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontFamily: fonts.regular }}>
                                     {svc.duration || 45} mins • {isMot ? '45-Min Bay Slot' : 'Workshop Drop-off'}
                                   </Text>
                                 </View>
@@ -2323,28 +2363,28 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                               if (isPendingApproval) {
                                 Alert.alert(
                                   'Registration Pending Approval',
-                                  `The registration for ${veh.registrationNumber} is currently pending approval by garage staff. You can book an MOT test once it is verified.`
+                                  `The registration for ${veh.registrationNumber} is currently pending approval by garage staff. You can book an appointment once it is verified.`
                                 );
                                 return;
                               }
                               if (isRejected) {
                                 Alert.alert(
                                   'Vehicle Registration Rejected',
-                                  `The registration for ${veh.registrationNumber} was rejected by garage staff. You cannot book an MOT for this vehicle.`
+                                  `The registration for ${veh.registrationNumber} was rejected by garage staff. You cannot book for this vehicle.`
                                 );
                                 return;
                               }
                               if (pendingBookingAlert) {
                                 Alert.alert(
                                   'Booking Pending Approval',
-                                  `An MOT appointment request for ${veh.registrationNumber} on ${formatDisplayDate(pendingBookingAlert.date) || pendingBookingAlert.date} is already awaiting confirmation by garage staff.`
+                                  `An appointment request for ${veh.registrationNumber} on ${formatDisplayDate(pendingBookingAlert.date) || pendingBookingAlert.date} is already awaiting confirmation by garage staff.`
                                 );
                                 return;
                               }
                               if (activeBookingAlert) {
                                 Alert.alert(
                                   'Vehicle Already Booked',
-                                  `${veh.registrationNumber} already has an active MOT booking on ${formatDisplayDate(activeBookingAlert.date) || activeBookingAlert.date}.`
+                                  `${veh.registrationNumber} already has an active booking on ${formatDisplayDate(activeBookingAlert.date) || activeBookingAlert.date}.`
                                 );
                                 return;
                               }
@@ -2417,35 +2457,35 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           <View style={[styles.inlineNotice, { backgroundColor: theme.colors.warning + '15', borderColor: theme.colors.warning + '40' }]}>
                             <MaterialCommunityIcons name="clock-outline" size={18} color={theme.colors.warning} style={{ marginRight: 8 }} />
                             <Text style={[styles.inlineNoticeText, { color: theme.colors.text }]}>
-                              <Text style={{ fontWeight: 'bold' }}>Registration Pending:</Text> {selectedVehicle.registrationNumber} is awaiting verification by garage staff before an MOT test can be booked.
+                              <Text style={{ fontFamily: fonts.bold }}>Registration Pending:</Text> {selectedVehicle.registrationNumber} is awaiting verification by garage staff before an appointment can be booked.
                             </Text>
                           </View>
                         ) : alerts.some(a => a.type === 'BOOKED' && a.registrationNumber?.toUpperCase() === selectedVehicle.registrationNumber?.toUpperCase() && a.status === 'Pending') ? (
                           <View style={[styles.inlineNotice, { backgroundColor: theme.colors.warning + '15', borderColor: theme.colors.warning + '40' }]}>
                             <MaterialCommunityIcons name="calendar-clock" size={18} color={theme.colors.warning} style={{ marginRight: 8 }} />
                             <Text style={[styles.inlineNoticeText, { color: theme.colors.text }]}>
-                              <Text style={{ fontWeight: 'bold' }}>Booking Pending:</Text> An MOT booking request for {selectedVehicle.registrationNumber} is already awaiting garage staff approval.
+                              <Text style={{ fontFamily: fonts.bold }}>Booking Pending:</Text> A booking request for {selectedVehicle.registrationNumber} is already awaiting garage staff approval.
                             </Text>
                           </View>
                         ) : alerts.some(a => a.type === 'BOOKED' && a.registrationNumber?.toUpperCase() === selectedVehicle.registrationNumber?.toUpperCase() && a.status === 'Approved') ? (
                           <View style={[styles.inlineNotice, { backgroundColor: theme.colors.primary + '15', borderColor: theme.colors.primary + '40' }]}>
                             <MaterialCommunityIcons name="calendar-check" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
                             <Text style={[styles.inlineNoticeText, { color: theme.colors.text }]}>
-                              <Text style={{ fontWeight: 'bold' }}>Already Booked:</Text> {selectedVehicle.registrationNumber} already has an active confirmed MOT appointment.
+                              <Text style={{ fontFamily: fonts.bold }}>Already Booked:</Text> {selectedVehicle.registrationNumber} already has an active confirmed booking.
                             </Text>
                           </View>
                         ) : getDaysUntilExpiry(selectedVehicle.motExpiryDate) > 30 ? (
                           <View style={[styles.inlineNotice, { backgroundColor: theme.colors.primary + '15', borderColor: theme.colors.primary + '30' }]}>
                             <MaterialCommunityIcons name="calendar-clock" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
                             <Text style={[styles.inlineNoticeText, { color: theme.colors.text }]}>
-                              <Text style={{ fontWeight: 'bold' }}>Pre-Booking Active:</Text> Showing slots within the 30-day renewal window ({selectedVehicle.registrationNumber} expires {formatDisplayDate(selectedVehicle.motExpiryDate)}).
+                              <Text style={{ fontFamily: fonts.bold }}>Pre-Booking Active:</Text> Showing slots within the 30-day renewal window ({selectedVehicle.registrationNumber} expires {formatDisplayDate(selectedVehicle.motExpiryDate)}).
                             </Text>
                           </View>
                         ) : getDaysUntilExpiry(selectedVehicle.motExpiryDate) <= 0 ? (
                           <View style={[styles.inlineNotice, { backgroundColor: theme.colors.error + '15', borderColor: theme.colors.error + '30' }]}>
                             <MaterialCommunityIcons name="alert-circle" size={18} color={theme.colors.error} style={{ marginRight: 8 }} />
                             <Text style={[styles.inlineNoticeText, { color: theme.colors.text }]}>
-                              <Text style={{ fontWeight: 'bold' }}>MOT Expired:</Text> {selectedVehicle.registrationNumber} certificate has expired. Book the earliest available slot as soon as possible.
+                              <Text style={{ fontFamily: fonts.bold }}>MOT Expired:</Text> {selectedVehicle.registrationNumber} certificate has expired. Book the earliest available slot as soon as possible.
                             </Text>
                           </View>
                         ) : null
@@ -2569,7 +2609,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         <MaterialCommunityIcons name="calendar-check" size={16} color={theme.colors.primary} style={{ marginRight: 6 }} />
                         <Text style={[styles.calendarSelectedText, { color: theme.colors.text }]}>
                           Selected Date:{' '}
-                          <Text style={{ fontWeight: 'bold', color: theme.colors.primary }}>
+                          <Text style={{ fontFamily: fonts.bold, color: theme.colors.primary }}>
                             {formatDisplayDate(selectedDate)}
                           </Text>
                         </Text>
@@ -2584,18 +2624,18 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     <View style={styles.flowSectionHeader}>
                       <MaterialCommunityIcons name="clock-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
                       <Text style={[styles.flowSectionTitle, { color: theme.colors.text }]}>
-                        3. Select 45-Min MOT Test Slot
+                        3. Select 45-Min Test Slot
                       </Text>
                     </View>
                     <Text style={[styles.flowSectionSubtitle, { color: theme.colors.placeholder }]}>
-                      Live MOT bay test slots for {formatDisplayDate(selectedDate)}
+                      Live test slots for {formatDisplayDate(selectedDate)}
                     </Text>
 
                     {loadingSlots ? (
                       <View style={[styles.slotsLoadingContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                         <ActivityIndicator size="small" color={theme.colors.primary} />
                         <Text style={[styles.slotsLoadingText, { color: theme.colors.placeholder }]}>
-                          Checking live MOT bay availability...
+                          Checking live slot availability...
                         </Text>
                       </View>
                     ) : freeSlots.length === 0 ? (
@@ -2660,7 +2700,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           <Text style={[styles.dateOnlyCardTitle, { color: theme.colors.text }]}>
                             Full-Day Workshop Drop-Off
                           </Text>
-                          <Text style={{ fontSize: 12, color: theme.colors.primary, fontWeight: '700', marginTop: 2 }}>
+                          <Text style={{ fontSize: 12, color: theme.colors.primary, fontFamily: fonts.bold, marginTop: 2 }}>
                             Operating Hours: 08:00 – 18:00
                           </Text>
                         </View>
@@ -2708,7 +2748,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Appointment:</Text>
                     <Text style={[styles.summaryValue, { color: theme.colors.primary, fontWeight: 'bold' }]}>
                       {hasMot 
-                        ? (selectedDate && selectedTime ? `${formatDisplayDate(selectedDate)} at ${selectedTime}` : 'Select date & MOT slot')
+                        ? (selectedDate && selectedTime ? `${formatDisplayDate(selectedDate)} at ${selectedTime}` : 'Select date & slot')
                         : (selectedDate ? `${formatDisplayDate(selectedDate)} (Full-Day Drop-off)` : 'Select date')}
                     </Text>
                   </View>
@@ -2745,7 +2785,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   else if (hasPendingBooking) buttonLabel = 'Booking Already Pending';
                   else if (hasApprovedBooking) buttonLabel = 'Vehicle Already Booked';
                   else if (!selectedDate) buttonLabel = 'Select an Appointment Date';
-                  else if (hasMot && !selectedTime) buttonLabel = 'Select an Available MOT Slot';
+                  else if (hasMot && !selectedTime) buttonLabel = 'Select an Available Slot';
 
                   const canSubmit = isVehicleEligible && selectedDate && (hasMot ? Boolean(selectedTime) : true) && !submittingBooking;
 
@@ -2838,16 +2878,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarText: {
+    fontFamily: fonts.bold,
     fontSize: 22,
-    fontWeight: 'bold',
   },
   headerInfo: {
     marginLeft: 12,
     flex: 1,
   },
   garageName: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 2,
   },
   ratingRow: {
@@ -2855,14 +2895,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ratingText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
     marginLeft: 4,
   },
   distanceText: {
+    fontFamily: fonts.regular,
     fontSize: 12,
   },
   description: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -2878,8 +2920,8 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   sectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
     marginBottom: 8,
   },
   infoItem: {
@@ -2891,6 +2933,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   infoText: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     flex: 1,
     lineHeight: 16,
@@ -2906,6 +2949,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   categoryPillText: {
+    fontFamily: fonts.medium,
     fontSize: 12,
   },
   serviceSearchBox: {
@@ -2919,6 +2963,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   serviceSearchInput: {
+    fontFamily: fonts.regular,
     flex: 1,
     fontSize: 12,
     padding: 0,
@@ -2932,6 +2977,7 @@ const styles = StyleSheet.create({
     marginVertical: 12,
   },
   serviceEmptyText: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     marginTop: 8,
     textAlign: 'center',
@@ -2960,8 +3006,8 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   serviceName: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
   },
   categoryBadge: {
     paddingHorizontal: 6,
@@ -2970,13 +3016,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   categoryBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 9,
-    fontWeight: '700',
   },
   serviceMeta: {
+    fontFamily: fonts.medium,
     fontSize: 11,
   },
   serviceDescText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 4,
@@ -2990,8 +3038,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5,
   },
   servicePriceText: {
+    fontFamily: fonts.extraBold,
     fontSize: 16,
-    fontWeight: '900',
   },
   bookBtn: {
     flexDirection: 'row',
@@ -3002,8 +3050,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bookBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 12,
   },
   selectedServiceBanner: {
@@ -3018,6 +3066,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   serviceSwitchChipText: {
+    fontFamily: fonts.medium,
     fontSize: 11,
   },
   retryButton: {
@@ -3047,9 +3096,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   carouselBadgeText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: 'bold',
   },
   galleryThumbContainer: {
     width: 104,
@@ -3075,9 +3124,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   galleryThumbText: {
+    fontFamily: fonts.semiBold,
     color: '#FFFFFF',
     fontSize: 9,
-    fontWeight: '600',
   },
   carouselImage: {
     height: 160,
@@ -3100,10 +3149,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   modalHeaderTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
   },
   modalHeaderSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginTop: 2,
   },
@@ -3127,10 +3177,11 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   flowSectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
   },
   flowSectionSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginBottom: 10,
     lineHeight: 15,
@@ -3143,6 +3194,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   emptyVehicleText: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     marginTop: 8,
     textAlign: 'center',
@@ -3154,8 +3206,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   enterVrnBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
   },
   vehicleSelectItem: {
     flexDirection: 'row',
@@ -3189,14 +3241,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ukStripTextSmall: {
+    fontFamily: fonts.extraBold,
     color: '#FFF',
     fontSize: 7,
-    fontWeight: 'bold',
   },
   plateTextSmall: {
+    fontFamily: fonts.extraBold,
     paddingHorizontal: 8,
     fontSize: 12,
-    fontWeight: 'bold',
     color: '#000',
     letterSpacing: 0.5,
   },
@@ -3204,10 +3256,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   vehicleSelectMake: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
   },
   vehicleSelectExpiry: {
+    fontFamily: fonts.regular,
     fontSize: 11,
   },
 
@@ -3229,8 +3282,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   calendarTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
   },
   weekdayRow: {
     flexDirection: 'row',
@@ -3241,10 +3294,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   weekdayText: {
+    fontFamily: fonts.bold,
     width: '14.2%',
     textAlign: 'center',
     fontSize: 11,
-    fontWeight: '700',
   },
   daysGrid: {
     flexDirection: 'row',
@@ -3258,8 +3311,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dayCellText: {
+    fontFamily: fonts.medium,
     fontSize: 13,
-    fontWeight: '500',
   },
   calendarSelectedBanner: {
     flexDirection: 'row',
@@ -3269,6 +3322,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   calendarSelectedText: {
+    fontFamily: fonts.medium,
     fontSize: 12,
   },
   slotsLoadingContainer: {
@@ -3280,6 +3334,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   slotsLoadingText: {
+    fontFamily: fonts.medium,
     fontSize: 12,
     marginLeft: 8,
   },
@@ -3290,6 +3345,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   slotsEmptyText: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     textAlign: 'center',
     marginTop: 6,
@@ -3310,8 +3366,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   slotChipText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
   },
   summaryCard: {
     padding: 14,
@@ -3320,8 +3376,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   summaryCardTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
     marginBottom: 10,
   },
   summaryRow: {
@@ -3332,20 +3388,22 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(150, 150, 150, 0.2)',
   },
   summaryLabel: {
+    fontFamily: fonts.regular,
     fontSize: 12,
   },
   summaryValue: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
     maxWidth: '65%',
     textAlign: 'right',
   },
   summaryTotalLabel: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
   },
   summaryTotalPrice: {
+    fontFamily: fonts.extraBold,
     fontSize: 16,
-    fontWeight: '900',
   },
   primaryActionBtn: {
     height: 46,
@@ -3359,9 +3417,9 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   primaryActionBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: 'bold',
   },
   secondaryActionBtn: {
     height: 42,
@@ -3371,8 +3429,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryActionBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
   },
   successContainer: {
     padding: 24,
@@ -3390,12 +3448,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   successTitle: {
+    fontFamily: fonts.bold,
     fontSize: 20,
-    fontWeight: 'bold',
     marginBottom: 8,
     textAlign: 'center',
   },
   successSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
@@ -3411,6 +3470,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   dvsaNoticeText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     flex: 1,
     lineHeight: 15,
@@ -3422,8 +3482,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   eligibilityBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 9,
-    fontWeight: 'bold',
   },
   inlineNotice: {
     flexDirection: 'row',
@@ -3434,6 +3494,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   inlineNoticeText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     flex: 1,
     lineHeight: 15,
@@ -3447,8 +3508,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   smallDirectionsBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: 'bold',
   },
   fullDirectionsBtn: {
     flexDirection: 'row',
@@ -3459,9 +3520,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   fullDirectionsBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: 'bold',
   },
   topHeaderBar: {
     height: 52,
@@ -3478,9 +3539,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   topHeaderTitle: {
+    fontFamily: fonts.bold,
     flex: 1,
     fontSize: 17,
-    fontWeight: 'bold',
     textAlign: 'center',
     marginHorizontal: 8,
   },
@@ -3501,9 +3562,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   viewInfoPillText: {
+    fontFamily: fonts.bold,
     flex: 1,
     fontSize: 12,
-    fontWeight: '700',
   },
   infoModalOverlay: {
     flex: 1,
@@ -3527,8 +3588,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   infoModalTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
   },
   infoModalCloseBtn: {
     width: 32,
@@ -3552,8 +3613,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   infoModalGarageName: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
   },
   infoModalBlock: {
     padding: 12,
@@ -3561,16 +3622,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   infoModalBlockTitle: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.8,
     marginBottom: 4,
   },
   infoModalText: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     lineHeight: 18,
   },
   infoModalDesc: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -3583,9 +3646,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   infoDirectionsBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: 'bold',
   },
   callBtn: {
     flexDirection: 'row',
@@ -3596,8 +3659,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   callBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   infoModalDoneBtn: {
     marginHorizontal: 16,
@@ -3607,9 +3670,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   infoModalDoneBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: 'bold',
   },
   infoModalLogoTouch: {
     position: 'relative',
@@ -3629,9 +3692,9 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   photoCountBadgeText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 9,
-    fontWeight: '700',
   },
   infoThumbWrap: {
     width: 64,
@@ -3655,9 +3718,9 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   infoThumbOverlayText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 9,
-    fontWeight: '700',
   },
   galleryTopBar: {
     flexDirection: 'row',
@@ -3683,9 +3746,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   galleryCounterText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700',
   },
   galleryMainImageContainer: {
     flex: 1,
@@ -3719,11 +3782,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   galleryGarageTitle: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
   },
   galleryGarageSubtitle: {
+    fontFamily: fonts.regular,
     color: '#94A3B8',
     fontSize: 12,
     marginTop: 2,
@@ -3761,8 +3825,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   addCarToggleText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   inlineAddCarCard: {
     padding: 14,
@@ -3776,8 +3840,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   inlineAddCarTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
   },
   plateInputContainer: {
     flexDirection: 'row',
@@ -3799,17 +3863,18 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   ukFlagEmoji: {
+    fontFamily: fonts.regular,
     fontSize: 10,
   },
   ukStripLabel: {
+    fontFamily: fonts.extraBold,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 8,
   },
   plateInputField: {
+    fontFamily: fonts.extraBold,
     flex: 1,
     fontSize: 15,
-    fontWeight: 'bold',
     color: '#000000',
     textAlign: 'center',
     height: '100%',
@@ -3824,8 +3889,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   plateLookupBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 11,
   },
   lookupSuccessBanner: {
@@ -3840,9 +3905,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   lookupSuccessText: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
     color: '#10B981',
-    fontWeight: '600',
     flex: 1,
   },
   formRow: {
@@ -3854,11 +3919,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '600',
     marginBottom: 4,
   },
   formInputField: {
+    fontFamily: fonts.regular,
     height: 40,
     borderRadius: 8,
     borderWidth: 1,
@@ -3874,8 +3940,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelCarFormText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   saveCarSubmitBtn: {
     paddingVertical: 10,
@@ -3885,9 +3951,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   saveCarSubmitBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: 'bold',
   },
   addAnotherCarDashedBtn: {
     borderWidth: 1.5,
@@ -3900,7 +3966,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   addAnotherCarText: {
-    fontWeight: '700',
+    fontFamily: fonts.bold,
     fontSize: 13,
     marginLeft: 6,
   },
@@ -3913,6 +3979,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   serviceSelectToggleText: {
+    fontFamily: fonts.medium,
     fontSize: 12,
   },
   floatingBottomBar: {
@@ -3951,8 +4018,8 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   selectedServiceItemName: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
     marginRight: 6,
     maxWidth: 160,
   },
@@ -3962,12 +4029,12 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   selectedServiceItemPrice: {
+    fontFamily: fonts.extraBold,
     fontSize: 12,
-    fontWeight: '800',
   },
   floatingBarTotalLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '600',
     marginBottom: 2,
   },
   floatingBarPriceRow: {
@@ -3975,13 +4042,13 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   floatingBarCurrency: {
+    fontFamily: fonts.extraBold,
     fontSize: 18,
-    fontWeight: '800',
     marginRight: 2,
   },
   floatingBarLargeAmount: {
+    fontFamily: fonts.extraBold,
     fontSize: 26,
-    fontWeight: '900',
     letterSpacing: -0.5,
   },
   floatingSelectedBadge: {
@@ -3993,13 +4060,13 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   floatingSelectedBadgeText: {
+    fontFamily: fonts.extraBold,
     fontSize: 9.5,
-    fontWeight: '800',
     letterSpacing: 0.3,
   },
   floatingBarModeText: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '600',
     flex: 1,
   },
   floatingBarActionBtn: {
@@ -4015,8 +4082,8 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   floatingBarActionText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: '800',
     fontSize: 15,
     letterSpacing: 0.2,
   },
@@ -4045,10 +4112,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dateOnlyCardTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '700',
   },
   dateOnlyCardBody: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -4061,8 +4129,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   bookingModeBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
   removeServicePillBtn: {
     width: 24,
@@ -4093,8 +4161,8 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   addMoreHeaderTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
   },
   addMoreCountBadge: {
     paddingHorizontal: 7,
@@ -4102,10 +4170,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   addMoreCountBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: '700',
   },
   addMoreSubtitleText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginBottom: 10,
   },
@@ -4132,8 +4201,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   addMoreItemName: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
   },
   addMoreCatBadge: {
     paddingHorizontal: 5,
@@ -4142,16 +4211,16 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
   },
   addMoreCatBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 9,
-    fontWeight: '700',
   },
   addMoreActionsCol: {
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
   addMoreItemPrice: {
+    fontFamily: fonts.extraBold,
     fontSize: 13,
-    fontWeight: '800',
     marginBottom: 4,
   },
   addMoreAddBtn: {
@@ -4162,9 +4231,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   addMoreAddBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: '700',
   },
   allIncludedCard: {
     flexDirection: 'row',
@@ -4175,7 +4244,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   allIncludedText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
 });

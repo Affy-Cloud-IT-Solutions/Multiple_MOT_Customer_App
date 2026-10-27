@@ -17,6 +17,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import Toast from 'react-native-toast-message';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
+import { fonts } from '../theme/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -451,7 +452,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
         });
         Alert.alert(
           'Vehicle Added ✅',
-          `${regClean} (${makeClean} ${modelClean}) has been added to your vehicles.\n\nAutomatic MOT expiry reminders (at 45, 30, 15 & 7 days) are now live!`
+          `${regClean} (${makeClean} ${modelClean}) has been added to your vehicles.\n\nAutomatic service and MOT expiry reminders (at 45, 30, 15 & 7 days) are now live!`
         );
       }
     } catch (err: any) {
@@ -471,6 +472,13 @@ export default function MotHistoryScreen({ route, navigation }: any) {
             { text: 'Sign In', onPress: () => navigation.navigate('Login') },
           ]
         );
+      } else if (err.message && err.message.toLowerCase().includes('already registered')) {
+        Alert.alert(
+          'Vehicle Already Registered',
+          err.message.includes('another account')
+            ? 'This vehicle is already registered in the system under another account.\n\nIf you recently acquired or purchased this vehicle, please contact support or your garage to transfer ownership to your account.'
+            : (err.message || 'This vehicle is already registered in the system.')
+        );
       } else {
         Alert.alert('Could Not Add Vehicle', err.message || 'Failed to add vehicle to your account.');
       }
@@ -483,7 +491,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
     if (!isVehicleInMyList) {
       Alert.alert(
         'Add This Vehicle First?',
-        `Would you like to add ${regNumber} to your vehicles list to track its MOT and receive reminders before booking?`,
+        `Would you like to add ${regNumber} to your vehicles list to track its service & MOT and receive reminders before booking?`,
         [
           {
             text: 'Cancel',
@@ -645,7 +653,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
                   <Text style={[styles.notInGarageTitle, { color: theme.colors.text }]}>Not in My Vehicles</Text>
                 </View>
                 <Text style={[styles.notInGarageDesc, { color: theme.colors.placeholder }]}>
-                  Add this car to get free MOT expiry reminders and easily book tests.
+                  Add this car to get free service & MOT reminders and easily book appointments.
                 </Text>
               </View>
               <TouchableOpacity
@@ -726,7 +734,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
 
               <Text style={[styles.statusHeroExpiry, { color: theme.colors.text }]}>
                 {isCurrentlyValid ? 'Expires: ' : 'Expired: '}
-                <Text style={{ fontWeight: '800' }}>
+                <Text style={{ fontFamily: fonts.bold }}>
                   {formatDate(latestTest?.expiryDate || latestTest?.completedDate)}
                 </Text>
               </Text>
@@ -1081,7 +1089,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
               activeOpacity={0.85}
             >
               <MaterialCommunityIcons name="calendar-check" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.bookMotBtnText}>Book MOT Slot</Text>
+              <Text style={styles.bookMotBtnText}>Book Service / MOT</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -1095,7 +1103,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
                 </View>
               </View>
               <Text style={[styles.bottomBarHint, { color: theme.colors.placeholder }]}>
-                {isCurrentlyValid ? 'Book next MOT early' : 'Urgent: test slot needed'}
+                {isCurrentlyValid ? 'Book next service or MOT early' : 'Urgent: service or test needed'}
               </Text>
             </View>
 
@@ -1105,7 +1113,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
               activeOpacity={0.85}
             >
               <MaterialCommunityIcons name="calendar-check" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.bookMotBtnText}>Book MOT Slot</Text>
+              <Text style={styles.bookMotBtnText}>Book Service / MOT</Text>
             </TouchableOpacity>
           </>
         )}
@@ -1125,12 +1133,13 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   loadingTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '800',
     marginTop: 16,
     marginBottom: 4,
   },
   loadingText: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     textAlign: 'center',
   },
@@ -1144,11 +1153,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   errorTitle: {
+    fontFamily: fonts.bold,
     fontSize: 19,
-    fontWeight: '800',
     marginBottom: 6,
   },
   errorSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
@@ -1163,8 +1173,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   retryBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: '700',
     fontSize: 14,
   },
   errorBackBtn: {
@@ -1172,8 +1182,8 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   errorBackBtnText: {
+    fontFamily: fonts.semiBold,
     fontSize: 13,
-    fontWeight: '600',
   },
   topNavRow: {
     flexDirection: 'row',
@@ -1191,11 +1201,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   navTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '800',
     letterSpacing: -0.2,
   },
   navSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 11,
   },
   dvsaTopBadge: {
@@ -1214,9 +1225,9 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   dvsaTopBadgeText: {
+    fontFamily: fonts.bold,
     color: '#10B981',
     fontSize: 10,
-    fontWeight: '800',
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -1256,25 +1267,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ukFlag: {
+    fontFamily: fonts.regular,
     fontSize: 10,
   },
   ukText: {
+    fontFamily: fonts.extraBold,
     color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: '900',
     letterSpacing: 0.5,
   },
   plateNumberText: {
+    fontFamily: fonts.extraBold,
     paddingHorizontal: 18,
     fontSize: 22,
-    fontWeight: '900',
     color: '#000000',
     letterSpacing: 2.2,
     alignSelf: 'center',
   },
   vehicleMakeModel: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: '800',
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -1294,8 +1306,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   specPillText: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '700',
   },
   statusHeroCard: {
     borderRadius: 14,
@@ -1327,9 +1339,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   statusPillText: {
+    fontFamily: fonts.extraBold,
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: '900',
     letterSpacing: 0.3,
   },
   daysPill: {
@@ -1339,10 +1351,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   daysPillText: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '700',
   },
   statusHeroExpiry: {
+    fontFamily: fonts.medium,
     fontSize: 13,
   },
   statsGrid: {
@@ -1360,13 +1373,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statBigNumber: {
+    fontFamily: fonts.extraBold,
     fontSize: 16,
-    fontWeight: '900',
     marginBottom: 2,
   },
   statLabel: {
+    fontFamily: fonts.medium,
     fontSize: 10,
-    fontWeight: '600',
     textAlign: 'center',
   },
   filterSection: {
@@ -1387,8 +1400,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   filterChipText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
   expandAllBtn: {
     flexDirection: 'row',
@@ -1396,8 +1409,8 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   expandAllText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
   timelineContainer: {
     paddingLeft: 4,
@@ -1458,12 +1471,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   resultBadgeText: {
+    fontFamily: fonts.extraBold,
     fontSize: 10,
-    fontWeight: '800',
   },
   testDateText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
   },
   dateBadgeWrap: {
     flexDirection: 'row',
@@ -1475,12 +1488,12 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   mileageLabel: {
+    fontFamily: fonts.medium,
     fontSize: 12,
-    fontWeight: '500',
   },
   mileageText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   deltaBadge: {
     backgroundColor: '#8B5CF618',
@@ -1490,9 +1503,9 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   deltaBadgeText: {
+    fontFamily: fonts.extraBold,
     color: '#8B5CF6',
     fontSize: 9,
-    fontWeight: '800',
   },
   cardExpandedContent: {
     borderTopWidth: 1,
@@ -1519,13 +1532,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   metaLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 10,
-    fontWeight: '600',
     textTransform: 'uppercase',
   },
   metaValue: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   defectsWrapper: {
     gap: 8,
@@ -1543,8 +1556,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   defectBlockTitle: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '800',
   },
   defectCard: {
     flexDirection: 'row',
@@ -1559,6 +1572,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   defectCardText: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -1571,9 +1585,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   dangerUrgentPillText: {
+    fontFamily: fonts.extraBold,
     color: '#FFFFFF',
     fontSize: 9,
-    fontWeight: '900',
   },
   cleanPassCard: {
     flexDirection: 'row',
@@ -1583,10 +1597,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   cleanPassTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '800',
   },
   cleanPassSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginTop: 2,
   },
@@ -1597,8 +1612,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   noTestsText: {
+    fontFamily: fonts.semiBold,
     fontSize: 13,
-    fontWeight: '700',
   },
   bottomBar: {
     position: 'absolute',
@@ -1617,11 +1632,12 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   bottomBarReg: {
+    fontFamily: fonts.extraBold,
     fontSize: 14,
-    fontWeight: '900',
     letterSpacing: 0.5,
   },
   bottomBarHint: {
+    fontFamily: fonts.regular,
     fontSize: 11,
   },
   bookMotBtn: {
@@ -1632,9 +1648,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   bookMotBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700',
   },
   inGaragePill: {
     flexDirection: 'row',
@@ -1647,8 +1663,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   inGaragePillText: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '700',
   },
   notInGarageBanner: {
     marginTop: 12,
@@ -1660,10 +1676,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   notInGarageTitle: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '800',
   },
   notInGarageDesc: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     lineHeight: 15,
   },
@@ -1675,9 +1692,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   addPromptBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '700',
   },
   bottomBarUnaddedRow: {
     flex: 1,
@@ -1696,8 +1713,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   addVehicleBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '800',
   },
   bookMotBtnFlex: {
     flex: 1.25,
@@ -1717,8 +1734,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   inListMiniText: {
+    fontFamily: fonts.bold,
     color: '#10B981',
     fontSize: 10,
-    fontWeight: '700',
   },
 });

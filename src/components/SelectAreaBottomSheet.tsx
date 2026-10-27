@@ -140,7 +140,7 @@ export default function SelectAreaBottomSheet({
                     <View style={{ marginLeft: 10, flex: 1 }}>
                       <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Select Area</Text>
                       <Text style={[styles.headerSubtitle, { color: theme.colors.placeholder }]}>
-                        Choose your area to find nearby MOT garages
+                        Choose your area to find nearby garages & service centres
                       </Text>
                     </View>
                   </View>
@@ -404,6 +404,8 @@ export default function SelectAreaBottomSheet({
   );
 }
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
@@ -449,11 +451,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: '800',
     letterSpacing: -0.2,
   },
   headerSubtitle: {
+    fontFamily: fonts.medium,
     fontSize: 12,
     marginTop: 2,
   },
@@ -474,6 +477,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   searchInput: {
+    fontFamily: fonts.regular,
     flex: 1,
     fontSize: 13,
     paddingVertical: 0,
@@ -497,8 +501,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   liveCardTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '700',
   },
   liveBadge: {
     paddingHorizontal: 6,
@@ -507,10 +511,11 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   liveBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: '700',
   },
   liveCardDesc: {
+    fontFamily: fonts.medium,
     fontSize: 12,
     marginTop: 2,
   },
@@ -518,8 +523,8 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   sectionHeading: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     marginBottom: 8,
@@ -530,6 +535,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   testSectionNotice: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginBottom: 8,
   },
@@ -557,10 +563,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cityName: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '700',
   },
   cityDesc: {
+    fontFamily: fonts.medium,
     fontSize: 11,
     marginTop: 2,
   },
@@ -572,9 +579,9 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   ukMiniBadgeText: {
+    fontFamily: fonts.bold,
     color: '#10B981',
     fontSize: 10,
-    fontWeight: '700',
   },
   nonUkPill: {
     paddingHorizontal: 5,
@@ -583,9 +590,9 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   nonUkPillText: {
+    fontFamily: fonts.bold,
     color: '#DC2626',
     fontSize: 10,
-    fontWeight: '700',
   },
   regionTag: {
     paddingHorizontal: 8,
@@ -593,8 +600,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   regionTagText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
   selectedCircle: {
     width: 22,

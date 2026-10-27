@@ -22,6 +22,7 @@ import { validateMotExpiryDate } from '../utils/validationUtils';
 import { openGarageDirections } from '../utils/mapUtils';
 import Toast from 'react-native-toast-message';
 import CustomerHeader from '../components/CustomerHeader';
+import { fonts } from '../theme/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -51,11 +52,11 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
         <MaterialCommunityIcons name="account-lock-outline" size={72} color={theme.colors.placeholder} style={{ marginBottom: 16 }} />
-        <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.text, marginBottom: 8, textAlign: 'center' }}>
+        <Text style={{ fontSize: 20, fontFamily: fonts.bold, color: theme.colors.text, marginBottom: 8, textAlign: 'center' }}>
           Access Customer Portal
         </Text>
-        <Text style={{ fontSize: 13, color: theme.colors.placeholder, textAlign: 'center', marginBottom: 24, paddingHorizontal: 20, lineHeight: 18 }}>
-          Please sign in to view and manage your registered vehicles, check MOT histories, and book new appointments.
+        <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: theme.colors.placeholder, textAlign: 'center', marginBottom: 24, paddingHorizontal: 20, lineHeight: 18 }}>
+          Please sign in to view and manage your registered vehicles, check histories, and book new service appointments.
         </Text>
         <TouchableOpacity
           onPress={() => navigation.navigate('Login')}
@@ -71,7 +72,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
             shadowRadius: 2,
           }}
         >
-          <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 }}>
+          <Text style={{ color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 14 }}>
             Sign In / Sign Up
           </Text>
         </TouchableOpacity>
@@ -297,7 +298,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
     
     Alert.alert(
       'Confirm Vehicle Sold',
-      `Are you sure you want to mark your ${makeModel} (${reg}) as sold? Future MOT reminders will be stopped.`,
+      `Are you sure you want to mark your ${makeModel} (${reg}) as sold? Future service reminders will be stopped.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -413,7 +414,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
       Alert.alert(
         'Vehicle Added',
-        'Your vehicle has been added successfully! You can now book MOT appointments and manage reminders.'
+        'Your vehicle has been added successfully! You can now book service appointments and manage reminders.'
       );
     } catch (error: any) {
       setLoadingAction(null);
@@ -444,7 +445,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       {/* Customer Header with Great UI */}
       <CustomerHeader
         title="My Vehicles"
-        subtitle="Registered Cars & MOT Reminders"
+        subtitle="Registered Cars & Service Reminders"
         iconName="car-multiple"
         iconColor={theme.colors.secondary}
         iconBg={theme.colors.secondary + '15'}
@@ -466,7 +467,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: lookupSuccessInfo ? 8 : 12 }}>
                   <View style={{ flexDirection: 'row', flex: 1, height: 42, backgroundColor: '#FFD300', borderWidth: 1.5, borderColor: '#000000', borderRadius: 8, overflow: 'hidden', alignItems: 'center' }}>
                     <View style={{ width: 32, height: '100%', backgroundColor: '#0A4E9B', justifyContent: 'center', alignItems: 'center' }}>
-                      <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 10 }}>UK</Text>
+                      <Text style={{ color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 10 }}>UK</Text>
                     </View>
                     <TextInput
                       value={regNo}
@@ -478,7 +479,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                       placeholderTextColor="#777777"
                       autoCapitalize="characters"
                       maxLength={9}
-                      style={{ flex: 1, fontSize: 14, fontWeight: 'bold', color: '#000000', textAlign: 'center', height: '100%', padding: 0 }}
+                      style={{ flex: 1, fontSize: 14, fontFamily: fonts.bold, color: '#000000', textAlign: 'center', height: '100%', padding: 0 }}
                     />
                   </View>
                   <TouchableOpacity
@@ -492,7 +493,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                     ) : (
                       <>
                         <MaterialCommunityIcons name="magnify" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                        <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 12 }}>LOOKUP</Text>
+                        <Text style={{ color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 12 }}>LOOKUP</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -502,7 +503,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 {lookupSuccessInfo && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B98115', borderColor: '#10B98150', borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12 }}>
                     <MaterialCommunityIcons name="check-decagram" size={16} color="#10B981" style={{ marginRight: 6 }} />
-                    <Text style={{ fontSize: 11, color: '#10B981', fontWeight: '600', flex: 1 }}>
+                    <Text style={{ fontSize: 11, color: '#10B981', fontFamily: fonts.semiBold, flex: 1 }}>
                       DVSA Verified: Autofilled details for {lookupSuccessInfo}
                     </Text>
                   </View>
@@ -617,7 +618,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 activeOpacity={0.8}
               >
                 <MaterialCommunityIcons name={showAddForm ? 'close' : 'plus'} size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
-                <Text style={{ color: '#FFFFFF', fontSize: 11.5, fontWeight: 'bold' }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 11.5, fontFamily: fonts.bold }}>
                   {showAddForm ? 'Close' : 'Add Vehicle'}
                 </Text>
               </TouchableOpacity>
@@ -627,7 +628,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
               <View style={styles.emptyContainer}>
                 <MaterialCommunityIcons name="car-outline" size={48} color={theme.colors.placeholder} style={{ marginBottom: 12 }} />
                 <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>
-                  You have no active vehicles registered for MOT reminders.
+                  You have no active vehicles registered for service reminders.
                 </Text>
               </View>
             ) : (
@@ -650,7 +651,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             {v.make} {v.model}
                           </Text>
                           {v.year ? (
-                            <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginLeft: 4 }}>
+                            <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginLeft: 4, fontFamily: fonts.regular }}>
                               • {v.year}
                             </Text>
                           ) : null}
@@ -683,18 +684,18 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             color={motIconColor} 
                             style={{ marginRight: 3 }} 
                           />
-                          <Text style={{ color: theme.colors.placeholder, fontSize: 11.5 }}>MOT: </Text>
-                          <Text style={{ color: isExpired ? theme.colors.error : theme.colors.text, fontWeight: '700', fontSize: 11.5 }}>
+                          <Text style={{ color: theme.colors.placeholder, fontSize: 11.5, fontFamily: fonts.regular }}>MOT: </Text>
+                          <Text style={{ color: isExpired ? theme.colors.error : theme.colors.text, fontFamily: fonts.bold, fontSize: 11.5 }}>
                             {formatShortDate(v.motExpiryDate)}
                           </Text>
                           {v.motExpiryDate && (
-                            <Text style={{ color: isExpired ? theme.colors.error : daysLeft <= 30 ? theme.colors.warning : theme.colors.placeholder, fontSize: 11, marginLeft: 3, fontWeight: '600' }}>
+                            <Text style={{ color: isExpired ? theme.colors.error : daysLeft <= 30 ? theme.colors.warning : theme.colors.placeholder, fontSize: 11, marginLeft: 3, fontFamily: fonts.semiBold }}>
                               ({daysLeft >= 0 ? `${daysLeft}d left` : `${Math.abs(daysLeft)}d ago`})
                             </Text>
                           )}
                           {isExpired && (
                             <View style={[styles.miniStatusBadge, { backgroundColor: theme.colors.error + '15', marginLeft: 5 }]}>
-                              <Text style={{ color: theme.colors.error, fontSize: 8.5, fontWeight: 'bold' }}>EXPIRED</Text>
+                              <Text style={{ color: theme.colors.error, fontSize: 8.5, fontFamily: fonts.bold }}>EXPIRED</Text>
                             </View>
                           )}
                         </View>
@@ -702,8 +703,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         {v.lastServiceDate && (
                           <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 6 }}>
                             <MaterialCommunityIcons name="wrench-clock" size={13} color={theme.colors.secondary} style={{ marginRight: 3 }} />
-                            <Text style={{ color: theme.colors.placeholder, fontSize: 11 }}>Svc: </Text>
-                            <Text style={{ color: theme.colors.text, fontSize: 11, fontWeight: '500' }}>{formatShortDate(v.lastServiceDate)}</Text>
+                            <Text style={{ color: theme.colors.placeholder, fontSize: 11, fontFamily: fonts.regular }}>Svc: </Text>
+                            <Text style={{ color: theme.colors.text, fontSize: 11, fontFamily: fonts.medium }}>{formatShortDate(v.lastServiceDate)}</Text>
                           </View>
                         )}
                       </View>
@@ -714,7 +715,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                       <View style={{ borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
                         <View style={[styles.pendingApprovalBox, { backgroundColor: theme.colors.warning + '10', borderColor: theme.colors.warning + '30', marginHorizontal: 8, marginTop: 5, marginBottom: 4 }]}>
                           <MaterialCommunityIcons name="clock-outline" size={14} color={theme.colors.warning} style={{ marginRight: 5 }} />
-                          <Text style={{ color: theme.colors.text, fontSize: 11, fontWeight: 'bold', flex: 1 }}>
+                          <Text style={{ color: theme.colors.text, fontSize: 11, fontFamily: fonts.bold, flex: 1 }}>
                             Awaiting registration approval from garage staff.
                           </Text>
                         </View>
@@ -732,7 +733,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           >
                             <View style={styles.actionBtnContent}>
                               <MaterialCommunityIcons name="history" size={14} color={theme.colors.primary} style={{ marginRight: 4 }} />
-                              <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>Live MOT History</Text>
+                              <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>Vehicle & MOT History</Text>
                             </View>
                           </TouchableOpacity>
                         </View>
@@ -753,7 +754,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           >
                             <View style={styles.actionBtnContent}>
                               <MaterialCommunityIcons name="history" size={14} color={theme.colors.primary} style={{ marginRight: 4 }} />
-                              <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>Live MOT History</Text>
+                              <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>Vehicle & MOT History</Text>
                             </View>
                           </TouchableOpacity>
 
@@ -808,13 +809,13 @@ const styles = StyleSheet.create({
     width: 100,
   },
   backBtnText: {
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     fontSize: 13,
     marginLeft: 4,
   },
   navTitle: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: 'bold',
     textAlign: 'left',
   },
   rightActionsRow: {
@@ -839,8 +840,8 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   sectionHeading: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
     marginBottom: 8,
   },
   formCard: {
@@ -855,8 +856,8 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   formTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
     marginBottom: 8,
   },
   formRow: {
@@ -864,11 +865,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   label: {
+    fontFamily: fonts.semiBold,
     fontSize: 10.5,
-    fontWeight: '600',
     marginBottom: 2,
   },
   input: {
+    fontFamily: fonts.medium,
     height: 32,
     borderWidth: 1,
     borderRadius: 6,
@@ -886,6 +888,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   inputField: {
+    fontFamily: fonts.medium,
     flex: 1,
     height: '100%',
     fontSize: 11.5,
@@ -899,8 +902,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   submitButtonText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 11.5,
   },
   formActionsRow: {
@@ -917,7 +920,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelFormBtnText: {
-    fontWeight: 'bold',
+    fontFamily: fonts.bold,
     fontSize: 11.5,
   },
   submitFormBtn: {
@@ -933,8 +936,8 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   emptyText: {
+    fontFamily: fonts.italic,
     fontSize: 12,
-    fontStyle: 'italic',
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -984,14 +987,14 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   plateText: {
+    fontFamily: fonts.bold,
     color: '#000',
-    fontWeight: 'bold',
     fontSize: 9.5,
     letterSpacing: 0.5,
   },
   makeModelText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
   },
   vehicleBody: {
     paddingHorizontal: 8,
@@ -1029,8 +1032,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 10.5,
-    fontWeight: 'bold',
   },
   bookedBadge: {
     flexDirection: 'row',
@@ -1042,8 +1045,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   bookedBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 9.5,
-    fontWeight: 'bold',
   },
   bookingDetailsContainer: {
     marginTop: 6,
@@ -1060,8 +1063,8 @@ const styles = StyleSheet.create({
     paddingBottom: 3,
   },
   bookingDetailsTitle: {
+    fontFamily: fonts.bold,
     fontSize: 11.5,
-    fontWeight: 'bold',
   },
   bookingInfoRow: {
     flexDirection: 'row',
@@ -1069,11 +1072,12 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   bookingInfoLabel: {
+    fontFamily: fonts.regular,
     fontSize: 11,
   },
   bookingInfoValue: {
+    fontFamily: fonts.medium,
     fontSize: 11,
-    fontWeight: '500',
   },
   smallPlate: {
     backgroundColor: '#FFD300',
@@ -1084,8 +1088,8 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   smallPlateText: {
+    fontFamily: fonts.bold,
     color: '#000',
-    fontWeight: 'bold',
     fontSize: 9.5,
     letterSpacing: 0.5,
   },
@@ -1104,8 +1108,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 10,
-    fontWeight: '600',
     marginTop: 2,
   },
   profileHeaderCard: {
@@ -1122,8 +1126,8 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   profileSectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 8,
@@ -1142,8 +1146,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   contactPillText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: 'bold',
   },
   profileAvatar: {
     width: 60,
@@ -1158,13 +1162,13 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   avatarText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 22,
-    fontWeight: 'bold',
   },
   profileName: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: 'bold',
     flexShrink: 1,
   },
   profileInfoCard: {
@@ -1187,7 +1191,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    // elevation: 1,
     marginBottom: 24,
   },
   pendingApprovalBox: {
@@ -1208,8 +1211,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   notificationAlertText: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '600',
     flex: 1,
     marginLeft: 8,
     lineHeight: 14,
@@ -1221,8 +1224,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   notificationDismissText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: 'bold',
   },
   homeGarageCard: {
     borderWidth: 1,
@@ -1231,8 +1234,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   homeGarageName: {
+    fontFamily: fonts.bold,
     fontSize: 11.5,
-    fontWeight: 'bold',
   },
   bookingDirectionsBtn: {
     flexDirection: 'row',
@@ -1243,8 +1246,8 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   bookingDirectionsBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 10.5,
-    fontWeight: 'bold',
   },
 });

@@ -574,7 +574,7 @@ export default function FilterServiceBottomSheet({
                   />
                   <TextInput
                     style={[styles.searchInput, { color: theme.colors.text }]}
-                    placeholder="Search service (MOT, Service, Brakes)..."
+                    placeholder="Search services (Full Service, MOT, Brakes)..."
                     placeholderTextColor={theme.colors.placeholder}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
@@ -902,15 +902,6 @@ export default function FilterServiceBottomSheet({
 
                 {/* Sticky Action Footer */}
                 <View style={[styles.sheetFooterBar, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.card }]}>
-                  {tempSelected.length > 0 && (
-                    <TouchableOpacity
-                      style={[styles.sheetResetBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-                      onPress={() => setTempSelected([])}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.sheetResetText, { color: theme.colors.placeholder }]}>Clear ({tempSelected.length})</Text>
-                    </TouchableOpacity>
-                  )}
                   <TouchableOpacity
                     style={[styles.sheetApplyBtn, { backgroundColor: theme.colors.primary }]}
                     onPress={handleApply}
@@ -932,6 +923,8 @@ export default function FilterServiceBottomSheet({
     </Modal>
   );
 }
+
+import { fonts } from '../theme/theme';
 
 const styles = StyleSheet.create({
   backdrop: {
@@ -968,8 +961,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheetResetText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
   },
   sheetApplyBtn: {
     flex: 1,
@@ -981,9 +974,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   sheetApplyText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '800',
   },
   sheetContent: {
     borderTopLeftRadius: 22,
@@ -1020,11 +1013,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '800',
     letterSpacing: -0.2,
   },
   headerSubtitle: {
+    fontFamily: fonts.medium,
     fontSize: 11,
     marginTop: 1,
   },
@@ -1034,8 +1028,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   resetBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 11.5,
-    fontWeight: '700',
   },
   closeBtn: {
     width: 30,
@@ -1054,6 +1048,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   searchInput: {
+    fontFamily: fonts.regular,
     flex: 1,
     fontSize: 12.5,
     paddingVertical: 0,
@@ -1074,6 +1069,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   categoryTabText: {
+    fontFamily: fonts.semiBold,
     fontSize: 11.5,
   },
   scrollList: {
@@ -1101,8 +1097,8 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   serviceTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
   },
   activeBadge: {
     paddingHorizontal: 5,
@@ -1111,8 +1107,8 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   activeBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 9.5,
-    fontWeight: '700',
   },
   rightCol: {
     flexDirection: 'row',
@@ -1125,8 +1121,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   countChipText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: '700',
   },
   radioCircle: {
     width: 18,
@@ -1142,6 +1138,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
+    fontFamily: fonts.regular,
     fontSize: 12.5,
     textAlign: 'center',
   },

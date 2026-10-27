@@ -121,6 +121,8 @@ export default function LoginRequiredModal({
   );
 }
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -152,13 +154,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   title: {
+    fontFamily: fonts.bold,
     fontSize: 20,
-    fontWeight: '800',
     textAlign: 'center',
     marginBottom: 8,
     letterSpacing: -0.3,
   },
   message: {
+    fontFamily: fonts.regular,
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -183,9 +186,9 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   loginBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
   },
   cancelBtn: {
     width: '100%',
@@ -196,7 +199,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   cancelBtnText: {
+    fontFamily: fonts.semiBold,
     fontSize: 14,
-    fontWeight: '600',
   },
 });

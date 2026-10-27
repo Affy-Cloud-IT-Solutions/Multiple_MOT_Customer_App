@@ -166,7 +166,7 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const BASE_URL = 'https://api.ondoorcarservice.com/api';
 
-const decodeToken = (tokenStr: string | null) => {
+export const decodeToken = (tokenStr: string | null) => {
   if (!tokenStr) return null;
   try {
     const parts = tokenStr.split('.');
@@ -201,7 +201,7 @@ const decodeToken = (tokenStr: string | null) => {
   }
 };
 
-const isTokenExpired = (tokenStr: string | null): boolean => {
+export const isTokenExpired = (tokenStr: string | null): boolean => {
   if (!tokenStr) return true;
   const decoded = decodeToken(tokenStr);
   if (!decoded || !decoded.exp) return false;
@@ -367,17 +367,33 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // Mutex/singleton to prevent multiple concurrent refresh calls
   const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
+  const sessionExpiredAlertShownRef = useRef(false);
 
   const handleSessionExpired = useCallback(() => {
+    if (!token && !refreshToken) {
+      return;
+    }
+    if (sessionExpiredAlertShownRef.current) {
+      return;
+    }
+    sessionExpiredAlertShownRef.current = true;
     console.warn('[AUTH] Session expired. Clearing session and navigating to login.');
     setTokens(null, null);
     setUserState(null);
     resetToLogin();
     Alert.alert(
       'Session Expired',
-      'Your session has expired. Please log in again to continue.'
+      'Your session has expired. Please log in again to continue.',
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            sessionExpiredAlertShownRef.current = false;
+          }
+        }
+      ]
     );
-  }, [setTokens]);
+  }, [token, refreshToken, setTokens]);
 
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     if (refreshPromiseRef.current) {
@@ -455,14 +471,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     let response = await fetch(url, { ...options, headers: rawHeaders });
 
     if (response.status === 401) {
-      console.log(`[AUTH] 401 Unauthorized for ${url}. Attempting access token refresh...`);
-      const newAccessToken = await refreshAccessToken();
-      if (newAccessToken) {
-        rawHeaders['Authorization'] = `Bearer ${newAccessToken}`;
-        response = await fetch(url, { ...options, headers: rawHeaders });
-      } else {
-        console.warn(`[AUTH] Failed to refresh token for ${url}. Triggering session expiration.`);
-        handleSessionExpired();
+      if (activeToken || refreshToken) {
+        console.log(`[AUTH] 401 Unauthorized for ${url}. Attempting access token refresh...`);
+        const newAccessToken = await refreshAccessToken();
+        if (newAccessToken) {
+          rawHeaders['Authorization'] = `Bearer ${newAccessToken}`;
+          response = await fetch(url, { ...options, headers: rawHeaders });
+        } else {
+          console.warn(`[AUTH] Failed to refresh token for ${url}. Triggering session expiration.`);
+          handleSessionExpired();
+        }
       }
     }
 
@@ -608,24 +626,36 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const cachedAlertsJson = await AsyncStorage.getItem('@cached_alerts');
         const cachedCustomersJson = await AsyncStorage.getItem('@cached_customers');
 
-        // Immediately restore cached data so user sees bookings & vehicles instantly on app launch
-        if (cachedVehiclesJson) {
-          try {
-            const parsedVehs = JSON.parse(cachedVehiclesJson);
-            if (Array.isArray(parsedVehs)) setVehicles(parsedVehs);
-          } catch (_) {}
-        }
-        if (cachedAlertsJson) {
-          try {
-            const parsedAlerts = JSON.parse(cachedAlertsJson);
-            if (Array.isArray(parsedAlerts)) setAlerts(parsedAlerts);
-          } catch (_) {}
-        }
-        if (cachedCustomersJson) {
-          try {
-            const parsedCusts = JSON.parse(cachedCustomersJson);
-            if (Array.isArray(parsedCusts)) setCustomers(parsedCusts);
-          } catch (_) {}
+        const hasSession = !!storedRefreshToken || (!!storedToken && !isTokenExpired(storedToken));
+
+        // Only restore cached user data if a valid authenticated session exists
+        if (hasSession) {
+          if (cachedVehiclesJson) {
+            try {
+              const parsedVehs = JSON.parse(cachedVehiclesJson);
+              if (Array.isArray(parsedVehs)) setVehicles(parsedVehs);
+            } catch (_) {}
+          }
+          if (cachedAlertsJson) {
+            try {
+              const parsedAlerts = JSON.parse(cachedAlertsJson);
+              if (Array.isArray(parsedAlerts)) setAlerts(parsedAlerts);
+            } catch (_) {}
+          }
+          if (cachedCustomersJson) {
+            try {
+              const parsedCusts = JSON.parse(cachedCustomersJson);
+              if (Array.isArray(parsedCusts)) setCustomers(parsedCusts);
+            } catch (_) {}
+          }
+        } else {
+          // Clear cached user data if unauthenticated
+          AsyncStorage.removeItem('@cached_vehicles').catch(() => {});
+          AsyncStorage.removeItem('@cached_alerts').catch(() => {});
+          AsyncStorage.removeItem('@cached_customers').catch(() => {});
+          setVehicles([]);
+          setAlerts([]);
+          setCustomers([]);
         }
 
         if (storedRefreshToken) {

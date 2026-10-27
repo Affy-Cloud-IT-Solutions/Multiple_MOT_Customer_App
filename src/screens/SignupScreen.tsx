@@ -233,7 +233,7 @@ export default function SignupScreen({ navigation }: any) {
               Create Account
             </Text>
             <Text style={[styles.subtitle, { color: theme.colors.placeholder }]}>
-              Join the UK MOT network for instant test alerts & direct booking
+              Join the UK car service & garage network for instant service alerts & direct booking
             </Text>
           </View>
 
@@ -578,7 +578,7 @@ export default function SignupScreen({ navigation }: any) {
               </View>
 
               <Text style={[styles.consentBodyText, { color: theme.colors.text }]}>
-                I authorize Multiple MOT to share my{' '}
+                I authorize Ondoor Car Service to share my{' '}
                 <Text style={[styles.highlightText, { color: isDark ? '#38BDF8' : '#1677FF' }]}>
                   full name
                 </Text>
@@ -590,7 +590,7 @@ export default function SignupScreen({ navigation }: any) {
                 <Text style={[styles.highlightText, { color: isDark ? '#38BDF8' : '#1677FF' }]}>
                   email
                 </Text>{' '}
-                with accredited MOT testing stations & garages for automated test expiry alerts, booking confirmations, and vehicle advisory notices.
+                with accredited service centres & garages for automated service alerts, booking confirmations, and vehicle advisory notices.
               </Text>
             </TouchableOpacity>
 
@@ -645,6 +645,8 @@ export default function SignupScreen({ navigation }: any) {
   );
 }
 
+import { fonts } from '../theme/theme';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -690,20 +692,21 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   headerBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 10.5,
-    fontWeight: '800',
     letterSpacing: 0.6,
   },
   titleSection: {
     marginBottom: 20,
   },
   title: {
+    fontFamily: fonts.bold,
     fontSize: 27,
-    fontWeight: '900',
     letterSpacing: 0.3,
     marginBottom: 4,
   },
   subtitle: {
+    fontFamily: fonts.regular,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -727,8 +730,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   errorText: {
+    fontFamily: fonts.semiBold,
     fontSize: 13,
-    fontWeight: '600',
     color: '#EF4444',
     flex: 1,
     lineHeight: 17,
@@ -737,8 +740,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   inputLabel: {
+    fontFamily: fonts.bold,
     fontSize: 13.5,
-    fontWeight: '700',
     marginBottom: 6,
     marginLeft: 2,
     letterSpacing: 0.2,
@@ -757,11 +760,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   input: {
+    fontFamily: fonts.medium,
     flex: 1,
     height: '100%',
     fontSize: 15,
     paddingVertical: 0,
-    fontWeight: '500',
   },
   eyeButton: {
     padding: 6,
@@ -788,19 +791,20 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   consentTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '800',
     letterSpacing: 0.1,
     flex: 1,
   },
   consentBodyText: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 17,
     opacity: 0.85,
     paddingLeft: 32,
   },
   highlightText: {
-    fontWeight: '800',
+    fontFamily: fonts.bold,
   },
   primaryButton: {
     height: 52,
@@ -818,9 +822,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   buttonText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '800',
     letterSpacing: 0.3,
   },
   footerSection: {
@@ -830,15 +834,15 @@ const styles = StyleSheet.create({
     marginTop: 22,
   },
   footerText: {
+    fontFamily: fonts.medium,
     fontSize: 14,
-    fontWeight: '500',
   },
   signInPill: {
     paddingVertical: 4,
     paddingHorizontal: 6,
   },
   signInLink: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '800',
   },
 });

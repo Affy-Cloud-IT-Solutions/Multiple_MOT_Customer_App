@@ -19,6 +19,7 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
+import { fonts } from '../theme/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   requestUserLiveLocation,
@@ -574,7 +575,7 @@ export default function HomeScreen({ navigation }: any) {
     });
   };
 
-  const userVehicles = vehicles || [];
+  const userVehicles = token ? (vehicles || []) : [];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -660,7 +661,7 @@ export default function HomeScreen({ navigation }: any) {
             </View>
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={[styles.cardHeaderTitle, { color: theme.colors.text }]}>
-                Check MOT History
+                Check Vehicle & MOT History
               </Text>
             </View>
           </View>
@@ -782,9 +783,9 @@ export default function HomeScreen({ navigation }: any) {
                   onPress={() => handleSelectService(item)}
                 >
                   <View style={[styles.enlargedIconCircle, { backgroundColor: item.iconBg, borderColor: item.iconColor + '35' }]}>
-                    <MaterialCommunityIcons name={item.icon} size={28} color={item.iconColor} />
+                    <MaterialCommunityIcons name={item.icon} size={26} color={item.iconColor} />
                     <View style={[styles.iconActionBadge, { backgroundColor: item.iconColor, borderColor: theme.colors.background }]}>
-                      <MaterialCommunityIcons name="arrow-right" size={10} color="#FFFFFF" />
+                      <MaterialCommunityIcons name="arrow-right" size={9} color="#FFFFFF" />
                     </View>
                   </View>
 
@@ -844,7 +845,7 @@ export default function HomeScreen({ navigation }: any) {
               </Text>
 
               <Text style={[styles.unavailableHomeDesc, { color: theme.colors.placeholder }]}>
-                Multiple MOT registered garages and DVSA certified testing centres operate exclusively across the United Kingdom. Please select a UK city or area to find local garages.
+                Our registered garages and vehicle service centres operate exclusively across the United Kingdom. Please select a UK city or area to find local garages.
               </Text>
 
               <TouchableOpacity
@@ -877,12 +878,12 @@ export default function HomeScreen({ navigation }: any) {
           ) : loadingGarages ? (
             <View style={[styles.garagesLoadingWrap, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <ActivityIndicator color={theme.colors.secondary} size="small" style={{ marginRight: 8 }} />
-              <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>Finding garages near your location...</Text>
+              <Text style={{ color: theme.colors.placeholder, fontSize: 13, fontFamily: fonts.medium }}>Finding garages near your location...</Text>
             </View>
           ) : sortedGarages.length === 0 ? (
             <View style={[styles.emptyGaragesCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <MaterialCommunityIcons name="store-alert-outline" size={28} color={theme.colors.placeholder} style={{ marginBottom: 4 }} />
-              <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>No local garages found nearby.</Text>
+              <Text style={{ color: theme.colors.placeholder, fontSize: 13, fontFamily: fonts.medium }}>No local garages found nearby.</Text>
             </View>
           ) : (
             <View style={styles.garagesVerticalList}>
@@ -1002,14 +1003,14 @@ export default function HomeScreen({ navigation }: any) {
 
         {/* 5. Core Navigation Hub Grid (4 Action Boxes) */}
         <View style={styles.quickGrid}>
-          {/* Card 1: Book MOT Slot */}
+          {/* Card 1: Book Service */}
           <TouchableOpacity
             style={[styles.quickHubCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
             activeOpacity={0.8}
             onPress={() => {
               navigation.navigate('Garages', {
-                serviceFilter: 'MOT',
-                serviceTitle: 'MOT Test',
+                serviceFilter: 'All',
+                serviceTitle: 'All Services',
                 searchQuery: '',
               });
             }}
@@ -1019,13 +1020,13 @@ export default function HomeScreen({ navigation }: any) {
             </View>
             <View style={styles.quickHubTextContainer}>
               <View style={styles.badgeInlineRow}>
-                <Text style={[styles.quickHubTitle, { color: theme.colors.text }]}>Book MOT</Text>
+                <Text style={[styles.quickHubTitle, { color: theme.colors.text }]}>Book Service</Text>
                 <View style={[styles.miniPill, { backgroundColor: '#1677FF18' }]}>
-                  <Text style={[styles.miniPillText, { color: '#1677FF' }]}>30-Day</Text>
+                  <Text style={[styles.miniPillText, { color: '#1677FF' }]}>MOT & Care</Text>
                 </View>
               </View>
               <Text style={[styles.quickHubDesc, { color: theme.colors.placeholder }]}>
-                Schedule certified test slot
+                Full service, MOT & repairs
               </Text>
             </View>
           </TouchableOpacity>
@@ -1038,7 +1039,7 @@ export default function HomeScreen({ navigation }: any) {
               if (token) {
                 navigation.navigate('My Portal');
               } else {
-                Alert.alert('Sign In Required', 'Please sign in to access your garage portal.', [
+                Alert.alert('Sign In Required', 'Please sign in to access your vehicle portal.', [
                   { text: 'Cancel', style: 'cancel' },
                   { text: 'Sign In', onPress: () => navigation.navigate('Login') }
                 ]);
@@ -1051,14 +1052,14 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.quickHubTextContainer}>
               <View style={styles.badgeInlineRow}>
                 <Text style={[styles.quickHubTitle, { color: theme.colors.text }]}>My Vehicles</Text>
-                {userVehicles.length > 0 && (
+                {token && userVehicles.length > 0 && (
                   <View style={[styles.miniPill, { backgroundColor: '#8B5CF618' }]}>
                     <Text style={[styles.miniPillText, { color: '#8B5CF6' }]}>{userVehicles.length}</Text>
                   </View>
                 )}
               </View>
               <Text style={[styles.quickHubDesc, { color: theme.colors.placeholder }]}>
-                Track live MOT expiries
+                Track service & MOT status
               </Text>
             </View>
           </TouchableOpacity>
@@ -1095,7 +1096,7 @@ export default function HomeScreen({ navigation }: any) {
               if (token) {
                 navigation.navigate('Bookings');
               } else {
-                Alert.alert('Sign In Required', 'Please sign in to view and manage your booked MOT slots.', [
+                Alert.alert('Sign In Required', 'Please sign in to view and manage your booked service slots.', [
                   { text: 'Cancel', style: 'cancel' },
                   { text: 'Sign In', onPress: () => navigation.navigate('Login') }
                 ]);
@@ -1139,8 +1140,8 @@ export default function HomeScreen({ navigation }: any) {
             {searchHistory.length === 0 ? (
               <View style={[styles.emptyHistoryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <MaterialCommunityIcons name="car-search-outline" size={32} color={theme.colors.placeholder} style={{ marginBottom: 6 }} />
-                <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>No recent vehicle checks recorded.</Text>
-                <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 2 }}>Searched registrations will appear here for quick access.</Text>
+                <Text style={{ color: theme.colors.placeholder, fontSize: 13, fontFamily: fonts.medium }}>No recent vehicle checks recorded.</Text>
+                <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 2, fontFamily: fonts.regular }}>Searched registrations will appear here for quick access.</Text>
               </View>
             ) : (
               searchHistory.slice(0, 5).map((item) => {
@@ -1185,7 +1186,7 @@ export default function HomeScreen({ navigation }: any) {
                             <Text style={[styles.recentExpiryText, { color: theme.colors.placeholder }]} numberOfLines={1}>
                               MOT: {item.expiryDate}{' '}
                               {daysDiff !== null && (
-                                <Text style={{ color: daysDiff <= 30 ? (daysDiff <= 7 ? '#EF4444' : '#F59E0B') : '#10B981', fontWeight: 'bold' }}>
+                                <Text style={{ color: daysDiff <= 30 ? (daysDiff <= 7 ? '#EF4444' : '#F59E0B') : '#10B981', fontFamily: fonts.bold }}>
                                   ({daysDiff >= 0 ? `${daysDiff} days left` : `${Math.abs(daysDiff)} days ago`})
                                 </Text>
                               )}
@@ -1270,13 +1271,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dvsaNetworkPillText: {
+    fontFamily: fonts.bold,
     fontSize: 9,
-    fontWeight: '800',
     letterSpacing: 0.6,
   },
   dashboardGreeting: {
+    fontFamily: fonts.bold,
     fontSize: 20,
-    fontWeight: '900',
     letterSpacing: -0.3,
   },
   topProfileBtn: {
@@ -1293,8 +1294,8 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   topProfileInitialsText: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '800',
     letterSpacing: 0.5,
   },
   locationStatusBar: {
@@ -1313,8 +1314,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   locationStatusText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
     flex: 1,
   },
   locationBadge: {
@@ -1326,8 +1327,8 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   locationBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
     marginRight: 2,
   },
   motSummaryCard: {
@@ -1348,8 +1349,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   motSummaryTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '800',
   },
   fleetCountBadge: {
     paddingHorizontal: 8,
@@ -1357,8 +1358,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   fleetCountText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '800',
   },
   motMetricsRow: {
     flexDirection: 'row',
@@ -1370,12 +1371,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   metricNumber: {
+    fontFamily: fonts.extraBold,
     fontSize: 18,
-    fontWeight: '900',
   },
   metricLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 10,
-    fontWeight: '600',
     marginTop: 2,
   },
   metricDivider: {
@@ -1416,8 +1417,8 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   quickHubTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '800',
   },
   miniPill: {
     paddingHorizontal: 5,
@@ -1425,10 +1426,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   miniPillText: {
+    fontFamily: fonts.bold,
     fontSize: 9,
-    fontWeight: '800',
   },
   quickHubDesc: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     lineHeight: 14,
   },
@@ -1458,10 +1460,11 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   cardHeaderTitle: {
+    fontFamily: fonts.bold,
     fontSize: 15,
-    fontWeight: '800',
   },
   cardHeaderSub: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginTop: 1,
   },
@@ -1490,12 +1493,13 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   ukFlagSymbol: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     lineHeight: 13,
   },
   ukPlateStripText: {
+    fontFamily: fonts.extraBold,
     color: '#FFFFFF',
-    fontWeight: '900',
     fontSize: 9,
     letterSpacing: 0.5,
   },
@@ -1507,9 +1511,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   plateInput: {
+    fontFamily: fonts.extraBold,
     flex: 1,
     fontSize: 16,
-    fontWeight: '900',
     color: '#111827',
     textAlign: 'center',
     letterSpacing: 2,
@@ -1531,9 +1535,9 @@ const styles = StyleSheet.create({
     borderLeftColor: '#111827',
   },
   attachedCheckBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '800',
     letterSpacing: 0.3,
   },
   nearbyGaragesSectionWrap: {
@@ -1548,11 +1552,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   nearbyGaragesTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '800',
     letterSpacing: -0.2,
   },
   nearbyGaragesSub: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     marginTop: 2,
   },
@@ -1589,8 +1594,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerLocationLabel: {
+    fontFamily: fonts.bold,
     fontSize: 9.5,
-    fontWeight: '700',
     marginBottom: 1,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
@@ -1601,8 +1606,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerLocationCity: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '800',
     lineHeight: 16,
     flex: 1,
     flexShrink: 1,
@@ -1654,8 +1659,8 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   garageVerticalName: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '800',
     flex: 1,
     marginRight: 6,
   },
@@ -1668,8 +1673,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   garageRatingText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '800',
     color: '#D97706',
   },
   garageMetaRow: {
@@ -1678,6 +1683,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   garageVerticalAddress: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     flex: 1,
   },
@@ -1695,8 +1701,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   dvsaApprovedPillText: {
+    fontFamily: fonts.semiBold,
     fontSize: 9.5,
-    fontWeight: '700',
   },
   distancePill: {
     flexDirection: 'row',
@@ -1706,8 +1712,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   distancePillText: {
+    fontFamily: fonts.semiBold,
     fontSize: 9.5,
-    fontWeight: '700',
   },
   garageServicesContainer: {
     marginTop: 10,
@@ -1740,12 +1746,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   serviceChipTitle: {
+    fontFamily: fonts.bold,
     fontSize: 11.5,
-    fontWeight: '700',
   },
   serviceChipPrice: {
+    fontFamily: fonts.bold,
     fontSize: 11.5,
-    fontWeight: '800',
   },
   serviceChipBookBtn: {
     paddingHorizontal: 8,
@@ -1753,9 +1759,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   serviceChipBookBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: '800',
   },
   servicesSectionWrap: {
     marginBottom: 16,
@@ -1769,8 +1775,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   servicesSectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '800',
     letterSpacing: -0.2,
   },
   tapHintBadge: {
@@ -1781,29 +1787,30 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tapHintText: {
+    fontFamily: fonts.bold,
     fontSize: 10.5,
-    fontWeight: '700',
   },
   servicesSectionSub: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     marginTop: 2,
   },
   servicesHorizontalScroll: {
     paddingRight: 8,
-    gap: 14,
+    gap: 6,
     paddingVertical: 4,
   },
   horizontalServiceItem: {
-    width: 88,
+    width: 76,
     alignItems: 'center',
   },
   enlargedIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
     borderWidth: 1.5,
     position: 'relative',
   },
@@ -1811,20 +1818,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 17,
+    height: 17,
+    borderRadius: 8.5,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
   },
   horizontalServiceTitle: {
-    fontSize: 12.5,
-    fontWeight: '700',
+    fontFamily: fonts.bold,
+    fontSize: 12,
     textAlign: 'center',
     marginBottom: 2,
   },
   horizontalServiceSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 10,
     textAlign: 'center',
   },
@@ -1838,8 +1846,8 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   selectPillText: {
+    fontFamily: fonts.bold,
     fontSize: 9.5,
-    fontWeight: '800',
     marginRight: 1,
   },
   skeletonTextBar: {
@@ -1866,12 +1874,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   recentSectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 15,
-    fontWeight: '800',
   },
   viewAllText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   emptyHistoryCard: {
     borderRadius: 12,
@@ -1913,14 +1921,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   recentPlateGbText: {
+    fontFamily: fonts.extraBold,
     color: '#FFFFFF',
     fontSize: 6,
-    fontWeight: '900',
   },
   recentPlateRegText: {
+    fontFamily: fonts.extraBold,
     color: '#111827',
     fontSize: 11,
-    fontWeight: '900',
     letterSpacing: 0.8,
     paddingHorizontal: 6,
   },
@@ -1929,8 +1937,8 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   recentVehicleTitle: {
+    fontFamily: fonts.semiBold,
     fontSize: 13,
-    fontWeight: '700',
   },
   recentExpiryRow: {
     flexDirection: 'row',
@@ -1938,6 +1946,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   recentExpiryText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
   },
   recentStatusWrapper: {
@@ -1952,8 +1961,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusText: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: '800',
   },
   detailsIncludedSection: {
     marginTop: 14,
@@ -1966,8 +1975,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   detailsSectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   detailsNormalGrid: {
     flexDirection: 'row',
@@ -1983,8 +1992,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   normalDetailText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
     flex: 1,
   },
   unavailableHomeCard: {
@@ -2017,16 +2026,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   unavailableDetectedText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   unavailableHomeTitle: {
+    fontFamily: fonts.bold,
     fontSize: 17,
-    fontWeight: '800',
     textAlign: 'center',
     marginBottom: 6,
   },
   unavailableHomeDesc: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
@@ -2042,9 +2052,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   unavailableChangeBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700',
   },
   presetQuickRow: {
     flexDirection: 'row',
@@ -2053,8 +2063,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   presetQuickLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '600',
     marginRight: 6,
   },
   presetQuickChip: {
@@ -2066,7 +2076,7 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   presetQuickChipText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
 });

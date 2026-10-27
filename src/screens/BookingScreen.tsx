@@ -16,6 +16,7 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { validateMotExpiryDate } from '../utils/validationUtils';
+import { fonts } from '../theme/theme';
 
 export default function BookingScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
@@ -113,7 +114,7 @@ export default function BookingScreen({ route, navigation }: any) {
 
   // Selected service state
   const [selectedService, setSelectedService] = useState<any>({
-    name: route?.params?.serviceName || alertAny?.serviceName || 'MOT Test',
+    name: route?.params?.serviceName || alertAny?.serviceName || 'Vehicle Service',
     price: route?.params?.price !== undefined ? route.params.price : (alertAny?.price !== undefined ? alertAny.price : 45.00),
     duration: route?.params?.duration || alertAny?.duration || 45
   });
@@ -733,20 +734,20 @@ export default function BookingScreen({ route, navigation }: any) {
 
       // Log to audit history
       await addAudit(
-        isReschedule ? 'MOT Booking Rescheduled' : (isAdmin ? 'MOT Booking Booked' : 'MOT Booking Requested'),
+        isReschedule ? 'Booking Rescheduled' : (isAdmin ? 'Booking Confirmed' : 'Booking Requested'),
         isAdmin
-          ? `Garage staff booked MOT booking slot for ${customer.firstName} ${customer.lastName}'s ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${targetSlotTime}`
-          : `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} MOT booking slot for ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${targetSlotTime}`
+          ? `Garage staff booked appointment slot for ${customer.firstName} ${customer.lastName}'s ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${targetSlotTime}`
+          : `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} appointment slot for ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${targetSlotTime}`
       );
 
       setLoading(false);
 
       // Show Toast Notification
       const successMessage = isReschedule
-        ? `MOT Booking rescheduled successfully for ${displayDateStr}!`
+        ? `Booking rescheduled successfully for ${displayDateStr}!`
         : (isAdmin 
-            ? `MOT Booking confirmed and approved for ${customer.firstName} ${customer.lastName}!`
-            : `MOT Booking request submitted successfully for ${displayDateStr}!`);
+            ? `Booking confirmed and approved for ${customer.firstName} ${customer.lastName}!`
+            : `Booking request submitted successfully for ${displayDateStr}!`);
 
       Toast.show({
         type: 'success',
@@ -786,7 +787,7 @@ export default function BookingScreen({ route, navigation }: any) {
           {/* <Text style={[styles.backBtnText, { color: theme.colors.text }]}>Back</Text> */}
         </TouchableOpacity>
         <Text style={[styles.navTitle, { color: theme.colors.text }]}>
-          {isReschedule ? 'Reschedule MOT Slot' : 'Book MOT Slot'}
+          {isReschedule ? 'Reschedule Appointment' : 'Book Appointment'}
         </Text>
         <View style={{ width: 60 }} />
       </View>
@@ -829,7 +830,7 @@ export default function BookingScreen({ route, navigation }: any) {
               <View style={[styles.rescheduleNotice, { backgroundColor: theme.colors.secondary + '12', borderColor: theme.colors.secondary, marginTop: 12 }]}>
                 <MaterialCommunityIcons name="calendar-clock" size={20} color={theme.colors.secondary} style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.secondary, fontWeight: 'bold', fontSize: 13 }}>
+                  <Text style={{ fontFamily: fonts.bold, color: theme.colors.secondary, fontSize: 13 }}>
                     Official DVSA 30-Day Renewal Window Active
                   </Text>
                   <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text, marginTop: 2 }]}>
@@ -846,11 +847,11 @@ export default function BookingScreen({ route, navigation }: any) {
             <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 12 }]}>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: theme.colors.placeholder, textTransform: 'uppercase' }}>
                     Booked Garage (Rescheduling)
                   </Text>
                   <View style={{ backgroundColor: theme.colors.warning + '25', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                    <Text style={{ color: theme.colors.warning, fontSize: 10, fontWeight: 'bold' }}>LOCKED</Text>
+                    <Text style={{ fontFamily: fonts.bold, color: theme.colors.warning, fontSize: 10 }}>LOCKED</Text>
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
@@ -862,7 +863,7 @@ export default function BookingScreen({ route, navigation }: any) {
                       {selectedGarage?.name || targetGarageName || 'Garage'}
                     </Text>
                     {selectedGarage?.address ? (
-                      <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginBottom: 4 }} numberOfLines={1}>
+                      <Text style={{ fontFamily: fonts.regular, fontSize: 11, color: theme.colors.placeholder, marginBottom: 4 }} numberOfLines={1}>
                         {selectedGarage.address}{selectedGarage.city ? `, ${selectedGarage.city}` : ''}
                       </Text>
                     ) : null}
@@ -880,31 +881,31 @@ export default function BookingScreen({ route, navigation }: any) {
                   <View style={[styles.currentBookingBox, { backgroundColor: theme.colors.warning + '12', borderColor: theme.colors.warning + '35' }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                       <MaterialCommunityIcons name="calendar-clock" size={16} color={theme.colors.warning} style={{ marginRight: 6 }} />
-                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.warning }}>
+                      <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: theme.colors.warning }}>
                         Current Booked Appointment
                       </Text>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
                       {bookedDateRaw && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
-                          <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginRight: 4 }}>Date:</Text>
-                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text }}>
+                          <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: theme.colors.placeholder, marginRight: 4 }}>Date:</Text>
+                          <Text style={{ fontFamily: fonts.bold, fontSize: 12, color: theme.colors.text }}>
                             {new Date(bookedDateRaw).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </Text>
                         </View>
                       )}
                       {bookedSlotTime && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10 }}>
-                          <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginRight: 4 }}>Time Slot:</Text>
-                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text }}>
+                          <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: theme.colors.placeholder, marginRight: 4 }}>Time Slot:</Text>
+                          <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: theme.colors.text }}>
                             {bookedSlotTime}
                           </Text>
                         </View>
                       )}
                       {bookedSlotNumber ? (
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginRight: 4 }}>Slot No:</Text>
-                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme.colors.text }}>
+                          <Text style={{ fontSize: 12, color: theme.colors.placeholder, marginRight: 4, fontFamily: fonts.regular }}>Slot No:</Text>
+                          <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: theme.colors.text }}>
                             #{bookedSlotNumber}
                           </Text>
                         </View>
@@ -1115,7 +1116,7 @@ export default function BookingScreen({ route, navigation }: any) {
                           {v.make} {v.model}
                         </Text>
                         {v.motExpiryDate && (
-                          <Text style={{ fontSize: 10, color: theme.colors.placeholder, marginTop: 1 }} numberOfLines={1}>
+                          <Text style={{ fontSize: 10, color: theme.colors.placeholder, marginTop: 1, fontFamily: fonts.regular }} numberOfLines={1}>
                             MOT: {new Date(v.motExpiryDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ({daysLeft >= 0 ? `${daysLeft}d left` : `${Math.abs(daysLeft)}d ago`})
                           </Text>
                         )}
@@ -1166,10 +1167,10 @@ export default function BookingScreen({ route, navigation }: any) {
                         style={{ marginRight: 8 }} 
                       />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: 'bold' }} numberOfLines={1}>
+                        <Text style={{ color: theme.colors.text, fontSize: 13, fontFamily: fonts.bold }} numberOfLines={1}>
                           {g.name}
                         </Text>
-                        <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 1 }} numberOfLines={1}>
+                        <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 1, fontFamily: fonts.regular }} numberOfLines={1}>
                           {g.address}
                         </Text>
                       </View>
@@ -1192,12 +1193,12 @@ export default function BookingScreen({ route, navigation }: any) {
               <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginBottom: 14 }]}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontWeight: 'bold', textTransform: 'uppercase' }}>
+                    <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase' }}>
                       Selected Service Package
                     </Text>
                     {selectedService?.category && (
                       <View style={{ backgroundColor: theme.colors.primary + '15', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                        <Text style={{ fontSize: 10, fontWeight: '700', color: theme.colors.primary }}>
+                        <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: theme.colors.primary }}>
                           {selectedService.category}
                         </Text>
                       </View>
@@ -1209,14 +1210,14 @@ export default function BookingScreen({ route, navigation }: any) {
                       <MaterialCommunityIcons name="wrench-clock" size={18} color={theme.colors.secondary} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 14, fontWeight: 'bold' }]}>
+                      <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 14, fontFamily: fonts.bold }]}>
                         {selectedService.name}
                       </Text>
-                      <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 2 }}>
-                        Standard Rate: <Text style={{ fontWeight: 'bold', color: theme.colors.primary }}>£{Number(selectedService.price || 0).toFixed(2)}</Text> • Duration: {selectedService.duration || 45} mins
+                      <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 2, fontFamily: fonts.regular }}>
+                        Standard Rate: <Text style={{ fontFamily: fonts.bold, color: theme.colors.primary }}>£{Number(selectedService.price || 0).toFixed(2)}</Text> • Duration: {selectedService.duration || 45} mins
                       </Text>
                       {selectedService.description ? (
-                        <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 3, fontStyle: 'italic' }} numberOfLines={2}>
+                        <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 3, fontStyle: 'italic', fontFamily: fonts.italic }} numberOfLines={2}>
                           {selectedService.description}
                         </Text>
                       ) : null}
@@ -1226,7 +1227,7 @@ export default function BookingScreen({ route, navigation }: any) {
                   {/* Horizontal list of other garage services */}
                   {selectedGarage.services && selectedGarage.services.filter((s: any) => s.isActive !== false).length > 1 && (
                     <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
-                      <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontWeight: '700', textTransform: 'uppercase', marginBottom: 6 }}>
+                      <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase', marginBottom: 6 }}>
                         Other Services at {selectedGarage.name}:
                       </Text>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
@@ -1252,7 +1253,7 @@ export default function BookingScreen({ route, navigation }: any) {
                                 <Text style={{
                                   fontSize: 11,
                                   color: isChosen ? '#FFFFFF' : theme.colors.text,
-                                  fontWeight: isChosen ? '700' : '500'
+                                  fontFamily: isChosen ? fonts.bold : fonts.medium
                                 }}>
                                   {svc.name} • £{Number(svc.price || 0).toFixed(0)}
                                 </Text>
@@ -1274,7 +1275,7 @@ export default function BookingScreen({ route, navigation }: any) {
               <MaterialCommunityIcons name="alert-circle-outline" size={20} color={theme.colors.warning} style={{ marginRight: 8, marginTop: 2 }} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.rescheduleNoticeText, { color: theme.colors.text }]}>
-                  You are rescheduling your existing MOT booking. The new date and slot will replace your current reservation upon confirmation.
+                  You are rescheduling your existing booking. The new date and slot will replace your current reservation upon confirmation.
                 </Text>
                 {activeBookingAlert && (
                   <TouchableOpacity
@@ -1319,7 +1320,7 @@ export default function BookingScreen({ route, navigation }: any) {
                     }}
                   >
                     <MaterialCommunityIcons name="calendar-remove" size={14} color={theme.colors.error} style={{ marginRight: 4 }} />
-                    <Text style={{ fontSize: 11.5, fontWeight: 'bold', color: theme.colors.error }}>
+                    <Text style={{ fontSize: 11.5, fontFamily: fonts.bold, color: theme.colors.error }}>
                       Or Cancel Booking Completely
                     </Text>
                   </TouchableOpacity>
@@ -1390,8 +1391,8 @@ export default function BookingScreen({ route, navigation }: any) {
                     style={[
                       styles.dayCellText,
                       { color: theme.colors.text },
-                      isSelected && { color: '#FFFFFF', fontWeight: 'bold' },
-                      !isSelected && isBookedOriginalDate && { color: theme.colors.warning, fontWeight: 'bold' },
+                      isSelected && { color: '#FFFFFF', fontFamily: fonts.bold },
+                      !isSelected && isBookedOriginalDate && { color: theme.colors.warning, fontFamily: fonts.bold },
                       !selectable && { color: theme.colors.placeholder + '40' }
                     ]}
                   >
@@ -1422,14 +1423,14 @@ export default function BookingScreen({ route, navigation }: any) {
             {!selectedGarage ? (
               <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <MaterialCommunityIcons name="store-clock-outline" size={22} color={theme.colors.placeholder} />
-                <Text style={{ marginLeft: 8, color: theme.colors.placeholder, fontSize: 13 }}>
+                <Text style={{ marginLeft: 8, color: theme.colors.placeholder, fontSize: 13, fontFamily: fonts.regular }}>
                   Please select a garage above to view available time slots.
                 </Text>
               </View>
             ) : loadingSlots ? (
               <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <ActivityIndicator size="small" color={theme.colors.secondary} style={{ marginRight: 8 }} />
-                <Text style={{ color: theme.colors.placeholder, fontSize: 13 }}>
+                <Text style={{ color: theme.colors.placeholder, fontSize: 13, fontFamily: fonts.medium }}>
                   Checking available slots for {selectedGarage.name}...
                 </Text>
               </View>
@@ -1437,11 +1438,11 @@ export default function BookingScreen({ route, navigation }: any) {
               <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <MaterialCommunityIcons name="calendar-remove" size={24} color={theme.colors.error} />
                 <View style={{ marginLeft: 10, flex: 1 }}>
-                  <Text style={{ color: theme.colors.text, fontSize: 13.5, fontWeight: '700' }}>
+                  <Text style={{ color: theme.colors.text, fontSize: 13.5, fontFamily: fonts.bold }}>
                     No Free Slots Available
                   </Text>
-                  <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 2, lineHeight: 16 }}>
-                    All MOT slots are fully booked or closed on this date at {selectedGarage.name}. Please choose another date on the calendar above.
+                  <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 2, lineHeight: 16, fontFamily: fonts.regular }}>
+                    All appointment slots are fully booked or closed on this date at {selectedGarage.name}. Please choose another date on the calendar above.
                   </Text>
                 </View>
               </View>
@@ -1467,20 +1468,20 @@ export default function BookingScreen({ route, navigation }: any) {
                     >
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: 14, fontWeight: '800' }]}>
+                          <Text style={[styles.timeLabel, { color: theme.colors.text, fontSize: 14, fontFamily: fonts.bold }]}>
                             {slot.time}
                           </Text>
                           {isSelected ? (
                             <MaterialCommunityIcons name="check-circle" size={16} color={theme.colors.secondary} />
                           ) : (
                             <View style={[styles.freeTag, { backgroundColor: '#10B98115' }]}>
-                              <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '700' }}>
+                              <Text style={{ color: '#10B981', fontSize: 10, fontFamily: fonts.bold }}>
                                 {slot.availableCount} Open
                               </Text>
                             </View>
                           )}
                         </View>
-                        <Text style={[styles.timeText, { color: theme.colors.placeholder, fontSize: 11, marginTop: 2 }]}>
+                        <Text style={[styles.timeText, { color: theme.colors.placeholder, fontSize: 11, marginTop: 2, fontFamily: fonts.medium }]}>
                           {slot.slotLabel || `${slot.time} - ${slot.endTime || '45m'}`}
                         </Text>
                       </View>
@@ -1501,10 +1502,10 @@ export default function BookingScreen({ route, navigation }: any) {
             <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.secondary + '40', padding: 14 }]}>
               <MaterialCommunityIcons name="car-wrench" size={26} color={theme.colors.secondary} />
               <View style={{ marginLeft: 12, flex: 1 }}>
-                <Text style={{ color: theme.colors.text, fontSize: 13.5, fontWeight: '700' }}>
+                <Text style={{ color: theme.colors.text, fontSize: 13.5, fontFamily: fonts.bold }}>
                   Full-Day Workshop Drop-off (08:00 - 18:00)
                 </Text>
-                <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 3, lineHeight: 17 }}>
+                <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 3, lineHeight: 17, fontFamily: fonts.regular }}>
                   No fixed 45-minute lane slot is needed for {selectedService.name}. Bring your vehicle to {selectedGarage?.name || 'the garage'} on {selectedDate}. The garage owner will receive notification to accept or reject your request as before.
                 </Text>
               </View>
@@ -1587,13 +1588,13 @@ const styles = StyleSheet.create({
     width: 60,
   },
   backBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
     marginLeft: 4,
   },
   navTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
   },
   scrollContent: {
     padding: 12,
@@ -1630,22 +1631,23 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   plateText: {
+    fontFamily: fonts.bold,
     color: '#000',
-    fontWeight: 'bold',
     fontSize: 12,
     letterSpacing: 0.5,
   },
   vehicleMakeModel: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
     marginBottom: 1,
   },
   vehicleSubText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
   },
   sectionHeading: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
@@ -1671,8 +1673,8 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   calendarTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
   },
   weekdayRow: {
     flexDirection: 'row',
@@ -1683,10 +1685,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   weekdayText: {
+    fontFamily: fonts.semiBold,
     width: '14.2%',
     textAlign: 'center',
     fontSize: 10,
-    fontWeight: '600',
   },
   daysGrid: {
     flexDirection: 'row',
@@ -1700,6 +1702,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dayCellText: {
+    fontFamily: fonts.medium,
     fontSize: 11,
   },
   timePickerContainer: {
@@ -1716,10 +1719,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   timeLabel: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
   },
   timeText: {
+    fontFamily: fonts.medium,
     fontSize: 11,
     marginTop: 1,
   },
@@ -1738,6 +1742,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   notesInput: {
+    fontFamily: fonts.regular,
     borderWidth: 1,
     borderRadius: 8,
     padding: 8,
@@ -1765,8 +1770,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 13,
   },
   rescheduleNotice: {
@@ -1778,6 +1783,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   rescheduleNoticeText: {
+    fontFamily: fonts.regular,
     flex: 1,
     fontSize: 11,
     lineHeight: 15,
@@ -1815,8 +1821,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   addCarToggleText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
   },
   inlineAddCarCard: {
     padding: 14,
@@ -1830,8 +1836,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   inlineAddCarTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: 'bold',
   },
   plateInputContainer: {
     flexDirection: 'row',
@@ -1853,17 +1859,18 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   ukFlagEmoji: {
+    fontFamily: fonts.regular,
     fontSize: 10,
   },
   ukStripLabel: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 8,
   },
   plateInputField: {
+    fontFamily: fonts.bold,
     flex: 1,
     fontSize: 15,
-    fontWeight: 'bold',
     color: '#000000',
     textAlign: 'center',
     height: '100%',
@@ -1878,8 +1885,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   plateLookupBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     fontSize: 11,
   },
   lookupSuccessBanner: {
@@ -1894,9 +1901,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   lookupSuccessText: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
     color: '#10B981',
-    fontWeight: '600',
     flex: 1,
   },
   formRow: {
@@ -1908,11 +1915,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 11,
-    fontWeight: '600',
     marginBottom: 4,
   },
   formInputField: {
+    fontFamily: fonts.medium,
     height: 40,
     borderRadius: 8,
     borderWidth: 1,
@@ -1928,8 +1936,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelCarFormText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   saveCarSubmitBtn: {
     paddingVertical: 10,
@@ -1939,8 +1947,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   saveCarSubmitBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: 'bold',
   },
 });

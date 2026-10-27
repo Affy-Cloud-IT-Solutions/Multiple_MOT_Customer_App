@@ -21,6 +21,7 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 import CustomerHeader from '../components/CustomerHeader';
 import { openGarageDirections } from '../utils/mapUtils';
+import { fonts } from '../theme/theme';
 
 export default function BookingsScreen({ navigation }: any) {
   const { theme } = useAppTheme();
@@ -71,45 +72,48 @@ export default function BookingsScreen({ navigation }: any) {
     }, [refreshData])
   );
 
-  // Extract all BOOKED alerts belonging to current user/customer
+  // Extract all BOOKED alerts belonging strictly to current logged-in customer
   const allCustomerBookings = useMemo(() => {
+    if (!token) return [];
+
+    const validCustIds = [
+      customerId,
+      customer?.id,
+      customer?._id,
+      user?.customerId,
+      user?.id,
+    ].filter(Boolean).map((id) => String(id).toLowerCase());
+
+    const userEmail = (user?.email || customer?.email || '').trim().toLowerCase();
+
     return alerts
       .filter((a) => {
         if (a.type !== 'BOOKED') return false;
-        // If logged in, match customerId or if guest, match all
-        if (token && customerId) {
-          const matchId =
-            !a.customerId ||
-            String(a.customerId).toLowerCase() === String(customerId).toLowerCase() ||
-            String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
-            String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase();
-          return matchId;
+
+        // Strictly match by customerId
+        if (a.customerId && validCustIds.includes(String(a.customerId).toLowerCase())) {
+          return true;
         }
-        return true;
+
+        // Match by customerEmail
+        if (userEmail && a.customerEmail && String(a.customerEmail).toLowerCase() === userEmail) {
+          return true;
+        }
+
+        return false;
       })
       .sort((a, b) => {
         const dateA = new Date(a.date || 0).getTime();
         const dateB = new Date(b.date || 0).getTime();
         return dateB - dateA;
       });
-  }, [alerts, token, customerId, customer]);
+  }, [alerts, token, customerId, customer, user]);
 
   // Active rejected bookings alerts for banner
   const rejectedAlerts = useMemo(() => {
-    return alerts.filter((a) => {
-      if (a.status !== 'Rejected') return false;
-      if (a.type !== 'BOOKED') return false;
-      if (token && customerId) {
-        return (
-          !a.customerId ||
-          String(a.customerId).toLowerCase() === String(customerId).toLowerCase() ||
-          String(a.customerId).toLowerCase() === String(customer.id || '').toLowerCase() ||
-          String(a.customerId).toLowerCase() === String(customer._id || '').toLowerCase()
-        );
-      }
-      return true;
-    });
-  }, [alerts, token, customerId, customer]);
+    if (!token) return [];
+    return allCustomerBookings.filter((a) => a.status === 'Rejected');
+  }, [allCustomerBookings, token]);
 
   // Counts for filter pills
   const counts = useMemo(() => {
@@ -174,7 +178,7 @@ export default function BookingsScreen({ navigation }: any) {
 
     Alert.alert(
       'Cancel Appointment',
-      `Are you sure you want to cancel the MOT booking for ${reg}?\n\nThe allocated test bay slot will be released.`,
+      `Are you sure you want to cancel the booking for ${reg}?\n\nThe allocated appointment slot will be released.`,
       [
         { text: 'Keep Appointment', style: 'cancel' },
         {
@@ -262,7 +266,7 @@ export default function BookingsScreen({ navigation }: any) {
   };
 
   const getVehicleDisplay = (makeModel?: string) => {
-    if (!makeModel) return 'Vehicle MOT Inspection';
+    if (!makeModel) return 'Vehicle Service Appointment';
     if (makeModel.includes(' - Slot: ')) {
       return makeModel.split(' - Slot: ')[0];
     }
@@ -341,12 +345,58 @@ export default function BookingsScreen({ navigation }: any) {
     };
   };
 
+  if (!token) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <CustomerHeader
+          title="My Bookings"
+          subtitle="Live Service & MOT Appointments"
+          iconName="calendar-clock"
+          iconColor={theme.colors.secondary}
+          iconBg={theme.colors.secondary + '15'}
+        />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons
+            name="account-lock-outline"
+            size={72}
+            color={theme.colors.placeholder}
+            style={{ marginBottom: 16 }}
+          />
+          <Text style={{ fontSize: 20, fontFamily: fonts.bold, color: theme.colors.text, marginBottom: 8, textAlign: 'center' }}>
+            Access Your Bookings
+          </Text>
+          <Text style={{ fontSize: 13, fontFamily: fonts.regular, color: theme.colors.placeholder, textAlign: 'center', marginBottom: 24, paddingHorizontal: 20, lineHeight: 18 }}>
+            Please sign in to view and manage your scheduled service & MOT appointments, track live statuses, and reschedule slots.
+          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Login')}
+            style={{
+              backgroundColor: theme.colors.primary,
+              paddingHorizontal: 28,
+              paddingVertical: 12,
+              borderRadius: 8,
+              elevation: 2,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 14 }}>
+              Sign In / Sign Up
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* 1. Customer Header with Great UI */}
       <CustomerHeader
         title="My Bookings"
-        subtitle="Live MOT & Service Appointments"
+        subtitle="Live Service & MOT Appointments"
         iconName="calendar-clock"
         iconColor={theme.colors.secondary}
         iconBg={theme.colors.secondary + '15'}
@@ -364,27 +414,6 @@ export default function BookingsScreen({ navigation }: any) {
           </TouchableOpacity>
         }
       />
-
-      {/* Guest Sign-In Notice if not logged in */}
-      {!token && (
-        <View style={[styles.guestNoticeCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <View style={[styles.guestIconWrap, { backgroundColor: theme.colors.primary + '15' }]}>
-            <MaterialCommunityIcons name="account-lock-outline" size={24} color={theme.colors.primary} />
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.guestTitle, { color: theme.colors.text }]}>Sign in to track bookings</Text>
-            <Text style={[styles.guestSubtitle, { color: theme.colors.placeholder }]}>
-              Log in with your customer account to sync live appointment statuses.
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Login')}
-            style={[styles.guestLoginBtn, { backgroundColor: theme.colors.primary }]}
-          >
-            <Text style={styles.guestLoginBtnText}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* Filter Tabs & Search */}
       <View style={[styles.filterContainer, { backgroundColor: theme.colors.background }]}>
@@ -437,7 +466,7 @@ export default function BookingsScreen({ navigation }: any) {
                     styles.filterChipText,
                     {
                       color: isSelected ? '#FFFFFF' : theme.colors.text,
-                      fontWeight: isSelected ? '700' : '600',
+                      fontFamily: isSelected ? fonts.bold : fonts.semiBold,
                     },
                   ]}
                 >
@@ -479,7 +508,7 @@ export default function BookingsScreen({ navigation }: any) {
                     Booking Rejected by Garage
                   </Text>
                   <Text style={[styles.notificationAlertText, { color: theme.colors.text }]}>
-                    Booking request for <Text style={{ fontWeight: 'bold' }}>{alert.registrationNumber}</Text> was rejected: "{alert.rejectionReason || 'No reason provided'}"
+                    Booking request for <Text style={{ fontFamily: fonts.bold }}>{alert.registrationNumber}</Text> was rejected: "{alert.rejectionReason || 'No reason provided'}"
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -511,7 +540,7 @@ export default function BookingsScreen({ navigation }: any) {
                 ? `No appointments match "${searchQuery}".`
                 : selectedFilter !== 'ALL'
                 ? `You have no ${selectedFilter.toLowerCase()} bookings.`
-                : 'You have not booked any MOT or vehicle service slots yet.'}
+                : 'You have not booked any vehicle service appointments yet.'}
             </Text>
 
             <TouchableOpacity
@@ -520,7 +549,7 @@ export default function BookingsScreen({ navigation }: any) {
               activeOpacity={0.85}
             >
               <MaterialCommunityIcons name="store-search-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.bookNowBtnText}>Find Garage & Book MOT</Text>
+              <Text style={styles.bookNowBtnText}>Find Garage & Book Service</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -573,7 +602,7 @@ export default function BookingsScreen({ navigation }: any) {
                 <View style={styles.serviceRow}>
                   <MaterialCommunityIcons name="wrench-outline" size={13} color={theme.colors.placeholder} style={{ marginRight: 5 }} />
                   <Text style={[styles.serviceNameText, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                    {item.serviceName || 'MOT Annual Safety Inspection (Class 4)'}
+                    {item.serviceName || 'Vehicle Service & Inspection'}
                   </Text>
                   {item.price ? (
                     <Text style={[styles.priceTag, { color: theme.colors.secondary }]}>
@@ -599,7 +628,7 @@ export default function BookingsScreen({ navigation }: any) {
                             borderColor: theme.colors.secondary + '30',
                           }}
                         >
-                          <Text style={{ fontSize: 10.5, fontWeight: '600', color: theme.colors.secondary }}>
+                          <Text style={{ fontSize: 10.5, fontFamily: fonts.semiBold, color: theme.colors.secondary }}>
                             {sName}
                           </Text>
                         </View>
@@ -647,12 +676,12 @@ export default function BookingsScreen({ navigation }: any) {
                   <View style={[styles.cardRejectionBox, { backgroundColor: '#DC262610', borderColor: '#DC262630' }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
                       <MaterialCommunityIcons name="alert-circle-outline" size={14} color="#DC2626" style={{ marginRight: 5 }} />
-                      <Text style={{ color: '#DC2626', fontWeight: 'bold', fontSize: 11.5 }}>
+                      <Text style={{ color: '#DC2626', fontFamily: fonts.bold, fontSize: 11.5 }}>
                         Booking Rejected by Garage
                       </Text>
                     </View>
-                    <Text style={{ color: theme.colors.text, fontSize: 11.5, marginTop: 2, lineHeight: 16 }}>
-                      Reason: <Text style={{ fontWeight: '700', color: '#DC2626' }}>{item.rejectionReason || 'No specific reason provided.'}</Text>
+                    <Text style={{ color: theme.colors.text, fontSize: 11.5, marginTop: 2, lineHeight: 16, fontFamily: fonts.regular }}>
+                      Reason: <Text style={{ fontFamily: fonts.bold, color: '#DC2626' }}>{item.rejectionReason || 'No specific reason provided.'}</Text>
                     </Text>
                   </View>
                 )}
@@ -698,7 +727,7 @@ export default function BookingsScreen({ navigation }: any) {
       {selectedBookingForDetails && (() => {
         const item = selectedBookingForDetails;
         const statusCfg = getStatusConfig(item.status);
-        const garageDisplayName = item.garageName || item.stationName || item.garage?.name || 'MOT Testing Centre';
+        const garageDisplayName = item.garageName || item.stationName || item.garage?.name || 'Service & Garage Centre';
         const garageAddressStr = [
           item.garageAddress || item.garage?.address,
           item.garageCity || item.garage?.city,
@@ -800,7 +829,7 @@ export default function BookingsScreen({ navigation }: any) {
                             <MaterialCommunityIcons name="wrench-outline" size={16} color={theme.colors.secondary} style={{ marginRight: 8 }} />
                             <View style={{ flex: 1 }}>
                               <Text style={[styles.sheetServiceName, { color: theme.colors.text }]}>
-                                {item.serviceName || 'MOT Annual Safety Inspection (Class 4)'}
+                                {item.serviceName || 'Vehicle Service & Inspection'}
                               </Text>
                               {item.price ? (
                                 <Text style={[styles.sheetPriceText, { color: theme.colors.secondary }]}>
@@ -837,10 +866,10 @@ export default function BookingsScreen({ navigation }: any) {
                                         color={theme.colors.secondary}
                                         style={{ marginRight: 6 }}
                                       />
-                                      <Text style={{ fontSize: 12.5, fontWeight: '600', color: theme.colors.text }}>{sName}</Text>
+                                      <Text style={{ fontSize: 12.5, fontFamily: fonts.semiBold, color: theme.colors.text }}>{sName}</Text>
                                     </View>
                                     {sPrice !== null && (
-                                      <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.secondary }}>£{sPrice}</Text>
+                                       <Text style={{ fontSize: 12, fontFamily: fonts.bold, color: theme.colors.secondary }}>£{sPrice}</Text>
                                     )}
                                   </View>
                                 );
@@ -1037,10 +1066,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   guestTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: 'bold',
   },
   guestSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginTop: 2,
     lineHeight: 14,
@@ -1052,9 +1082,9 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   guestLoginBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: 'bold',
   },
   filterContainer: {
     paddingHorizontal: 16,
@@ -1070,6 +1100,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   searchInput: {
+    fontFamily: fonts.medium,
     flex: 1,
     fontSize: 13,
     paddingVertical: 0,
@@ -1085,6 +1116,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   filterChipText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
   },
   listContent: {
@@ -1140,16 +1172,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   ukFlagText: {
+    fontFamily: fonts.bold,
     fontSize: 7.5,
   },
   ukTagText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 7.5,
-    fontWeight: 'bold',
   },
   ukPlateNumber: {
+    fontFamily: fonts.bold,
     color: '#000000',
-    fontWeight: 'bold',
     fontSize: 11,
     paddingHorizontal: 6,
     letterSpacing: 0.6,
@@ -1163,8 +1196,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusBadgeText: {
+    fontFamily: fonts.bold,
     fontSize: 10.5,
-    fontWeight: '700',
   },
   vehicleRow: {
     flexDirection: 'row',
@@ -1173,8 +1206,8 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   vehicleName: {
+    fontFamily: fonts.bold,
     fontSize: 13.5,
-    fontWeight: 'bold',
     flex: 1,
   },
   serviceRow: {
@@ -1183,12 +1216,13 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   serviceNameText: {
+    fontFamily: fonts.medium,
     fontSize: 11.5,
     flexShrink: 1,
   },
   priceTag: {
+    fontFamily: fonts.bold,
     fontSize: 11.5,
-    fontWeight: 'bold',
     marginLeft: 4,
   },
   appointmentInfoBox: {
@@ -1202,13 +1236,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dateLabel: {
+    fontFamily: fonts.bold,
     fontSize: 8,
-    fontWeight: '700',
     letterSpacing: 0.5,
   },
   dateValue: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
     marginTop: 1,
   },
   motHistoryBtn: {
@@ -1220,8 +1254,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   motHistoryBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
   cardBottomRow: {
     flexDirection: 'row',
@@ -1237,9 +1271,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   cancelBookingBtnText: {
+    fontFamily: fonts.semiBold,
     color: '#EF4444',
     fontSize: 10.5,
-    fontWeight: '600',
   },
   rescheduleCardBtn: {
     flexDirection: 'row',
@@ -1251,8 +1285,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   rescheduleCardBtnText: {
+    fontFamily: fonts.bold,
     fontSize: 10.5,
-    fontWeight: '700',
   },
   // BottomSheet Modal Styles
   modalBackdrop: {
@@ -1300,11 +1334,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sheetHeaderTitle: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: '800',
     letterSpacing: -0.2,
   },
   sheetHeaderSubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     marginTop: 2,
   },
@@ -1325,8 +1360,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sheetVehicleName: {
+    fontFamily: fonts.bold,
     fontSize: 15,
-    fontWeight: '700',
     flex: 1,
   },
   sheetStatusBanner: {
@@ -1337,26 +1372,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sheetStatusTitle: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
   },
   sheetStatusDesc: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginTop: 2,
     lineHeight: 15,
   },
   sheetSectionHeading: {
+    fontFamily: fonts.bold,
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.6,
   },
   sheetServiceName: {
+    fontFamily: fonts.bold,
     fontSize: 13,
-    fontWeight: '700',
   },
   sheetPriceText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
     marginTop: 2,
   },
   sheetDivider: {
@@ -1365,21 +1401,22 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   sheetScheduleLabel: {
+    fontFamily: fonts.bold,
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 0.5,
   },
   sheetScheduleVal: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: '700',
     marginTop: 1,
   },
   sheetGarageName: {
+    fontFamily: fonts.bold,
     fontSize: 14,
-    fontWeight: '700',
     flex: 1,
   },
   sheetGarageAddress: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 16,
     flex: 1,
@@ -1399,9 +1436,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   sheetActionBtnPrimaryText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: 'bold',
   },
   sheetActionBtnOutline: {
     flex: 1,
@@ -1414,8 +1451,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sheetActionBtnOutlineText: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
   },
   sheetViewGarageLink: {
     flexDirection: 'row',
@@ -1426,8 +1463,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   sheetViewGarageLinkText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
   },
   sheetReasonBox: {
     flexDirection: 'row',
@@ -1437,10 +1474,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sheetReasonTitle: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: 'bold',
   },
   sheetReasonText: {
+    fontFamily: fonts.regular,
     fontSize: 11,
     marginTop: 2,
   },
@@ -1453,9 +1491,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sheetRescheduleBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 12.5,
-    fontWeight: '700',
   },
   sheetCancelBtn: {
     flexDirection: 'row',
@@ -1467,9 +1505,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sheetCancelBtnText: {
+    fontFamily: fonts.bold,
     color: '#EF4444',
     fontSize: 12,
-    fontWeight: '700',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -1488,11 +1526,12 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   emptyTitle: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: 'bold',
     marginBottom: 6,
   },
   emptySubtitle: {
+    fontFamily: fonts.regular,
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
@@ -1507,9 +1546,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   bookNowBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: 'bold',
   },
   rejectedBannerContainer: {
     marginBottom: 12,
@@ -1523,13 +1562,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   notificationAlertTitle: {
+    fontFamily: fonts.bold,
     fontSize: 12,
-    fontWeight: 'bold',
     marginBottom: 2,
   },
   notificationAlertText: {
+    fontFamily: fonts.medium,
     fontSize: 11,
-    fontWeight: '500',
     lineHeight: 15,
   },
   notificationDismissBtn: {
@@ -1539,8 +1578,8 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   notificationDismissText: {
+    fontFamily: fonts.bold,
     fontSize: 11,
-    fontWeight: 'bold',
   },
   cardRejectionBox: {
     borderRadius: 8,
@@ -1559,8 +1598,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   rebookBtnText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: 'bold',
   },
 });

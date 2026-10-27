@@ -53,11 +53,11 @@ export default function AdminDashboardScreen({ navigation }: any) {
     if (!customer) return;
 
     const noticeText = daysLeft < 0 
-      ? `MOT Overdue reminder` 
-      : `MOT Due reminder (${daysLeft} days left - DVSA 30-day window)`;
+      ? `Service / MOT Overdue reminder` 
+      : `Service / MOT Due reminder (${daysLeft} days left)`;
 
     Alert.alert(
-      'Send MOT Reminder',
+      'Send Service Reminder',
       `Send ${noticeText} to ${customer.firstName} ${customer.lastName} via ${customer.preferredContact}?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -66,7 +66,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
           onPress: () => {
             Alert.alert(
               'Sent!',
-              `MOT reminder sent successfully to ${customer.firstName} (${customer.mobile}) via ${customer.preferredContact}.`
+              `Service reminder sent successfully to ${customer.firstName} (${customer.mobile}) via ${customer.preferredContact}.`
             );
           }
         }
@@ -113,7 +113,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
         <View>
           <Text style={[styles.title, { color: theme.colors.text }]}>Dashboard</Text>
           <Text style={[styles.subtitle, { color: theme.colors.placeholder }]}>
-            MOT Operations & Reminders
+            Service Operations & Reminders
           </Text>
         </View>
         <View style={styles.headerActions}>
@@ -179,14 +179,14 @@ export default function AdminDashboardScreen({ navigation }: any) {
           <StatCard 
             icon="clock-alert-outline" 
             value={dueForMotVehicles.length} 
-            label="Due for MOT" 
+            label="Due for Service" 
             color="#F59E0B"
             subtitle="Within 30 Days"
           />
           <StatCard 
             icon="calendar-check-outline" 
             value={bookedMotsCount} 
-            label="Booked MOT's" 
+            label="Booked Services" 
             color="#3B82F6"
             onPress={() => navigation.navigate('BookedMots')}
           />
@@ -221,7 +221,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
       {/* Urgent Action Section */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>MOT Due & Urgent Actions</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Service Due & Urgent Actions</Text>
           <Text style={[styles.sectionCount, { color: theme.colors.placeholder }]}>
             {urgentVehiclesList.length} actionable
           </Text>
@@ -292,7 +292,7 @@ export default function AdminDashboardScreen({ navigation }: any) {
                   >
                     <MaterialCommunityIcons name="send-outline" size={16} color={theme.colors.secondary} />
                     <Text style={[styles.actionButtonText, { color: theme.colors.secondary }]}>
-                      Send MOT Reminder
+                      Send Reminder
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -304,6 +304,8 @@ export default function AdminDashboardScreen({ navigation }: any) {
     </ScrollView>
   );
 }
+
+import { fonts } from '../theme/theme';
 
 const styles = StyleSheet.create({
   container: {
@@ -321,13 +323,13 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   title: {
+    fontFamily: fonts.bold,
     fontSize: 24,
-    fontWeight: '700',
     letterSpacing: -0.5,
   },
   subtitle: {
+    fontFamily: fonts.regular,
     fontSize: 13,
-    fontWeight: '400',
     marginTop: 2,
     letterSpacing: -0.2,
   },
@@ -360,9 +362,9 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   bellBadgeText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 9.5,
-    fontWeight: 'bold',
   },
   refreshButton: {
     width: 40,
@@ -401,20 +403,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statValue: {
+    fontFamily: fonts.bold,
     fontSize: 16,
-    fontWeight: '700',
     letterSpacing: -0.3,
     marginBottom: 1,
   },
   statLabel: {
+    fontFamily: fonts.semiBold,
     fontSize: 9.5,
-    fontWeight: '600',
     letterSpacing: 0.1,
     textTransform: 'uppercase',
   },
   statSubtitle: {
+    fontFamily: fonts.medium,
     fontSize: 8,
-    fontWeight: '500',
     letterSpacing: 0.2,
     textTransform: 'uppercase',
     marginTop: 1,
@@ -430,13 +432,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
+    fontFamily: fonts.bold,
     fontSize: 18,
-    fontWeight: '600',
     letterSpacing: -0.2,
   },
   sectionCount: {
+    fontFamily: fonts.medium,
     fontSize: 12,
-    fontWeight: '500',
   },
   emptyState: {
     borderRadius: 12,
@@ -446,10 +448,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyText: {
+    fontFamily: fonts.semiBold,
     fontSize: 16,
-    fontWeight: '500',
   },
   emptySubtext: {
+    fontFamily: fonts.regular,
     fontSize: 13,
   },
   actionCard: {
@@ -481,14 +484,14 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   plateText: {
+    fontFamily: fonts.bold,
     color: '#000',
-    fontWeight: '700',
     fontSize: 11,
     letterSpacing: 0.5,
   },
   vehicleName: {
+    fontFamily: fonts.semiBold,
     fontSize: 13,
-    fontWeight: '600',
   },
   daysBadge: {
     paddingHorizontal: 8,
@@ -496,21 +499,21 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   daysText: {
+    fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 11,
-    fontWeight: '700',
   },
   actionCardDetails: {
     marginBottom: 8,
     gap: 1,
   },
   customerName: {
+    fontFamily: fonts.medium,
     fontSize: 12.5,
-    fontWeight: '500',
   },
   contactInfo: {
+    fontFamily: fonts.regular,
     fontSize: 11,
-    fontWeight: '400',
   },
   actionButton: {
     flexDirection: 'row',
@@ -521,8 +524,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   actionButtonText: {
+    fontFamily: fonts.semiBold,
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 0.3,
   },
 });

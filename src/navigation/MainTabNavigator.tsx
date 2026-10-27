@@ -8,6 +8,8 @@ import CustomerPortalScreen from '../screens/CustomerPortalScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { useAppTheme } from '../context/ThemeContext';
 
+import { fonts } from '../theme/theme';
+
 const Tab = createBottomTabNavigator();
 
 export default function MainTabNavigator() {
@@ -46,7 +48,7 @@ export default function MainTabNavigator() {
           paddingTop: 8,
         },
         tabBarLabelStyle: {
-          fontWeight: 'bold',
+          fontFamily: fonts.semiBold,
           fontSize: 11,
         },
         headerStyle: {
@@ -58,7 +60,7 @@ export default function MainTabNavigator() {
         },
         headerTintColor: theme.colors.text,
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontFamily: fonts.bold,
         },
       })}
     >
