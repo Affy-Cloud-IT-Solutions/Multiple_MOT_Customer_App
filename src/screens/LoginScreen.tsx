@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Dimensions,
   StatusBar,
+  Image,
 } from 'react-native';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL, isTokenExpired } from '../context/DataContext';
@@ -19,7 +20,6 @@ import { validateEmail, validatePassword } from '../utils/validationUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fonts } from '../theme/theme';
 import {
-  MotHeroLogo,
   EmailIcon,
   LockIcon,
   EyeIcon,
@@ -187,12 +187,14 @@ export default function LoginScreen({ navigation }: any) {
           {/* Brand & Hero Logo Section */}
           <View style={styles.heroSection}>
             <View style={styles.logoShadowWrapper}>
-              <MotHeroLogo
-                size={100}
-                primary={isDark ? '#0B1F33' : '#0B1F33'}
-                secondary={isDark ? '#38BDF8' : '#1677FF'}
-                dark={isDark}
-              />
+              <View style={styles.brandLogoCard}>
+                <Image
+                  source={require('../images/ondoorcarservice_Logo.png')}
+                  style={styles.brandLogoImage}
+                  resizeMode="contain"
+                  accessibilityLabel="Ondoorcarservice"
+                />
+              </View>
             </View>
 
             <Text style={[styles.title, { color: theme.colors.text }]}>Ondoor Car Service</Text>
@@ -419,6 +421,18 @@ export default function LoginScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  brandLogoCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandLogoImage: {
+    width: 200,
+    height: 89, // logo is 750 x 333
+  },
   container: {
     flex: 1,
   },

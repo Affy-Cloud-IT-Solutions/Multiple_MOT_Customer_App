@@ -34,7 +34,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function AdminCustomersScreen({ navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, addCustomer, addVehicle, updateVehicleStatus, lookupVehicle, token } = useAppValues();
+  const { customers, vehicles, addCustomer, addVehicle, updateVehicleStatus, lookupVehicle, token, authFetch } = useAppValues();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
@@ -78,10 +78,9 @@ export default function AdminCustomersScreen({ navigation }: any) {
       'SUZUKI', 'TESLA', 'TOYOTA', 'VAUXHALL', 'VOLKSWAGEN', 'VOLVO'
     ];
     try {
-      const response = await fetch(`${BASE_URL}/vehicles/makes?page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
+      const response = await authFetch(`${BASE_URL}/vehicles/makes?page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
         }
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);

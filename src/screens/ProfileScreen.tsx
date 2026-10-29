@@ -32,6 +32,7 @@ export default function ProfileScreen({ navigation }: any) {
     createStaffAccount,
     setToken,
     setUser,
+    logout,
     customers = [],
     vehicles = [],
     alerts = [],
@@ -66,15 +67,11 @@ export default function ProfileScreen({ navigation }: any) {
           onPress: async () => {
             setLoggingOut(true);
             try {
-              await AsyncStorage.removeItem('user_token');
-              await AsyncStorage.removeItem('user_profile');
-            } catch (e) {
-              console.error('Error clearing AsyncStorage:', e);
+              // Revokes the refresh token on the server, clears the stored session and returns to Login
+              await logout();
+            } finally {
+              setLoggingOut(false);
             }
-            setToken(null);
-            setUser(null);
-            setLoggingOut(false);
-            navigation.replace('Login');
           },
         },
       ]

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Coordinates, requestUserLiveLocation, isWithinUKBoundary } from '../utils/mapUtils';
-import { resetToLogin } from '../navigation/NavigationService';
+import { resetToLogin, isOnLoginScreen } from '../navigation/NavigationService';
 import { decodeToken, isTokenExpired, msUntilAccessTokenRefresh, requestTokenRefresh, RefreshOutcome } from '../utils/authSession';
 
 // Re-exported for existing importers (e.g. LoginScreen)
@@ -370,6 +370,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     console.warn('[AUTH] Refresh token expired or revoked. Clearing session and navigating to login.');
     setTokens(null, null);
     setUserState(null);
+    // Already on Login (e.g. at launch): just clear the session, no popup
+    if (isOnLoginScreen()) {
+      sessionExpiredAlertShownRef.current = false;
+      return;
+    }
     resetToLogin();
     Alert.alert(
       'Session Expired',
@@ -929,8 +934,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
       await refreshData();
     } catch (error) {
-      console.error('[DATA CONTEXT] addAudit error:', error);
-      throw error;
+      // Audit logging is best-effort: never turn an action that already succeeded into an error for the user
+      console.warn('[DATA CONTEXT] addAudit failed (action itself was not affected):', error);
     }
   };
 

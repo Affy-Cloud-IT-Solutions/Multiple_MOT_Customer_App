@@ -71,7 +71,7 @@ const GarageCarouselImage = ({ uri, style, width }: any) => {
 
 export default function GarageDetailScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { token, user, customers, vehicles, alerts = [], addAlert, addAudit, addVehicle, refreshData, lookupVehicle } = useAppValues();
+  const { token, user, customers, vehicles, alerts = [], addAlert, addAudit, addVehicle, refreshData, lookupVehicle, authFetch } = useAppValues();
   const { garageId } = route.params;
   const { width: screenWidth } = Dimensions.get('window');
 
@@ -239,8 +239,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${BASE_URL}/garages/${garageId}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      const response = await authFetch(`${BASE_URL}/garages/${garageId}`, {
+        headers: {},
       });
       if (!response.ok) {
         throw new Error('Failed to load garage details.');
@@ -249,8 +249,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       let services = Array.isArray(data.services) && data.services.length > 0 ? data.services : [];
       if (services.length === 0) {
         try {
-          const sRes = await fetch(`${BASE_URL}/garages/${garageId}/services`, {
-            headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          const sRes = await authFetch(`${BASE_URL}/garages/${garageId}/services`, {
+            headers: {},
           });
           if (sRes.ok) {
             const sData = await sRes.json();
@@ -467,8 +467,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     if (!targetId || !dateStr) return;
     setLoadingSlots(true);
     try {
-      const res = await fetch(`${BASE_URL}/garages/${targetId}/slots?date=${dateStr}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      const res = await authFetch(`${BASE_URL}/garages/${targetId}/slots?date=${dateStr}`, {
+        headers: {}
       });
       if (res.ok) {
         const data = await res.json();

@@ -71,7 +71,7 @@ const GarageLogo = ({ uri, name, theme }: any) => {
 
 export default function GarageListScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { user, token, userLocation, setUserLocation, isOutsideUK } = useAppValues();
+  const { user, token, userLocation, setUserLocation, isOutsideUK, authFetch } = useAppValues();
 
   const [garages, setGarages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,8 +167,8 @@ export default function GarageListScreen({ route, navigation }: any) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${BASE_URL}/garages`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      const response = await authFetch(`${BASE_URL}/garages`, {
+        headers: {},
       });
       if (!response.ok) {
         throw new Error('Failed to load registered garages.');
@@ -278,8 +278,8 @@ export default function GarageListScreen({ route, navigation }: any) {
 
     try {
       // 3. Fetch fresh registered garages list from server
-      const response = await fetch(`${BASE_URL}/garages`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      const response = await authFetch(`${BASE_URL}/garages`, {
+        headers: {},
       });
       if (!response.ok) {
         throw new Error('Failed to load registered garages.');

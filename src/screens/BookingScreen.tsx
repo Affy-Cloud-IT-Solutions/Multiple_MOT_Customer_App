@@ -20,7 +20,7 @@ import { fonts } from '../theme/theme';
 
 export default function BookingScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addAudit, addVehicle, lookupVehicle, user, token, cancelBooking, rescheduleBooking } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addAudit, addVehicle, lookupVehicle, user, token, cancelBooking, rescheduleBooking, authFetch } = useAppValues();
 
   // Find active customer
   const customerId = user?.customerId || (customers.length > 0 ? (customers[0].id || customers[0]._id) : user?.id) || '';
@@ -204,8 +204,8 @@ export default function BookingScreen({ route, navigation }: any) {
     const fetchGarages = async () => {
       setLoadingGarages(true);
       try {
-        const response = await fetch(`${BASE_URL}/garages`, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        const response = await authFetch(`${BASE_URL}/garages`, {
+          headers: {}
         });
         if (response.ok) {
           const data = await response.json();
@@ -258,8 +258,8 @@ export default function BookingScreen({ route, navigation }: any) {
     let isMounted = true;
     const fetchGarageDetails = async () => {
       try {
-        const response = await fetch(`${BASE_URL}/garages/${gId}`, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        const response = await authFetch(`${BASE_URL}/garages/${gId}`, {
+          headers: {}
         });
         if (response.ok) {
           const data = await response.json();

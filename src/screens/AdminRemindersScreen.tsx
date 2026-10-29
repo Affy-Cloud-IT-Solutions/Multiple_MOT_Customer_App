@@ -6,7 +6,7 @@ import { useAppValues, BASE_URL } from '../context/DataContext';
 
 export default function AdminRemindersScreen() {
   const { theme } = useAppTheme();
-  const { audits, vehicles, customers, alerts, token } = useAppValues();
+  const { audits, vehicles, customers, alerts, token, authFetch } = useAppValues();
   const [activeTab, setActiveTab] = useState<'logs' | 'reports' | 'templates'>('logs');
 
   // Service & MOT Due Template state
@@ -20,17 +20,23 @@ export default function AdminRemindersScreen() {
   const saveTemplate = async () => {
     setSavingTemplate(true);
     try {
-      await fetch(`${BASE_URL}/reminders/templates`, {
+      const res = await authFetch(`${BASE_URL}/reminders/templates`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ motDue: motTemplate, template: motTemplate, t30: motTemplate })
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        // The reminder template is platform-wide, so only super admins may change it
+        throw new Error(res.status === 403
+          ? 'Only platform admins can change the reminder template.'
+          : (data.error || 'Could not save the reminder template.'));
+      }
       Alert.alert('Success', 'Service & MOT Due Reminder Template updated successfully!');
-    } catch (error) {
-      Alert.alert('Success', 'Service & MOT Due Reminder Template updated successfully!');
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Could not save the reminder template.');
     } finally {
       setSavingTemplate(false);
     }

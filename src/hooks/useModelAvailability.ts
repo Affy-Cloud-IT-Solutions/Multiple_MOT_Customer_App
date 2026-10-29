@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { checkModelAvailability, fetchVehicleModelsPage, ModelAvailability } from '../utils/vehicleModels';
+import { useAppValues } from '../context/DataContext';
 
 /**
  * Tracks whether the selected make has models (which decides if Model is required) and provides
@@ -8,6 +9,9 @@ import { checkModelAvailability, fetchVehicleModelsPage, ModelAvailability } fro
  */
 export function useModelAvailability(make: string, baseUrl: string, token?: string | null) {
   const [availability, setAvailability] = useState<ModelAvailability>('idle');
+  // authFetch adds the access token and refreshes/retries it when expired
+  const { authFetch } = useAppValues();
+  const fetchImpl = authFetch as unknown as typeof fetch;
   const currentMakeRef = useRef('');
 
   useEffect(() => {
@@ -18,23 +22,23 @@ export function useModelAvailability(make: string, baseUrl: string, token?: stri
       return;
     }
     setAvailability('loading');
-    checkModelAvailability({ baseUrl, token, make: makeKey }).then(status => {
+    checkModelAvailability({ baseUrl, make: makeKey, fetchImpl }).then(status => {
       if (currentMakeRef.current === makeKey) setAvailability(status);
     });
-  }, [make, baseUrl, token]);
+  }, [make, baseUrl, token, fetchImpl]);
 
   // Throws when models can't be loaded, so the dropdown shows an error + retry instead of "No models found"
   const fetchModels = useCallback(
     async (search: string, page: number) => {
       const makeKey = make.trim().toUpperCase();
-      const result = await fetchVehicleModelsPage({ baseUrl, token, make: makeKey, search, page });
+      const result = await fetchVehicleModelsPage({ baseUrl, make: makeKey, search, page, fetchImpl });
       // A successful unfiltered first page also settles whether Model is required (e.g. after a retry)
       if (!search && page === 1 && result.hasModels !== null && currentMakeRef.current === makeKey) {
         setAvailability(result.hasModels ? 'available' : 'none');
       }
       return { items: result.items, hasMore: result.hasMore };
     },
-    [make, baseUrl, token]
+    [make, baseUrl, token, fetchImpl]
   );
 
   return { availability, fetchModels };

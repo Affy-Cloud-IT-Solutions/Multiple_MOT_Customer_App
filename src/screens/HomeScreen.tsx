@@ -306,8 +306,7 @@ export default function HomeScreen({ navigation }: any) {
     services,
     fetchServices,
     serviceCategories,
-    fetchServiceCategories,
-  } = useAppValues();
+    fetchServiceCategories, authFetch } = useAppValues();
   const [regNumber, setRegNumber] = useState('');
   const [garageSearchText, setGarageSearchText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -344,8 +343,8 @@ export default function HomeScreen({ navigation }: any) {
   const fetchNearbyGarages = async () => {
     try {
       setLoadingGarages(true);
-      const response = await fetch(`${BASE_URL}/garages`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const response = await authFetch(`${BASE_URL}/garages`, {
+        headers: {},
       });
       if (response.ok) {
         const data = await response.json();
