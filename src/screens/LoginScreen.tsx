@@ -422,16 +422,12 @@ export default function LoginScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   brandLogoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   brandLogoImage: {
     width: 200,
-    height: 89, // logo is 750 x 333
+    height: 93, // logo is 590 x 273
   },
   container: {
     flex: 1,
@@ -452,11 +448,6 @@ const styles = StyleSheet.create({
   },
   logoShadowWrapper: {
     marginBottom: 12,
-    shadowColor: '#1677FF',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
   },
   badgePill: {
     flexDirection: 'row',
