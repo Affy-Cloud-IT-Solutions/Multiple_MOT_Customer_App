@@ -23,7 +23,10 @@ import {
   validateEmail,
   validatePhoneNumber,
   validateMotExpiryDate,
+  validateNewVehicleForm,
+  VEHICLE_DROPDOWN_FORM_MESSAGES,
 } from '../utils/validationUtils';
+import { useModelAvailability } from '../hooks/useModelAvailability';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -61,6 +64,10 @@ export default function AdminCustomersScreen({ navigation }: any) {
   const [expiry, setExpiry] = useState('');
   const [serviceDate, setServiceDate] = useState('');
 
+  // Whether each form's selected make has models (decides if Model is required) + the Model dropdown loaders
+  const newCustModels = useModelAvailability(newCustMake, BASE_URL, token);
+  const vehicleModels = useModelAvailability(make, BASE_URL, token);
+
   const fetchMakesList = async (search: string, pageNum: number) => {
     const fallbackMakes = [
       'ALFA ROMEO', 'ASTON MARTIN', 'AUDI', 'BENTLEY', 'BMW', 'CITROEN', 'CUPRA', 'DACIA', 
@@ -89,58 +96,6 @@ export default function AdminCustomersScreen({ navigation }: any) {
       const filtered = search 
         ? fallbackMakes.filter(m => m.includes(search.toUpperCase()))
         : fallbackMakes;
-      const limit = 20;
-      const start = (pageNum - 1) * limit;
-      const items = filtered.slice(start, start + limit);
-      const hasMore = start + limit < filtered.length;
-      return { items, hasMore };
-    }
-  };
-
-  const fetchModelsListForMake = (makeVal: string) => async (search: string, pageNum: number) => {
-    if (!makeVal) return { items: [], hasMore: false };
-    const fallbackModelsMap: Record<string, string[]> = {
-      'FORD': ['FOCUS', 'FIESTA', 'MUSTANG', 'MONDEO', 'KUGA', 'PUMA', 'RANGER', 'TRANSIT', 'KA', 'GALAXY', 'C-MAX', 'S-MAX'],
-      'BMW': ['1 SERIES', '2 SERIES', '3 SERIES', '4 SERIES', '5 SERIES', 'X1', 'X3', 'X5', 'M3', 'M5', 'i3', 'i8', '320D', '520D'],
-      'MITSUBISHI': ['OUTLANDER', 'L200', 'SHOGUN', 'COLT', 'ASX', 'ECLIPSE CROSS', 'MIRAGE', 'LANCER'],
-      'VOLKSWAGEN': ['GOLF', 'POLO', 'PASSAT', 'TIGUAN', 'UP', 'TOURAN', 'CADDY', 'TRANSPORTER', 'SHARAN', 'SCIROCCO', 'TOUAREG'],
-      'AUDI': ['A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'Q2', 'Q3', 'Q5', 'Q7', 'TT', 'R8', 'E-TRON'],
-      'VAUXHALL': ['ASTRA', 'CORSA', 'INSIGNIA', 'MOKKA', 'ZAFIRA', 'VIVA', 'CROSSLAND', 'GRANDLAND'],
-      'TOYOTA': ['YARIS', 'COROLLA', 'AURIS', 'PRIUS', 'AVENSIS', 'RAV4', 'C-HR', 'LAND CRUISER', 'AYGO', 'HILUX'],
-      'HONDA': ['CIVIC', 'JAZZ', 'CR-V', 'HR-V', 'ACCORD', 'INSIGHT'],
-      'NISSAN': ['QASHQAI', 'JUKE', 'MICRA', 'LEAF', 'X-TRAIL', 'NOTE', 'NAVARA'],
-      'HYUNDAI': ['I10', 'I20', 'I30', 'TUCSON', 'IONIQ', 'KONA', 'SANTA FE'],
-      'KIA': ['SPORTAGE', 'CEED', 'RIO', 'PICANTO', 'NIRO', 'SORENTO', 'STONIC'],
-      'MERCEDES-BENZ': ['A CLASS', 'B CLASS', 'C CLASS', 'E CLASS', 'S CLASS', 'GLA', 'GLC', 'GLE', 'CLA', 'CLS'],
-      'PEUGEOT': ['108', '208', '308', '2008', '3008', '5008', 'PARTNER'],
-      'RENAULT': ['CLIO', 'CAPTUR', 'MEGANE', 'KADJAR', 'ZOE', 'SCENIC'],
-      'FIAT': ['500', 'PANDA', 'PUNTO', 'TIPO', '500X', 'DOBLO'],
-      'LAND ROVER': ['RANGE ROVER', 'DISCOVERY', 'DEFENDER', 'EVOQUE', 'VELAR', 'FREELANDER'],
-      'JAGUAR': ['XE', 'XF', 'XJ', 'F-PACE', 'E-PACE', 'I-PACE', 'F-TYPE'],
-      'MINI': ['COOPER', 'ONE', 'COUNTRYMAN', 'CLUBMAN'],
-      'TESLA': ['MODEL 3', 'MODEL Y', 'MODEL S', 'MODEL X']
-    };
-    try {
-      const response = await fetch(`${BASE_URL}/vehicles/models?make=${encodeURIComponent(makeVal)}&page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        }
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      const localModels = fallbackModelsMap[makeVal.toUpperCase()] || [];
-      const items = data.models && data.models.length > 0 ? data.models : localModels.filter(m => m.includes(search.toUpperCase()));
-      return {
-        items,
-        hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
-      };
-    } catch (e) {
-      console.warn('Failed to fetch models, using client-side fallback list:', e);
-      const localModels = fallbackModelsMap[makeVal.toUpperCase()] || [];
-      const filtered = search 
-        ? localModels.filter(m => m.includes(search.toUpperCase()))
-        : localModels;
       const limit = 20;
       const start = (pageNum - 1) * limit;
       const items = filtered.slice(start, start + limit);
@@ -239,20 +194,16 @@ export default function AdminCustomersScreen({ navigation }: any) {
 
     // If adding vehicle details now, validate vehicle inputs first
     if (addVehicleNow) {
-      if (!newCustRegNo.trim() || !newCustMake.trim() || !newCustModel.trim() || !newCustYear.trim() || !newCustExpiry.trim()) {
-        Alert.alert('Validation Error', 'Please fill in all vehicle details or toggle off "Include Vehicle Details"');
-        return;
-      }
-
-      if (!/^\d{4}$/.test(newCustYear.trim())) {
-        Alert.alert('Validation Error', 'Please enter a valid 4-digit year of manufacture');
-        return;
-      }
-
-      // Validate MOT Expiry Date
-      const expiryVal = validateMotExpiryDate(newCustExpiry);
-      if (expiryVal.error) {
-        Alert.alert('Validation Error', `MOT Expiry: ${expiryVal.error}`);
+      // Field-by-field validation: names only the vehicle fields that are actually missing or invalid
+      const vehicleCheck = validateNewVehicleForm(
+        { registration: newCustRegNo, make: newCustMake, model: newCustModel, year: newCustYear, motExpiry: newCustExpiry },
+        { modelAvailability: newCustModels.availability, missingMessages: VEHICLE_DROPDOWN_FORM_MESSAGES }
+      );
+      if (!vehicleCheck.isValid) {
+        Alert.alert(
+          vehicleCheck.title,
+          `${vehicleCheck.message}\n\nOr toggle off "Include Vehicle Details" to create the customer only.`
+        );
         return;
       }
 
@@ -283,6 +234,7 @@ export default function AdminCustomersScreen({ navigation }: any) {
           customerId,
           registrationNumber: newCustRegNo.trim().toUpperCase(),
           make: newCustMake.trim().toUpperCase(),
+          // may be blank only for a make with no models - the backend re-checks this
           model: newCustModel.trim().toUpperCase(),
           year: newCustYear.trim(),
           motExpiryDate: newCustExpiry.trim(),
@@ -319,21 +271,14 @@ export default function AdminCustomersScreen({ navigation }: any) {
     }
   };
 
-  const handleCreateVehicle = (customerId: string) => {
-    if (!regNo.trim() || !make.trim() || !model.trim() || !year.trim() || !expiry.trim()) {
-      Alert.alert('Error', 'Please fill in all vehicle details');
-      return;
-    }
-
-    if (!/^\d{4}$/.test(year.trim())) {
-      Alert.alert('Error', 'Please enter a valid 4-digit year of manufacture');
-      return;
-    }
-
-    // Validate MOT Expiry Date
-    const expiryVal = validateMotExpiryDate(expiry);
-    if (expiryVal.error) {
-      Alert.alert('Validation Error', expiryVal.error);
+  const handleCreateVehicle = async (customerId: string) => {
+    // Field-by-field validation: names only the fields that are actually missing or invalid
+    const vehicleCheck = validateNewVehicleForm(
+      { registration: regNo, make, model, year, motExpiry: expiry },
+      { modelAvailability: vehicleModels.availability, missingMessages: VEHICLE_DROPDOWN_FORM_MESSAGES }
+    );
+    if (!vehicleCheck.isValid) {
+      Alert.alert(vehicleCheck.title, vehicleCheck.message);
       return;
     }
 
@@ -346,16 +291,23 @@ export default function AdminCustomersScreen({ navigation }: any) {
       }
     }
 
-    addVehicle({
-      customerId,
-      registrationNumber: regNo.trim().toUpperCase(),
-      make: make.trim().toUpperCase(),
-      model: model.trim().toUpperCase(),
-      year: year.trim(),
-      motExpiryDate: expiry.trim(),
-      lastServiceDate: serviceDate.trim() || undefined,
-      status: 'Active',
-    });
+    // Await the save so a rejected vehicle (e.g. duplicate plate) isn't reported as added
+    try {
+      await addVehicle({
+        customerId,
+        registrationNumber: regNo.trim().toUpperCase(),
+        make: make.trim().toUpperCase(),
+        // may be blank only for a make with no models - the backend re-checks this
+        model: model.trim().toUpperCase(),
+        year: year.trim(),
+        motExpiryDate: expiry.trim(),
+        lastServiceDate: serviceDate.trim() || undefined,
+        status: 'Active',
+      });
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to add vehicle.');
+      return;
+    }
 
     setRegNo('');
     setMake('');
@@ -588,8 +540,13 @@ export default function AdminCustomersScreen({ navigation }: any) {
                       placeholder="Model"
                       selectedValue={newCustModel}
                       onValueChange={setNewCustModel}
-                      fetchItems={fetchModelsListForMake(newCustMake)}
+                      fetchItems={newCustModels.fetchModels}
                       disabled={!newCustMake}
+                      emptyText={
+                        newCustModels.availability === 'none'
+                          ? `No models are listed for ${newCustMake}. You can add this vehicle without a model.`
+                          : undefined
+                      }
                     />
                   </View>
                 </View>
@@ -724,7 +681,17 @@ export default function AdminCustomersScreen({ navigation }: any) {
                         onPress={() => {
                           const bookableVehicles = customerVehicles.filter(v => v.status === 'Active');
                           if (bookableVehicles.length === 0) {
-                            Alert.alert('No Approved Vehicles', 'This customer has no active/approved vehicles. Please add or approve a vehicle first.');
+                            Alert.alert(
+                              'No Approved Vehicles',
+                              'This customer has no active/approved vehicles. Please add or approve a vehicle first.',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Add',
+                                  onPress: () => navigation.navigate('CustomerDetail', { customerId: c.id }),
+                                },
+                              ]
+                            );
                             return;
                           }
                           
@@ -859,8 +826,13 @@ export default function AdminCustomersScreen({ navigation }: any) {
                               placeholder="Model"
                               selectedValue={model}
                               onValueChange={setModel}
-                              fetchItems={fetchModelsListForMake(make)}
+                              fetchItems={vehicleModels.fetchModels}
                               disabled={!make}
+                              emptyText={
+                                vehicleModels.availability === 'none'
+                                  ? `No models are listed for ${make}. You can add this vehicle without a model.`
+                                  : undefined
+                              }
                             />
                           </View>
                           <View style={styles.formField}>

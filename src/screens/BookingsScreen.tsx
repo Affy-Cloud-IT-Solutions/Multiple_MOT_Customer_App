@@ -32,7 +32,8 @@ export default function BookingsScreen({ navigation }: any) {
     alerts = [],
     refreshData,
     cancelBooking,
-    acknowledgeAlert,
+    dismissedAlertIds = [],
+    dismissCustomerAlert,
   } = useAppValues();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -109,11 +110,14 @@ export default function BookingsScreen({ navigation }: any) {
       });
   }, [alerts, token, customerId, customer, user]);
 
-  // Active rejected bookings alerts for banner
+  // Active rejected bookings alerts for banner (minus the ones the customer dismissed)
   const rejectedAlerts = useMemo(() => {
     if (!token) return [];
-    return allCustomerBookings.filter((a) => a.status === 'Rejected');
-  }, [allCustomerBookings, token]);
+    return allCustomerBookings.filter((a) => {
+      const alertId = a.id || (a as any)._id;
+      return a.status === 'Rejected' && !a.customerDismissedAt && !dismissedAlertIds.includes(alertId);
+    });
+  }, [allCustomerBookings, token, dismissedAlertIds]);
 
   // Counts for filter pills
   const counts = useMemo(() => {
@@ -512,14 +516,10 @@ export default function BookingsScreen({ navigation }: any) {
                   </Text>
                 </View>
                 <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      if (acknowledgeAlert) {
-                        await acknowledgeAlert(alert.id || (alert as any)._id);
-                      }
-                    } catch (e) {
-                      console.error('Dismiss error:', e);
-                    }
+                  onPress={() => {
+                    // Customers dismiss (hide) the notification; "acknowledge" is a garage action that is denied
+                    // for customers and would also change the booking's status
+                    dismissCustomerAlert(alert.id || (alert as any)._id);
                   }}
                   style={[styles.notificationDismissBtn, { backgroundColor: '#DC262620' }]}
                 >

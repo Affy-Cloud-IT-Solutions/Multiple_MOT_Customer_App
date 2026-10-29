@@ -15,7 +15,7 @@ import Toast from 'react-native-toast-message';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { validateMotExpiryDate } from '../utils/validationUtils';
+import { validateNewVehicleForm } from '../utils/validationUtils';
 import { fonts } from '../theme/theme';
 
 export default function BookingScreen({ route, navigation }: any) {
@@ -50,6 +50,13 @@ export default function BookingScreen({ route, navigation }: any) {
   const [newModel, setNewModel] = useState('');
   const [newYear, setNewYear] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
+  // Per-field errors from the last Save attempt - drives the red borders on the add-vehicle form
+  const [newCarErrors, setNewCarErrors] = useState<Record<string, string>>({});
+  const clearNewCarError = (field: string) =>
+    setNewCarErrors(prev => (prev[field] ? { ...prev, [field]: '' } : prev));
+  useEffect(() => {
+    if (!showAddCarForm) setNewCarErrors({});
+  }, [showAddCarForm]);
   const [isSearchingNewPlate, setIsSearchingNewPlate] = useState(false);
   const [newLookupInfo, setNewLookupInfo] = useState<string | null>(null);
   const [isAddingCar, setIsAddingCar] = useState(false);
@@ -112,20 +119,84 @@ export default function BookingScreen({ route, navigation }: any) {
       : null
   );
 
-  // Selected service state
-  const [selectedService, setSelectedService] = useState<any>({
-    name: route?.params?.serviceName || alertAny?.serviceName || 'Vehicle Service',
-    price: route?.params?.price !== undefined ? route.params.price : (alertAny?.price !== undefined ? alertAny.price : 45.00),
-    duration: route?.params?.duration || alertAny?.duration || 45
-  });
+  // Selected services state with multi-service support
+  const initialServices = React.useMemo(() => {
+    if (Array.isArray(route?.params?.selectedServices) && route.params.selectedServices.length > 0) {
+      return route.params.selectedServices;
+    }
+    if (Array.isArray(route?.params?.services) && route.params.services.length > 0) {
+      return route.params.services;
+    }
+    if (Array.isArray(alertAny?.services) && alertAny.services.length > 0) {
+      return alertAny.services;
+    }
+    return [{
+      name: route?.params?.serviceName || alertAny?.serviceName || 'Vehicle Service',
+      price: route?.params?.price !== undefined ? route.params.price : (alertAny?.price !== undefined ? alertAny.price : 45.00),
+      duration: route?.params?.duration || alertAny?.duration || 45,
+      category: route?.params?.category || alertAny?.serviceCategory || 'Servicing',
+    }];
+  }, [route?.params, alertAny]);
+
+  const [selectedServices, setSelectedServices] = useState<any[]>(initialServices);
+  const selectedService = selectedServices[0] || null;
+
+  const toggleSelectService = (svc: any) => {
+    setSelectedServices(prev => {
+      const exists = prev.some(s => 
+        (s._id && svc._id && s._id === svc._id) || 
+        (s.id && svc.id && s.id === svc.id) || 
+        (s.name?.trim().toLowerCase() === svc.name?.trim().toLowerCase())
+      );
+      if (exists) {
+        if (prev.length <= 1) {
+          Alert.alert('Notice', 'At least one service must remain selected.');
+          return prev;
+        }
+        return prev.filter(s => !(
+          (s._id && svc._id && s._id === svc._id) || 
+          (s.id && svc.id && s.id === svc.id) || 
+          (s.name?.trim().toLowerCase() === svc.name?.trim().toLowerCase())
+        ));
+      } else {
+        return [...prev, svc];
+      }
+    });
+  };
 
   const hasMot = React.useMemo(() => {
-    const sName = (selectedService?.name || '').toLowerCase();
-    const sCat = (selectedService?.category || '').toLowerCase();
-    return sName.includes('mot') || sCat.includes('mot');
-  }, [selectedService]);
+    return selectedServices.some((s: any) => {
+      const sName = (s?.name || '').toLowerCase();
+      const sCat = (s?.category || '').toLowerCase();
+      return sName.includes('mot') || sCat.includes('mot');
+    });
+  }, [selectedServices]);
 
   const isDateOnly = !hasMot;
+
+  const totalServicePrice = React.useMemo(() => {
+    return selectedServices.reduce((sum, s) => sum + (Number(s?.price) || 0), 0);
+  }, [selectedServices]);
+
+  const totalServiceDuration = React.useMemo(() => {
+    return selectedServices.reduce((sum, s) => sum + (Number(s?.duration) || 45), 0);
+  }, [selectedServices]);
+
+  const selectedServiceNames = React.useMemo(() => {
+    return selectedServices.map(s => s?.name).filter(Boolean).join(' + ') || 'Service';
+  }, [selectedServices]);
+
+  const otherServices = React.useMemo(() => {
+    return selectedServices.filter(s => {
+      const sName = (s?.name || '').toLowerCase();
+      const sCat = (s?.category || '').toLowerCase();
+      return !sName.includes('mot') && !sCat.includes('mot');
+    });
+  }, [selectedServices]);
+
+  const otherServicesNames = React.useMemo(() => {
+    return otherServices.map(s => s?.name).filter(Boolean).join(', ');
+  }, [otherServices]);
 
   // Fetch garages list
   useEffect(() => {
@@ -206,7 +277,7 @@ export default function BookingScreen({ route, navigation }: any) {
           if (data.services && data.services.length > 0) {
             const motSvc = data.services.find((s: any) => s.name?.toUpperCase().includes('MOT'));
             if (motSvc && !route?.params?.serviceName && !activeBookingAlert?.serviceName) {
-              setSelectedService(motSvc);
+              setSelectedServices([motSvc]);
             }
           }
         }
@@ -413,6 +484,7 @@ export default function BookingScreen({ route, navigation }: any) {
         setNewExpiry(v.motExpiryDate || '');
         const infoStr = `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}`;
         setNewLookupInfo(infoStr);
+        setNewCarErrors({});
 
         Toast.show({
           type: 'success',
@@ -448,27 +520,29 @@ export default function BookingScreen({ route, navigation }: any) {
   };
 
   const handleSaveNewCar = async () => {
-    const regClean = newRegNo.trim().toUpperCase();
-    const makeClean = newMake.trim().toUpperCase();
-    const modelClean = newModel.trim().toUpperCase();
-    const yearClean = newYear.trim();
-    const expiryClean = newExpiry.trim();
-
-    if (!regClean || !makeClean || !modelClean || !yearClean || !expiryClean) {
-      Alert.alert('Missing Details', 'Please fill in registration, make, model, year, and MOT expiry date.');
+    // Field-by-field validation: names only the fields that are actually missing or invalid
+    const vehicleCheck = validateNewVehicleForm({
+      registration: newRegNo,
+      make: newMake,
+      model: newModel,
+      year: newYear,
+      motExpiry: newExpiry,
+    });
+    if (!vehicleCheck.isValid) {
+      setNewCarErrors(vehicleCheck.errors);
+      Alert.alert(vehicleCheck.title, vehicleCheck.message);
       return;
     }
 
-    if (!/^\d{4}$/.test(yearClean)) {
-      Alert.alert('Invalid Year', 'Please enter a valid 4-digit manufacture year (e.g. 2019).');
-      return;
-    }
+    setNewCarErrors({});
 
-    const expiryCheck = validateMotExpiryDate(expiryClean);
-    if (expiryCheck.error) {
-      Alert.alert('Validation Error', expiryCheck.error);
-      return;
-    }
+    const {
+      registration: regClean,
+      make: makeClean,
+      model: modelClean,
+      year: yearClean,
+      motExpiry: expiryClean,
+    } = vehicleCheck.values;
 
     if (!token || !token.trim()) {
       Alert.alert(
@@ -712,21 +786,21 @@ export default function BookingScreen({ route, navigation }: any) {
           customerEmail: customer.email || user?.email || '',
           customerMobile: customer.mobile || '',
           garageId: selectedGarage.id || selectedGarage._id,
-          serviceName: selectedService.name,
-          services: [{
-            name: selectedService.name,
-            category: selectedService.category || (hasMot ? 'MOT' : 'Servicing'),
-            price: selectedService.price,
-            duration: selectedService.duration || 45,
-          }],
+          serviceName: selectedServiceNames,
+          services: selectedServices.map((s: any) => ({
+            name: s.name,
+            category: s.category || (s.name?.toLowerCase().includes('mot') ? 'MOT' : 'Servicing'),
+            price: Number(s.price) || 0,
+            duration: Number(s.duration) || 45,
+          })),
           hasMot,
           isDateOnly,
-          price: selectedService.price,
-          duration: selectedSlot?.slotDuration || selectedService.duration || 45,
+          price: totalServicePrice,
+          duration: hasMot ? (selectedSlot?.slotDuration || totalServiceDuration) : totalServiceDuration,
           slotTime: targetSlotTime,
           slotNumber: hasMot ? selectedSlot?.slotNumber : undefined,
           registrationNumber: selectedVehicle.registrationNumber,
-          makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}`,
+          makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}${otherServicesNames ? ` & Service: ${otherServicesNames}` : ''}`,
           status: isAdmin ? 'Approved' : 'Pending',
           date: selectedDate,
         });
@@ -736,8 +810,8 @@ export default function BookingScreen({ route, navigation }: any) {
       await addAudit(
         isReschedule ? 'Booking Rescheduled' : (isAdmin ? 'Booking Confirmed' : 'Booking Requested'),
         isAdmin
-          ? `Garage staff booked appointment slot for ${customer.firstName} ${customer.lastName}'s ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${targetSlotTime}`
-          : `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} appointment slot for ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} at ${targetSlotTime}`
+          ? `Garage staff booked appointment for ${customer.firstName} ${customer.lastName}'s ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} - ${hasMot ? `MOT Slot: ${targetSlotTime}` : 'Workshop Intake'}${otherServicesNames ? ` & Service: ${otherServicesNames}` : ''}`
+          : `${customer.firstName} ${customer.lastName} ${isReschedule ? 'rescheduled' : 'requested'} appointment for ${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.registrationNumber}) on ${displayDateStr} - ${hasMot ? `MOT Slot: ${targetSlotTime}` : 'Workshop Intake'}${otherServicesNames ? ` & Service: ${otherServicesNames}` : ''}`
       );
 
       setLoading(false);
@@ -962,14 +1036,14 @@ export default function BookingScreen({ route, navigation }: any) {
 
                 {/* UK Number Plate Input with Attached Lookup */}
                 <Text style={[styles.formLabel, { color: theme.colors.text }]}>UK Registration Plate</Text>
-                <View style={styles.plateInputContainer}>
+                <View style={[styles.plateInputContainer, newCarErrors.registration ? { borderColor: theme.colors.error, borderWidth: 2 } : null]}>
                   <View style={styles.ukPlateStrip}>
                     <Text style={styles.ukFlagEmoji}>🇬🇧</Text>
                     <Text style={styles.ukStripLabel}>UK</Text>
                   </View>
                   <TextInput
                     value={newRegNo}
-                    onChangeText={(txt) => setNewRegNo(txt.toUpperCase())}
+                    onChangeText={(txt) => { setNewRegNo(txt.toUpperCase()); clearNewCarError('registration'); }}
                     placeholder="eg AB19 CDE"
                     placeholderTextColor="#6B7280"
                     style={styles.plateInputField}
@@ -993,6 +1067,9 @@ export default function BookingScreen({ route, navigation }: any) {
                     )}
                   </TouchableOpacity>
                 </View>
+                {newCarErrors.registration ? (
+                  <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.registration}</Text>
+                ) : null}
 
                 {/* Lookup Info Banner */}
                 {newLookupInfo && (
@@ -1010,23 +1087,29 @@ export default function BookingScreen({ route, navigation }: any) {
                     <Text style={[styles.formLabel, { color: theme.colors.text }]}>Make</Text>
                     <TextInput
                       value={newMake}
-                      onChangeText={setNewMake}
+                      onChangeText={(t) => { setNewMake(t); clearNewCarError('make'); }}
                       placeholder="e.g. FORD"
                       placeholderTextColor={theme.colors.placeholder}
                       autoCapitalize="characters"
-                      style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                      style={[styles.formInputField, { color: theme.colors.text, borderColor: newCarErrors.make ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}
                     />
+                    {newCarErrors.make ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.make}</Text>
+                    ) : null}
                   </View>
                   <View style={styles.formCol}>
                     <Text style={[styles.formLabel, { color: theme.colors.text }]}>Model</Text>
                     <TextInput
                       value={newModel}
-                      onChangeText={setNewModel}
+                      onChangeText={(t) => { setNewModel(t); clearNewCarError('model'); }}
                       placeholder="e.g. FOCUS"
                       placeholderTextColor={theme.colors.placeholder}
                       autoCapitalize="characters"
-                      style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                      style={[styles.formInputField, { color: theme.colors.text, borderColor: newCarErrors.model ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}
                     />
+                    {newCarErrors.model ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.model}</Text>
+                    ) : null}
                   </View>
                 </View>
 
@@ -1036,25 +1119,31 @@ export default function BookingScreen({ route, navigation }: any) {
                     <Text style={[styles.formLabel, { color: theme.colors.text }]}>Year</Text>
                     <TextInput
                       value={newYear}
-                      onChangeText={setNewYear}
+                      onChangeText={(t) => { setNewYear(t); clearNewCarError('year'); }}
                       placeholder="e.g. 2019"
                       placeholderTextColor={theme.colors.placeholder}
                       keyboardType="numeric"
                       maxLength={4}
-                      style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                      style={[styles.formInputField, { color: theme.colors.text, borderColor: newCarErrors.year ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}
                     />
+                    {newCarErrors.year ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.year}</Text>
+                    ) : null}
                   </View>
                   <View style={styles.formCol}>
                     <Text style={[styles.formLabel, { color: theme.colors.text }]}>MOT Expiry (YYYY-MM-DD)</Text>
                     <TextInput
                       value={newExpiry}
-                      onChangeText={(t) => setNewExpiry(formatDateInput(t))}
+                      onChangeText={(t) => { setNewExpiry(formatDateInput(t)); clearNewCarError('motExpiry'); }}
                       placeholder="YYYY-MM-DD"
                       placeholderTextColor={theme.colors.placeholder}
                       keyboardType="numeric"
                       maxLength={10}
-                      style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                      style={[styles.formInputField, { color: theme.colors.text, borderColor: newCarErrors.motExpiry ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}
                     />
+                    {newCarErrors.motExpiry ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.motExpiry}</Text>
+                    ) : null}
                   </View>
                 </View>
 
@@ -1188,81 +1277,145 @@ export default function BookingScreen({ route, navigation }: any) {
               </ScrollView>
             )}
 
-            {/* 3. Service Package Selector */}
+            {/* 3. Service Selection (Multi-select supported) */}
             {selectedGarage && (
               <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginBottom: 14 }]}>
                 <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase' }}>
-                      Selected Service Package
+                      Selected Services ({selectedServices.length})
                     </Text>
-                    {selectedService?.category && (
-                      <View style={{ backgroundColor: theme.colors.primary + '15', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                        <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: theme.colors.primary }}>
-                          {selectedService.category}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                    <View style={[styles.selectedGarageIconCircle, { backgroundColor: theme.colors.secondary + '15', marginTop: 2 }]}>
-                      <MaterialCommunityIcons name="wrench-clock" size={18} color={theme.colors.secondary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.vehicleMakeModel, { color: theme.colors.text, fontSize: 14, fontFamily: fonts.bold }]}>
-                        {selectedService.name}
+                    <View style={{ backgroundColor: theme.colors.primary + '15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: theme.colors.primary }}>
+                        Total: £{totalServicePrice.toFixed(2)}
                       </Text>
-                      <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 2, fontFamily: fonts.regular }}>
-                        Standard Rate: <Text style={{ fontFamily: fonts.bold, color: theme.colors.primary }}>£{Number(selectedService.price || 0).toFixed(2)}</Text> • Duration: {selectedService.duration || 45} mins
-                      </Text>
-                      {selectedService.description ? (
-                        <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 3, fontStyle: 'italic', fontFamily: fonts.italic }} numberOfLines={2}>
-                          {selectedService.description}
-                        </Text>
-                      ) : null}
                     </View>
                   </View>
 
-                  {/* Horizontal list of other garage services */}
-                  {selectedGarage.services && selectedGarage.services.filter((s: any) => s.isActive !== false).length > 1 && (
-                    <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
-                      <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase', marginBottom: 6 }}>
-                        Other Services at {selectedGarage.name}:
+                  {/* Summary of currently selected services */}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                    {selectedServices.map((svc: any) => {
+                      const isMot = (svc.name || '').toLowerCase().includes('mot') || (svc.category || '').toLowerCase().includes('mot');
+                      return (
+                        <View
+                          key={svc._id || svc.id || svc.name}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: isMot ? (theme.dark ? theme.colors.secondary + '25' : theme.colors.secondary + '20') : theme.colors.primary + '15',
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: 16,
+                            borderWidth: 1,
+                            borderColor: isMot ? theme.colors.secondary : theme.colors.primary + '40',
+                          }}
+                        >
+                          <MaterialCommunityIcons
+                            name={isMot ? 'car-wrench' : 'wrench'}
+                            size={14}
+                            color={isMot ? theme.colors.secondary : theme.colors.primary}
+                            style={{ marginRight: 5 }}
+                          />
+                          <Text style={{ fontSize: 12, color: theme.colors.text, fontFamily: fonts.bold }}>
+                            {svc.name}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: theme.colors.primary, fontFamily: fonts.bold, marginLeft: 4 }}>
+                            (£{Number(svc.price || 0).toFixed(0)})
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  {/* Toggle list of all garage services */}
+                  {selectedGarage.services && selectedGarage.services.filter((s: any) => s.isActive !== false).length > 0 && (
+                    <View style={{ marginTop: 6, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
+                      <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase', marginBottom: 8 }}>
+                        Tap services to add or remove for this booking:
                       </Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                         {selectedGarage.services
                           .filter((s: any) => s.isActive !== false)
                           .map((svc: any) => {
-                            const isChosen = selectedService?.name === svc.name;
+                            const isChosen = selectedServices.some((s: any) =>
+                              (s._id && svc._id && s._id === svc._id) ||
+                              (s.id && svc.id && s.id === svc.id) ||
+                              (s.name?.trim().toLowerCase() === svc.name?.trim().toLowerCase())
+                            );
                             return (
                               <TouchableOpacity
                                 key={svc._id || svc.id || svc.name}
-                                onPress={() => setSelectedService(svc)}
+                                onPress={() => toggleSelectService(svc)}
+                                activeOpacity={0.7}
                                 style={[
                                   {
                                     paddingHorizontal: 10,
-                                    paddingVertical: 6,
-                                    borderRadius: 6,
-                                    borderWidth: 1,
-                                    backgroundColor: isChosen ? theme.colors.primary : theme.colors.background,
-                                    borderColor: isChosen ? theme.colors.primary : theme.colors.border,
+                                    paddingVertical: 7,
+                                    borderRadius: 8,
+                                    borderWidth: 1.5,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    backgroundColor: isChosen
+                                      ? (theme.colors.primary + '18')
+                                      : theme.colors.background,
+                                    borderColor: isChosen
+                                      ? theme.colors.primary
+                                      : theme.colors.border,
                                   }
                                 ]}
                               >
-                                <Text style={{
-                                  fontSize: 11,
-                                  color: isChosen ? '#FFFFFF' : theme.colors.text,
-                                  fontFamily: isChosen ? fonts.bold : fonts.medium
-                                }}>
-                                  {svc.name} • £{Number(svc.price || 0).toFixed(0)}
-                                </Text>
+                                <MaterialCommunityIcons
+                                  name={isChosen ? 'check-circle' : 'circle-outline'}
+                                  size={16}
+                                  color={isChosen ? theme.colors.primary : theme.colors.placeholder}
+                                  style={{ marginRight: 6 }}
+                                />
+                                <View>
+                                  <Text style={{
+                                    fontSize: 12,
+                                    color: theme.colors.text,
+                                    fontFamily: isChosen ? fonts.bold : fonts.medium
+                                  }}>
+                                    {svc.name}
+                                  </Text>
+                                  <Text style={{
+                                    fontSize: 10,
+                                    color: isChosen ? theme.colors.primary : theme.colors.placeholder,
+                                    fontFamily: fonts.bold
+                                  }}>
+                                    £{Number(svc.price || 0).toFixed(2)} • {svc.duration || 45} mins
+                                  </Text>
+                                </View>
                               </TouchableOpacity>
                             );
                           })}
-                      </ScrollView>
+                      </View>
                     </View>
                   )}
+
+                  {/* Mode explanation banner */}
+                  <View style={{
+                    marginTop: 10,
+                    padding: 8,
+                    borderRadius: 6,
+                    backgroundColor: hasMot ? theme.colors.secondary + '12' : theme.colors.primary + '10',
+                    flexDirection: 'row',
+                    alignItems: 'center'
+                  }}>
+                    <MaterialCommunityIcons
+                      name={hasMot ? 'clock-check-outline' : 'calendar-clock'}
+                      size={16}
+                      color={hasMot ? theme.colors.secondary : theme.colors.primary}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={{ fontSize: 11, color: theme.colors.text, fontFamily: fonts.medium, flex: 1 }}>
+                      {hasMot && otherServices.length > 0
+                        ? `MOT slot required for the test; additional service (${otherServicesNames}) will be completed on the same date.`
+                        : hasMot
+                        ? 'MOT test requires a specific 45-minute lane time slot.'
+                        : 'Workshop drop-off intake (08:00 - 18:00) on chosen date. No 45-minute slot needed.'}
+                    </Text>
+                  </View>
                 </View>
               </View>
             )}
@@ -1414,11 +1567,34 @@ export default function BookingScreen({ route, navigation }: any) {
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialCommunityIcons name="clock-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
                 <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>
-                  2. Choose Time Slot (45 Mins)
+                  2. Choose MOT Time Slot (45 Mins)
                 </Text>
               </View>
               {loadingSlots && <ActivityIndicator size="small" color={theme.colors.secondary} />}
             </View>
+
+            {otherServices.length > 0 && (
+              <View style={{
+                backgroundColor: theme.colors.primary + '15',
+                borderColor: theme.colors.primary + '40',
+                borderWidth: 1,
+                borderRadius: 8,
+                padding: 10,
+                marginBottom: 10,
+                flexDirection: 'row',
+                alignItems: 'center'
+              }}>
+                <MaterialCommunityIcons name="information" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.colors.text, fontSize: 12, fontFamily: fonts.bold }}>
+                    Same Date for All Services ({selectedDate})
+                  </Text>
+                  <Text style={{ color: theme.colors.placeholder, fontSize: 11, marginTop: 2, fontFamily: fonts.regular, lineHeight: 15 }}>
+                    The 45-minute slot selected below is for your MOT test. Other services ({otherServicesNames}) will be completed during workshop hours on this same date.
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {!selectedGarage ? (
               <View style={[styles.emptySlotsNotice, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
@@ -1506,7 +1682,7 @@ export default function BookingScreen({ route, navigation }: any) {
                   Full-Day Workshop Drop-off (08:00 - 18:00)
                 </Text>
                 <Text style={{ color: theme.colors.placeholder, fontSize: 12, marginTop: 3, lineHeight: 17, fontFamily: fonts.regular }}>
-                  No fixed 45-minute lane slot is needed for {selectedService.name}. Bring your vehicle to {selectedGarage?.name || 'the garage'} on {selectedDate}. The garage owner will receive notification to accept or reject your request as before.
+                  No fixed 45-minute lane slot is needed for {selectedServiceNames}. Bring your vehicle to {selectedGarage?.name || 'the garage'} on {selectedDate}. The garage will carry out your service during workshop hours.
                 </Text>
               </View>
             </View>
@@ -1534,6 +1710,39 @@ export default function BookingScreen({ route, navigation }: any) {
             },
           ]}
         />
+
+        {/* Summary Card Before Confirmation */}
+        <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 14, marginBottom: 4 }]}>
+          <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase', marginBottom: 8 }}>
+            Booking Summary
+          </Text>
+          <View style={{ gap: 6 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12, color: theme.colors.placeholder, fontFamily: fonts.medium }}>Date (Shared):</Text>
+              <Text style={{ fontSize: 12, color: theme.colors.text, fontFamily: fonts.bold }}>{selectedDate || 'Not selected'}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12, color: theme.colors.placeholder, fontFamily: fonts.medium }}>Services:</Text>
+              <Text style={{ fontSize: 12, color: theme.colors.text, fontFamily: fonts.bold, flexShrink: 1, textAlign: 'right' }}>
+                {selectedServiceNames}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12, color: theme.colors.placeholder, fontFamily: fonts.medium }}>
+                {hasMot ? 'MOT Slot:' : 'Workshop Intake:'}
+              </Text>
+              <Text style={{ fontSize: 12, color: theme.colors.primary, fontFamily: fonts.bold }}>
+                {hasMot ? (selectedTime || 'Select a slot') : 'Full-Day Drop-off (08:00 - 18:00)'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: theme.colors.border, paddingTop: 6, marginTop: 2 }}>
+              <Text style={{ fontSize: 13, color: theme.colors.text, fontFamily: fonts.bold }}>Total Price:</Text>
+              <Text style={{ fontSize: 14, color: theme.colors.primary, fontFamily: fonts.bold }}>
+                £{totalServicePrice.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+        </View>
 
         {/* Action Buttons */}
         <View style={styles.actionContainer}>
@@ -1918,6 +2127,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semiBold,
     fontSize: 11,
     marginBottom: 4,
+  },
+  fieldErrorText: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    marginTop: 4,
   },
   formInputField: {
     fontFamily: fonts.medium,

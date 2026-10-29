@@ -21,6 +21,10 @@ interface SearchableDropdownProps {
   onValueChange: (value: string) => void;
   fetchItems: (search: string, page: number) => Promise<{ items: string[]; hasMore: boolean }>;
   disabled?: boolean;
+  /** Shows the red error border (e.g. required field left empty on submit) */
+  hasError?: boolean;
+  /** Message shown when the list loads successfully but is empty (defaults to "No <placeholder>s found.") */
+  emptyText?: string;
 }
 
 export default function SearchableDropdown({
@@ -29,6 +33,8 @@ export default function SearchableDropdown({
   onValueChange,
   fetchItems,
   disabled = false,
+  hasError = false,
+  emptyText,
 }: SearchableDropdownProps) {
   const { theme } = useAppTheme();
   const [modalVisible, setModalVisible] = useState(false);
@@ -38,6 +44,8 @@ export default function SearchableDropdown({
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  // Set when fetchItems fails, so a failed load isn't shown as an empty "No items found" list
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const searchTimeoutRef = useRef<any>(null);
 
@@ -55,6 +63,7 @@ export default function SearchableDropdown({
   const loadData = async (search: string, currentPage: number, isInitial: boolean = false) => {
     if (isInitial) {
       setLoading(true);
+      setLoadError(null);
     } else {
       setLoadingMore(true);
     }
@@ -69,6 +78,11 @@ export default function SearchableDropdown({
       setHasMore(result.hasMore);
     } catch (error) {
       console.error('Error fetching dropdown items:', error);
+      if (isInitial) {
+        setItems([]);
+        setLoadError(`Couldn't load ${placeholder.toLowerCase()}s. Please check your connection and try again.`);
+      }
+      setHasMore(false);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -117,7 +131,7 @@ export default function SearchableDropdown({
           styles.dropdownButton,
           {
             backgroundColor: theme.colors.card,
-            borderColor: theme.colors.border,
+            borderColor: hasError ? theme.colors.error : theme.colors.border,
           },
           disabled && styles.disabledButton,
         ]}
@@ -223,11 +237,23 @@ export default function SearchableDropdown({
                   );
                 }}
                 ListEmptyComponent={
-                  <View style={styles.emptyContainer}>
-                    <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>
-                      No {placeholder.toLowerCase()}s found.
-                    </Text>
-                  </View>
+                  loadError ? (
+                    <View style={styles.emptyContainer}>
+                      <Text style={[styles.emptyText, { color: theme.colors.error }]}>{loadError}</Text>
+                      <TouchableOpacity
+                        onPress={() => loadData(searchQuery, 1, true)}
+                        style={[styles.retryButton, { borderColor: theme.colors.secondary }]}
+                      >
+                        <Text style={[styles.retryButtonText, { color: theme.colors.secondary }]}>Retry</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.emptyContainer}>
+                      <Text style={[styles.emptyText, { color: theme.colors.placeholder }]}>
+                        {emptyText || `No ${placeholder.toLowerCase()}s found.`}
+                      </Text>
+                    </View>
+                  )
                 }
                 ListFooterComponent={
                   loadingMore ? (
@@ -342,6 +368,18 @@ const styles = StyleSheet.create({
   emptyText: {
     fontFamily: fonts.regular,
     fontSize: 14,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  retryButtonText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
   },
   footerSpinner: {
     paddingVertical: 12,

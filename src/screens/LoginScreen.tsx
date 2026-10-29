@@ -34,7 +34,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }: any) {
   const { theme } = useAppTheme();
-  const { setToken, setTokens, setUser } = useAppValues();
+  const { setTokens, setUser, refreshSession } = useAppValues();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -58,7 +58,7 @@ export default function LoginScreen({ navigation }: any) {
         if (storedToken && storedUserJson) {
           if (!isTokenExpired(storedToken)) {
             const storedUser = JSON.parse(storedUserJson);
-            setToken(storedToken);
+            setTokens(storedToken, storedRefreshToken);
             setUser(storedUser);
 
             if (
@@ -70,25 +70,20 @@ export default function LoginScreen({ navigation }: any) {
               return;
             }
           } else if (storedRefreshToken) {
-            // Attempt silent token refresh before deciding
-            try {
-              const res = await fetch(`${BASE_URL}/auth/refresh-token`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refreshToken: storedRefreshToken })
-              });
-              if (res.ok) {
-                const data = await res.json();
-                const newAccess = data.accessToken || data.token;
-                const newRefresh = data.refreshToken || storedRefreshToken;
-                setTokens(newAccess, newRefresh);
-                if (data.user) {
-                  setUser(data.user);
-                }
-                navigation.replace('Main');
-                return;
-              }
-            } catch (_) {}
+            // Silent refresh through the app's shared (de-duplicated) refresh, so it can't race another refresh
+            // with the same token. It stores the new tokens itself.
+            const outcome = await refreshSession();
+            if (outcome.status === 'ok') {
+              navigation.replace('Main');
+              return;
+            }
+            // Offline/server problem: the session is still valid - only a rejected refresh token
+            // should make the user log in again
+            if (outcome.status === 'transient') {
+              setUser(JSON.parse(storedUserJson));
+              navigation.replace('Main');
+              return;
+            }
           }
 
           // If expired and cannot be refreshed, silently clear stale credentials

@@ -18,7 +18,8 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues, BASE_URL } from '../context/DataContext';
 import SearchableDropdown from '../components/SearchableDropdown';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { validateMotExpiryDate } from '../utils/validationUtils';
+import { validateNewVehicleForm, VEHICLE_DROPDOWN_FORM_MESSAGES } from '../utils/validationUtils';
+import { useModelAvailability } from '../hooks/useModelAvailability';
 import { openGarageDirections } from '../utils/mapUtils';
 import Toast from 'react-native-toast-message';
 import CustomerHeader from '../components/CustomerHeader';
@@ -114,6 +115,16 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const [model, setModel] = useState('');
   const [year, setYear] = useState('');
   const [expiry, setExpiry] = useState('');
+  // Per-field errors from the last Add Vehicle attempt - drives the red borders on the form
+  const [vehicleErrors, setVehicleErrors] = useState<Record<string, string>>({});
+  const clearVehicleError = (field: string) =>
+    setVehicleErrors(prev => (prev[field] ? { ...prev, [field]: '' } : prev));
+  useEffect(() => {
+    if (!showAddForm) setVehicleErrors({});
+  }, [showAddForm]);
+
+  // Whether the selected make has models (decides if Model is required) + the Model dropdown's loader
+  const { availability: modelAvailability, fetchModels } = useModelAvailability(make, BASE_URL, token);
   const [isSearchingPlate, setIsSearchingPlate] = useState(false);
   const [lookupSuccessInfo, setLookupSuccessInfo] = useState<string | null>(null);
 
@@ -136,6 +147,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         setModel(v.model || '');
         setYear(v.year ? String(v.year) : '');
         setExpiry(v.motExpiryDate || '');
+        setVehicleErrors({});
         const infoStr = `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}`;
         setLookupSuccessInfo(infoStr);
 
@@ -197,58 +209,6 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       const filtered = search 
         ? fallbackMakes.filter(m => m.includes(search.toUpperCase()))
         : fallbackMakes;
-      const limit = 20;
-      const start = (pageNum - 1) * limit;
-      const items = filtered.slice(start, start + limit);
-      const hasMore = start + limit < filtered.length;
-      return { items, hasMore };
-    }
-  };
-
-  const fetchModelsListForMake = (makeVal: string) => async (search: string, pageNum: number) => {
-    if (!makeVal) return { items: [], hasMore: false };
-    const fallbackModelsMap: Record<string, string[]> = {
-      'FORD': ['FOCUS', 'FIESTA', 'MUSTANG', 'MONDEO', 'KUGA', 'PUMA', 'RANGER', 'TRANSIT', 'KA', 'GALAXY', 'C-MAX', 'S-MAX'],
-      'BMW': ['1 SERIES', '2 SERIES', '3 SERIES', '4 SERIES', '5 SERIES', 'X1', 'X3', 'X5', 'M3', 'M5', 'i3', 'i8', '320D', '520D'],
-      'MITSUBISHI': ['OUTLANDER', 'L200', 'SHOGUN', 'COLT', 'ASX', 'ECLIPSE CROSS', 'MIRAGE', 'LANCER'],
-      'VOLKSWAGEN': ['GOLF', 'POLO', 'PASSAT', 'TIGUAN', 'UP', 'TOURAN', 'CADDY', 'TRANSPORTER', 'SHARAN', 'SCIROCCO', 'TOUAREG'],
-      'AUDI': ['A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'Q2', 'Q3', 'Q5', 'Q7', 'TT', 'R8', 'E-TRON'],
-      'VAUXHALL': ['ASTRA', 'CORSA', 'INSIGNIA', 'MOKKA', 'ZAFIRA', 'VIVA', 'CROSSLAND', 'GRANDLAND'],
-      'TOYOTA': ['YARIS', 'COROLLA', 'AURIS', 'PRIUS', 'AVENSIS', 'RAV4', 'C-HR', 'LAND CRUISER', 'AYGO', 'HILUX'],
-      'HONDA': ['CIVIC', 'JAZZ', 'CR-V', 'HR-V', 'ACCORD', 'INSIGHT'],
-      'NISSAN': ['QASHQAI', 'JUKE', 'MICRA', 'LEAF', 'X-TRAIL', 'NOTE', 'NAVARA'],
-      'HYUNDAI': ['I10', 'I20', 'I30', 'TUCSON', 'IONIQ', 'KONA', 'SANTA FE'],
-      'KIA': ['SPORTAGE', 'CEED', 'RIO', 'PICANTO', 'NIRO', 'SORENTO', 'STONIC'],
-      'MERCEDES-BENZ': ['A CLASS', 'B CLASS', 'C CLASS', 'E CLASS', 'S CLASS', 'GLA', 'GLC', 'GLE', 'CLA', 'CLS'],
-      'PEUGEOT': ['108', '208', '308', '2008', '3008', '5008', 'PARTNER'],
-      'RENAULT': ['CLIO', 'CAPTUR', 'MEGANE', 'KADJAR', 'ZOE', 'SCENIC'],
-      'FIAT': ['500', 'PANDA', 'PUNTO', 'TIPO', '500X', 'DOBLO'],
-      'LAND ROVER': ['RANGE ROVER', 'DISCOVERY', 'DEFENDER', 'EVOQUE', 'VELAR', 'FREELANDER'],
-      'JAGUAR': ['XE', 'XF', 'XJ', 'F-PACE', 'E-PACE', 'I-PACE', 'F-TYPE'],
-      'MINI': ['COOPER', 'ONE', 'COUNTRYMAN', 'CLUBMAN'],
-      'TESLA': ['MODEL 3', 'MODEL Y', 'MODEL S', 'MODEL X']
-    };
-    try {
-      const response = await fetch(`${BASE_URL}/vehicles/models?make=${encodeURIComponent(makeVal)}&page=${pageNum}&limit=20&search=${encodeURIComponent(search)}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        }
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      const localModels = fallbackModelsMap[makeVal.toUpperCase()] || [];
-      const items = data.models && data.models.length > 0 ? data.models : localModels.filter(m => m.includes(search.toUpperCase()));
-      return {
-        items,
-        hasMore: data.pagination ? data.pagination.page < data.pagination.totalPages : false
-      };
-    } catch (e) {
-      console.warn('Failed to fetch models, using client-side fallback list:', e);
-      const localModels = fallbackModelsMap[makeVal.toUpperCase()] || [];
-      const filtered = search 
-        ? localModels.filter(m => m.includes(search.toUpperCase()))
-        : localModels;
       const limit = 20;
       const start = (pageNum - 1) * limit;
       const items = filtered.slice(start, start + limit);
@@ -339,21 +299,17 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
 
 
   const handleAddNewVehicle = async () => {
-    if (!regNo.trim() || !make.trim() || !model.trim() || !year.trim() || !expiry.trim()) {
-      Alert.alert('Error', 'Please fill in all vehicle details');
-      return;
-    }
-
-    // Verify year is a 4-digit number
-    if (!/^\d{4}$/.test(year.trim())) {
-      Alert.alert('Error', 'Please enter a valid 4-digit year of manufacture');
-      return;
-    }
-
-    // Validate MOT Expiry Date
-    const expiryVal = validateMotExpiryDate(expiry);
-    if (expiryVal.error) {
-      Alert.alert('Validation Error', expiryVal.error);
+    // Field-by-field validation: names only the fields that are actually missing or invalid
+    const vehicleCheck = validateNewVehicleForm(
+      { registration: regNo, make, model, year, motExpiry: expiry },
+      {
+        modelAvailability,
+        missingMessages: VEHICLE_DROPDOWN_FORM_MESSAGES,
+      }
+    );
+    setVehicleErrors(vehicleCheck.errors);
+    if (!vehicleCheck.isValid) {
+      Alert.alert(vehicleCheck.title, vehicleCheck.message);
       return;
     }
 
@@ -373,14 +329,17 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
     try {
       const targetCustId = customer.id || customer._id || user?.customerId || '';
 
+      const cleaned = vehicleCheck.values;
+
       // 1. Create the vehicle in the database with Active status
+      // (model may be blank only for a make with no models - the backend re-checks this)
       await addVehicle({
         customerId: targetCustId,
-        registrationNumber: regNo.trim().toUpperCase(),
-        make: make.trim().toUpperCase(),
-        model: model.trim().toUpperCase(),
-        year: year.trim(),
-        motExpiryDate: expiry,
+        registrationNumber: cleaned.registration,
+        make: cleaned.make,
+        model: cleaned.model,
+        year: cleaned.year,
+        motExpiryDate: cleaned.motExpiry,
         status: 'Active'
       });
 
@@ -391,14 +350,14 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         customerId: targetCustId,
         customerEmail: customer.email || user?.email || '',
         customerMobile: customer.mobile || '',
-        registrationNumber: regNo.trim().toUpperCase(),
-        makeModel: `${make.trim().toUpperCase()} ${model.trim().toUpperCase()}`,
+        registrationNumber: cleaned.registration,
+        makeModel: `${cleaned.make} ${cleaned.model}`.trim(),
         status: 'Approved'
       });
 
       await addAudit(
         'New Vehicle Registered', 
-        `${customer.firstName} ${customer.lastName} added vehicle ${make.trim().toUpperCase()} (${regNo.trim().toUpperCase()}) - active immediately`
+        `${customer.firstName} ${customer.lastName} added vehicle ${cleaned.make} (${cleaned.registration}) - active immediately`
       );
 
       setLoadingAction(null);
@@ -464,8 +423,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                 
                 <Text style={[styles.label, { color: theme.colors.text }]}>UK Registration Number</Text>
                 {/* UK Plate Input & Lookup Row */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: lookupSuccessInfo ? 8 : 12 }}>
-                  <View style={{ flexDirection: 'row', flex: 1, height: 42, backgroundColor: '#FFD300', borderWidth: 1.5, borderColor: '#000000', borderRadius: 8, overflow: 'hidden', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: lookupSuccessInfo || vehicleErrors.registration ? 8 : 12 }}>
+                  <View style={{ flexDirection: 'row', flex: 1, height: 42, backgroundColor: '#FFD300', borderWidth: vehicleErrors.registration ? 2 : 1.5, borderColor: vehicleErrors.registration ? theme.colors.error : '#000000', borderRadius: 8, overflow: 'hidden', alignItems: 'center' }}>
                     <View style={{ width: 32, height: '100%', backgroundColor: '#0A4E9B', justifyContent: 'center', alignItems: 'center' }}>
                       <Text style={{ color: '#FFFFFF', fontFamily: fonts.bold, fontSize: 10 }}>UK</Text>
                     </View>
@@ -473,6 +432,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                       value={regNo}
                       onChangeText={(txt) => {
                         setRegNo(txt.toUpperCase());
+                        clearVehicleError('registration');
                         if (lookupSuccessInfo) setLookupSuccessInfo(null);
                       }}
                       placeholder="eg AB19 CDE"
@@ -498,6 +458,9 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                     )}
                   </TouchableOpacity>
                 </View>
+                {vehicleErrors.registration ? (
+                  <Text style={[styles.fieldErrorText, { color: theme.colors.error, marginTop: -4, marginBottom: 8 }]}>{vehicleErrors.registration}</Text>
+                ) : null}
 
                 {/* Lookup Success Banner */}
                 {lookupSuccessInfo && (
@@ -517,31 +480,54 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                       selectedValue={make}
                       onValueChange={(val) => {
                         setMake(val);
+                        // A model from the previous make must never be submitted with the new one
                         setModel('');
+                        clearVehicleError('make');
+                        clearVehicleError('model');
                       }}
                       fetchItems={fetchMakesList}
+                      hasError={!!vehicleErrors.make}
                     />
+                    {vehicleErrors.make ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{vehicleErrors.make}</Text>
+                    ) : null}
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.label, { color: theme.colors.text }]}>Model</Text>
                     <SearchableDropdown
                       placeholder="Model"
                       selectedValue={model}
-                      onValueChange={setModel}
-                      fetchItems={fetchModelsListForMake(make)}
+                      onValueChange={(val) => {
+                        setModel(val);
+                        clearVehicleError('model');
+                      }}
+                      fetchItems={fetchModels}
                       disabled={!make}
+                      hasError={!!vehicleErrors.model}
+                      emptyText={
+                        modelAvailability === 'none'
+                          ? `No models are listed for ${make}. You can add this vehicle without a model.`
+                          : undefined
+                      }
                     />
+                    {vehicleErrors.model ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{vehicleErrors.model}</Text>
+                    ) : modelAvailability === 'none' ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.placeholder }]}>No models listed - optional</Text>
+                    ) : modelAvailability === 'error' ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>Couldn't load models - tap to retry</Text>
+                    ) : null}
                   </View>
                 </View>
 
                 <View style={styles.formRow}>
                   <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={[styles.label, { color: theme.colors.text }]}>Year</Text>
-                    <View style={[styles.inputWrapper, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+                    <View style={[styles.inputWrapper, { borderColor: vehicleErrors.year ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
                       <MaterialCommunityIcons name="calendar-outline" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
                       <TextInput
                         value={year}
-                        onChangeText={setYear}
+                        onChangeText={(t) => { setYear(t); clearVehicleError('year'); }}
                         placeholder="E.g. 2018"
                         placeholderTextColor={theme.colors.placeholder}
                         keyboardType="numeric"
@@ -549,14 +535,17 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         style={[styles.inputField, { color: theme.colors.text }]}
                       />
                     </View>
+                    {vehicleErrors.year ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{vehicleErrors.year}</Text>
+                    ) : null}
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.label, { color: theme.colors.text }]}>MOT Expiry Date</Text>
-                    <View style={[styles.inputWrapper, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+                    <View style={[styles.inputWrapper, { borderColor: vehicleErrors.motExpiry ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}>
                       <MaterialCommunityIcons name="calendar-clock" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
                       <TextInput
                         value={expiry}
-                        onChangeText={(text) => setExpiry(formatDateInput(text))}
+                        onChangeText={(text) => { setExpiry(formatDateInput(text)); clearVehicleError('motExpiry'); }}
                         placeholder="YYYY-MM-DD"
                         placeholderTextColor={theme.colors.placeholder}
                         keyboardType="numeric"
@@ -564,6 +553,9 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                         style={[styles.inputField, { color: theme.colors.text }]}
                       />
                     </View>
+                    {vehicleErrors.motExpiry ? (
+                      <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{vehicleErrors.motExpiry}</Text>
+                    ) : null}
                   </View>
                 </View>
 
@@ -863,6 +855,11 @@ const styles = StyleSheet.create({
   formRow: {
     flexDirection: 'row',
     marginBottom: 6,
+  },
+  fieldErrorText: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    marginTop: 4,
   },
   label: {
     fontFamily: fonts.semiBold,

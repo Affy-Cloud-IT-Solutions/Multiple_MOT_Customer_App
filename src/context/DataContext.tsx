@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Coordinates, requestUserLiveLocation, isWithinUKBoundary } from '../utils/mapUtils';
 import { resetToLogin } from '../navigation/NavigationService';
+import { decodeToken, isTokenExpired, msUntilAccessTokenRefresh, requestTokenRefresh, RefreshOutcome } from '../utils/authSession';
+
+// Re-exported for existing importers (e.g. LoginScreen)
+export { decodeToken, isTokenExpired };
 
 export interface Customer {
   id: string;
@@ -37,6 +41,8 @@ export interface Vehicle {
 export interface AlertNotification {
   id: string;
   _id?: string;
+  /** Set when the customer dismissed this notification (hides the banner; booking status is unchanged) */
+  customerDismissedAt?: string | null;
   type: 'NEW_VEHICLE' | 'SOLD' | 'BOOKED';
   customerName: string;
   customerId: string;
@@ -133,6 +139,8 @@ interface DataContextType {
   setRefreshToken: (token: string | null) => void;
   setTokens: (accessToken: string | null, refreshToken: string | null) => void;
   refreshAccessToken: () => Promise<string | null>;
+  /** Refreshes the session; only an 'invalid' outcome means the user must log in again */
+  refreshSession: () => Promise<RefreshOutcome>;
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
   logout: () => Promise<void>;
   user: UserProfile | null;
@@ -144,6 +152,9 @@ interface DataContextType {
   addAlert: (alert: Omit<AlertNotification, 'id' | 'status' | 'date'> & { status?: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected' | 'Completed' | 'Cancelled', date?: string, registrationNumber?: string, makeModel?: string }) => Promise<void>;
   approveAlert: (alertId: string) => Promise<void>;
   acknowledgeAlert: (alertId: string) => Promise<void>;
+  /** Alert ids the customer dismissed on this device (shown banners filter these out) */
+  dismissedAlertIds: string[];
+  dismissCustomerAlert: (alertId: string) => Promise<void>;
   rejectAlert: (alertId: string, reason: string) => Promise<void>;
   addAudit: (activity: string, details: string) => Promise<void>;
   createStaffAccount: (name: string, email: string, password: string) => Promise<void>;
@@ -166,49 +177,8 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const BASE_URL = 'https://api.ondoorcarservice.com/api';
 
-export const decodeToken = (tokenStr: string | null) => {
-  if (!tokenStr) return null;
-  try {
-    const parts = tokenStr.split('.');
-    if (parts.length < 2) return null;
-    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4 !== 0) {
-      base64 += '=';
-    }
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-    let str = '';
-    for (let i = 0; i < base64.length; i += 4) {
-      const enc1 = chars.indexOf(base64.charAt(i));
-      const enc2 = chars.indexOf(base64.charAt(i + 1));
-      const enc3 = chars.indexOf(base64.charAt(i + 2));
-      const enc4 = chars.indexOf(base64.charAt(i + 3));
-      if (enc1 === -1 || enc2 === -1) break;
-      const chr1 = (enc1 << 2) | (enc2 >> 4);
-      str += String.fromCharCode(chr1);
-      if (enc3 !== 64 && enc3 !== -1) {
-        const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
-        str += String.fromCharCode(chr2);
-      }
-      if (enc4 !== 64 && enc4 !== -1) {
-        const chr3 = ((enc3 & 3) << 6) | enc4;
-        str += String.fromCharCode(chr3);
-      }
-    }
-    return JSON.parse(str);
-  } catch (error) {
-    console.error('[DATA CONTEXT] Error decoding token:', error);
-    return null;
-  }
-};
+const DISMISSED_ALERTS_KEY = '@dismissed_alert_ids';
 
-export const isTokenExpired = (tokenStr: string | null): boolean => {
-  if (!tokenStr) return true;
-  const decoded = decodeToken(tokenStr);
-  if (!decoded || !decoded.exp) return false;
-  // Buffer by 30 seconds
-  return decoded.exp * 1000 < (Date.now() + 30000);
-};
- 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -216,10 +186,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [audits, setAudits] = useState<AuditLog[]>([]);
   const [token, setTokenState] = useState<string | null>(null);
   const [refreshToken, setRefreshTokenState] = useState<string | null>(null);
+  // Always hold the latest tokens. Callbacks read these instead of state captured in their closure, so a
+  // stale callback can never send a refresh token that has already been rotated (which the server revokes).
+  const tokenRef = useRef<string | null>(null);
+  const refreshTokenRef = useRef<string | null>(null);
   const [user, setUserState] = useState<UserProfile | null>(null);
   const [userLocation, setUserLocationState] = useState<Coordinates | null>(null);
   const [services, setServices] = useState<DynamicService[]>([]);
   const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
+
+  // Notifications dismissed on this device, so a dismissed banner stays hidden even if the server call fails
+  useEffect(() => {
+    AsyncStorage.getItem(DISMISSED_ALERTS_KEY)
+      .then(raw => {
+        const ids = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(ids)) setDismissedAlertIds(ids);
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchServiceCategories = async (): Promise<ServiceCategory[]> => {
     try {
@@ -311,6 +296,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   const setRefreshToken = useCallback((newRefreshToken: string | null) => {
+    refreshTokenRef.current = newRefreshToken;
     setRefreshTokenState(newRefreshToken);
     if (newRefreshToken) {
       AsyncStorage.setItem('user_refresh_token', newRefreshToken).catch(err => console.error(err));
@@ -320,6 +306,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const setToken = useCallback((newToken: string | null) => {
+    tokenRef.current = newToken;
+    if (!newToken) refreshTokenRef.current = null;
     setTokenState(newToken);
     if (newToken) {
       AsyncStorage.setItem('user_token', newToken).catch(err => console.error(err));
@@ -340,6 +328,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const setTokens = useCallback((newToken: string | null, newRefreshToken: string | null) => {
+    tokenRef.current = newToken;
+    refreshTokenRef.current = newRefreshToken;
     setTokenState(newToken);
     setRefreshTokenState(newRefreshToken);
     if (newToken) {
@@ -366,18 +356,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   // Mutex/singleton to prevent multiple concurrent refresh calls
-  const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
+  const refreshPromiseRef = useRef<Promise<RefreshOutcome> | null>(null);
   const sessionExpiredAlertShownRef = useRef(false);
 
   const handleSessionExpired = useCallback(() => {
-    if (!token && !refreshToken) {
+    if (!tokenRef.current && !refreshTokenRef.current) {
       return;
     }
     if (sessionExpiredAlertShownRef.current) {
       return;
     }
     sessionExpiredAlertShownRef.current = true;
-    console.warn('[AUTH] Session expired. Clearing session and navigating to login.');
+    console.warn('[AUTH] Refresh token expired or revoked. Clearing session and navigating to login.');
     setTokens(null, null);
     setUserState(null);
     resetToLogin();
@@ -393,51 +383,37 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
       ]
     );
-  }, [token, refreshToken, setTokens]);
+  }, [setTokens]);
 
-  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+  /**
+   * Exchanges the refresh token for a new access token (and rotated refresh token).
+   * Only one refresh runs at a time; concurrent callers share its result. Tokens are stored on success.
+   * The session is NOT cleared here - callers decide, and only an 'invalid' outcome should log the user out.
+   */
+  const refreshSession = useCallback(async (): Promise<RefreshOutcome> => {
     if (refreshPromiseRef.current) {
       return refreshPromiseRef.current;
     }
 
-    const refreshTask = (async (): Promise<string | null> => {
+    const refreshTask = (async (): Promise<RefreshOutcome> => {
       try {
-        let currentRefreshToken = refreshToken;
-        if (!currentRefreshToken) {
-          currentRefreshToken = await AsyncStorage.getItem('user_refresh_token');
-        }
-
-        if (!currentRefreshToken) {
-          console.warn('[AUTH] No refresh token found. Cannot refresh session.');
-          return null;
-        }
-
+        const currentRefreshToken = refreshTokenRef.current || await AsyncStorage.getItem('user_refresh_token');
         console.log('[AUTH] Calling refresh token endpoint...');
-        const res = await fetch(`${BASE_URL}/auth/refresh-token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: currentRefreshToken })
-        });
+        const outcome = await requestTokenRefresh(BASE_URL, currentRefreshToken);
 
-        const data = await res.json();
-        if (res.ok && (data.accessToken || data.token)) {
-          const newAccessToken = data.accessToken || data.token;
-          const newRefreshToken = data.refreshToken || currentRefreshToken;
-
+        if (outcome.status === 'ok') {
           console.log('[AUTH] Access token refreshed successfully.');
-          setTokens(newAccessToken, newRefreshToken);
-          if (data.user) {
-            setUserState(prev => ({ ...prev, ...data.user }));
-            AsyncStorage.setItem('user_profile', JSON.stringify(data.user)).catch(e => console.error(e));
+          setTokens(outcome.accessToken, outcome.refreshToken);
+          if (outcome.user) {
+            setUserState(prev => ({ ...prev, ...outcome.user }));
+            AsyncStorage.setItem('user_profile', JSON.stringify(outcome.user)).catch(e => console.error(e));
           }
-          return newAccessToken;
+        } else if (outcome.status === 'invalid') {
+          console.warn('[AUTH] Refresh token rejected by server:', outcome.reason);
         } else {
-          console.warn('[AUTH] Refresh token rejected by server:', data.error);
-          return null;
+          console.warn('[AUTH] Could not refresh token right now (keeping session):', outcome.reason);
         }
-      } catch (err) {
-        console.error('[AUTH] Exception while refreshing token:', err);
-        return null;
+        return outcome;
       } finally {
         refreshPromiseRef.current = null;
       }
@@ -445,7 +421,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     refreshPromiseRef.current = refreshTask;
     return refreshTask;
-  }, [refreshToken, setTokens]);
+  }, [setTokens]);
+
+  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+    const outcome = await refreshSession();
+    return outcome.status === 'ok' ? outcome.accessToken : null;
+  }, [refreshSession]);
 
   const authFetch = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
     const rawHeaders: Record<string, string> = {};
@@ -459,9 +440,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    let activeToken = token;
-    if (!activeToken) {
-      activeToken = await AsyncStorage.getItem('user_token');
+    let activeToken = tokenRef.current || await AsyncStorage.getItem('user_token');
+    const hasRefreshToken = !!(refreshTokenRef.current || await AsyncStorage.getItem('user_refresh_token'));
+
+    // Refresh up front when the access token is (about to be) expired, instead of waiting for a 401
+    if (hasRefreshToken && (!activeToken || isTokenExpired(activeToken))) {
+      const outcome = await refreshSession();
+      if (outcome.status === 'ok') {
+        activeToken = outcome.accessToken;
+      } else if (outcome.status === 'invalid') {
+        handleSessionExpired();
+      }
     }
 
     if (activeToken && !rawHeaders['Authorization']) {
@@ -470,26 +459,61 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     let response = await fetch(url, { ...options, headers: rawHeaders });
 
-    if (response.status === 401) {
-      if (activeToken || refreshToken) {
-        console.log(`[AUTH] 401 Unauthorized for ${url}. Attempting access token refresh...`);
-        const newAccessToken = await refreshAccessToken();
-        if (newAccessToken) {
-          rawHeaders['Authorization'] = `Bearer ${newAccessToken}`;
-          response = await fetch(url, { ...options, headers: rawHeaders });
-        } else {
-          console.warn(`[AUTH] Failed to refresh token for ${url}. Triggering session expiration.`);
-          handleSessionExpired();
-        }
+    if (response.status === 401 && hasRefreshToken) {
+      console.log(`[AUTH] 401 Unauthorized for ${url}. Attempting access token refresh...`);
+      const outcome = await refreshSession();
+      if (outcome.status === 'ok') {
+        rawHeaders['Authorization'] = `Bearer ${outcome.accessToken}`;
+        response = await fetch(url, { ...options, headers: rawHeaders });
+      } else if (outcome.status === 'invalid') {
+        // Only the refresh token being rejected ends the session - not an expired access token
+        console.warn(`[AUTH] Refresh token rejected while calling ${url}. Ending session.`);
+        handleSessionExpired();
       }
+      // 'transient': keep the session and return the 401 to the caller; the next request retries the refresh
     }
 
     return response;
-  }, [token, refreshAccessToken, handleSessionExpired]);
+  }, [refreshSession, handleSessionExpired]);
+
+  // Proactively refresh shortly before the access token expires, so screens that read `token` directly
+  // always have a valid one. Transient failures are retried; a rejected refresh token ends the session.
+  useEffect(() => {
+    if (!token) return;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const delay = msUntilAccessTokenRefresh(token);
+    if (delay === null) return;
+
+    const runRefresh = async () => {
+      const outcome = await refreshSession();
+      if (outcome.status === 'invalid') {
+        handleSessionExpired();
+      } else if (outcome.status === 'transient') {
+        retryTimer = setTimeout(runRefresh, 30 * 1000);
+      }
+    };
+    const timer = setTimeout(runRefresh, delay);
+    return () => {
+      clearTimeout(timer);
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [token, refreshSession, handleSessionExpired]);
+
+  // Timers don't run while the app is in the background, so check again as soon as it comes back
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async nextState => {
+      if (nextState !== 'active' || !refreshTokenRef.current) return;
+      if (!tokenRef.current || isTokenExpired(tokenRef.current)) {
+        const outcome = await refreshSession();
+        if (outcome.status === 'invalid') handleSessionExpired();
+      }
+    });
+    return () => subscription.remove();
+  }, [refreshSession, handleSessionExpired]);
 
   const logout = useCallback(async () => {
     try {
-      const activeRefreshToken = refreshToken || await AsyncStorage.getItem('user_refresh_token');
+      const activeRefreshToken = refreshTokenRef.current || await AsyncStorage.getItem('user_refresh_token');
       if (activeRefreshToken) {
         await fetch(`${BASE_URL}/auth/logout`, {
           method: 'POST',
@@ -502,7 +526,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setUserState(null);
       resetToLogin();
     }
-  }, [refreshToken, setTokens]);
+  }, [setTokens]);
 
   const refreshData = async (activeToken?: string | null) => {
     let currentToken = activeToken !== undefined ? activeToken : token;
@@ -659,6 +683,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
 
         if (storedRefreshToken) {
+          tokenRef.current = storedToken;
+          refreshTokenRef.current = storedRefreshToken;
           if (storedToken && !isTokenExpired(storedToken)) {
             setTokenState(storedToken);
             setRefreshTokenState(storedRefreshToken);
@@ -667,32 +693,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             }
             refreshData(storedToken);
           } else {
-            console.log('[DATA CONTEXT] Stored token expired/absent. Refreshing session...');
-            try {
-              const refRes = await fetch(`${BASE_URL}/auth/refresh-token`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refreshToken: storedRefreshToken })
-              });
-              if (refRes.ok) {
-                const refData = await refRes.json();
-                const newAccess = refData.accessToken || refData.token;
-                const newRefresh = refData.refreshToken || storedRefreshToken;
-                setTokens(newAccess, newRefresh);
-                if (refData.user) {
-                  setUserState(refData.user);
-                  AsyncStorage.setItem('user_profile', JSON.stringify(refData.user)).catch(e => console.error(e));
-                }
-                refreshData(newAccess);
-              } else {
-                console.warn('[DATA CONTEXT] Stored refresh token is expired or invalid. Clearing session.');
-                setTokens(null, null);
+            console.log('[DATA CONTEXT] Stored access token expired/absent. Refreshing session...');
+            // Shared, de-duplicated refresh - screens mounting at the same time reuse this same request
+            const outcome = await refreshSession();
+            if (outcome.status === 'ok') {
+              refreshData(outcome.accessToken);
+            } else if (outcome.status === 'invalid') {
+              console.warn('[DATA CONTEXT] Stored refresh token is expired or invalid. Clearing session.');
+              setTokens(null, null);
+            } else {
+              // Offline / server issue: keep the user signed in; the refresh is retried on the next request
+              console.warn('[DATA CONTEXT] Could not refresh session on launch (keeping it):', outcome.reason);
+              setRefreshTokenState(storedRefreshToken);
+              if (storedUserJson) {
+                setUserState(JSON.parse(storedUserJson));
               }
-            } catch (refErr) {
-              console.warn('[DATA CONTEXT] Network error refreshing token on launch:', refErr);
             }
           }
         } else if (storedToken && !isTokenExpired(storedToken)) {
+          tokenRef.current = storedToken;
           setTokenState(storedToken);
           if (storedUserJson) {
             setUserState(JSON.parse(storedUserJson));
@@ -864,6 +883,34 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('[DATA CONTEXT] acknowledgeAlert error:', error);
       throw error;
+    }
+  };
+
+  // Customer dismisses a notification banner (e.g. "Booking Rejected by Garage").
+  // Hidden immediately and remembered on the device; the server records it so it stays hidden everywhere.
+  // Unlike acknowledgeAlert (garage/admin only), this never changes the booking's status.
+  const dismissCustomerAlert = async (alertId: string): Promise<void> => {
+    if (!alertId) return;
+    setDismissedAlertIds(prev => {
+      if (prev.includes(alertId)) return prev;
+      const next = [...prev, alertId];
+      AsyncStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+    try {
+      const response = await authFetch(`${BASE_URL}/alerts/${alertId}/dismiss`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${response.status}`);
+      }
+      const now = new Date().toISOString();
+      setAlerts(prev => prev.map(a => ((a.id || a._id) === alertId ? { ...a, customerDismissedAt: a.customerDismissedAt || now } : a)));
+    } catch (error) {
+      // Still hidden on this device; the server copy is updated on a later dismiss/refresh
+      console.warn('[DATA CONTEXT] dismissCustomerAlert: server update failed (kept hidden locally):', error);
     }
   };
 
@@ -1120,6 +1167,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         setRefreshToken,
         setTokens,
         refreshAccessToken,
+        refreshSession,
         authFetch,
         logout,
         user,
@@ -1131,6 +1179,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         addAlert,
         approveAlert,
         acknowledgeAlert,
+        dismissedAlertIds,
+        dismissCustomerAlert,
         rejectAlert,
         addAudit,
         createStaffAccount,

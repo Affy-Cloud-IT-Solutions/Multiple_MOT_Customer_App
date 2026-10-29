@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,87 +19,11 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAppValues } from '../context/DataContext';
 import { fonts } from '../theme/theme';
 
+const NOT_FOUND_MESSAGE = 'No vehicle or MOT record was found for this registration. Please check the plate and try again.';
+
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-// Generates authentic, realistic past MOT test records if the vehicle object lacks them
-const generateFallbackTests = (vehicle: any, regNumber: string) => {
-  const isPass = vehicle.status === 'PASS' || vehicle.motStatus === 'Valid' || vehicle.status === 'Active';
-  const currentYear = new Date().getFullYear();
-  const vehicleYear = parseInt(vehicle.year) || (currentYear - 6);
-  const yearsActive = Math.max(1, currentYear - vehicleYear - 2);
-
-  const tests: any[] = [];
-  let baseMileage = 18000 + Math.floor(Math.random() * 8000);
-
-  // Generate records from previous years up to now
-  for (let i = yearsActive; i >= 0; i--) {
-    const testYear = currentYear - i;
-    const isLatest = i === 0;
-    const testResult = isLatest ? (isPass ? 'PASSED' : 'FAILED') : (i === 2 ? 'FAILED' : 'PASSED');
-    
-    baseMileage += 6000 + Math.floor(Math.random() * 4000);
-    const completedDate = `${testYear}-07-${10 + (i * 3) % 18}T10:30:00.000Z`;
-    const expiryDate = testResult === 'PASSED' ? `${testYear + 1}-07-${9 + (i * 3) % 18}T23:59:59.000Z` : undefined;
-    const testNumber = `${testYear}48${(10000000 + (regNumber.charCodeAt(0) * 8391) + (i * 19283)).toString().slice(0, 8)}`;
-
-    let defects: any[] = [];
-    if (testResult === 'FAILED') {
-      defects = [
-        {
-          text: 'Nearside front position lamp not working on dipped beam',
-          type: 'MAJOR',
-          dangerous: false,
-        },
-        {
-          text: 'Offside rear brake lining worn below legal limit (1.1.13 (a) (ii))',
-          type: 'MAJOR',
-          dangerous: false,
-        },
-        {
-          text: 'Tyre tread depth below requirements of 1.6mm nearside front',
-          type: 'DANGEROUS',
-          dangerous: true,
-        },
-      ];
-    } else if (i === 1) {
-      defects = [
-        {
-          text: 'Front brake pads wearing thin (minor)',
-          type: 'MINOR',
-          dangerous: false,
-        },
-        {
-          text: 'Offside rear tyre slightly worn close to legal limit (advisory)',
-          type: 'ADVISORY',
-          dangerous: false,
-        },
-      ];
-    } else if (i === 3) {
-      defects = [
-        {
-          text: 'Suspension arm pin or bush worn but not resulting in excessive movement (advisory)',
-          type: 'ADVISORY',
-          dangerous: false,
-        },
-      ];
-    }
-
-    tests.push({
-      motTestNumber: testNumber,
-      completedDate,
-      expiryDate,
-      testResult,
-      odometerValue: String(baseMileage),
-      odometerUnit: 'mi',
-      defects,
-    });
-  }
-
-  // Reverse so newest is first
-  return tests.reverse();
-};
 
 export default function MotHistoryScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
@@ -114,16 +38,20 @@ export default function MotHistoryScreen({ route, navigation }: any) {
     token,
   } = useAppValues();
 
-  const [loading, setLoading] = useState(false);
-  const [vehicle, setVehicle] = useState<any>(null);
+  const registration = route?.params?.registration || route?.params?.vehicleData?.registration || route?.params?.vehicleData?.registrationNumber;
+  const initialVehicleData = route?.params?.vehicleData;
+  const hasInitialTests = Array.isArray(initialVehicleData?.motTests) && initialVehicleData.motTests.length > 0;
+
+  // Start in the loading state when a lookup is needed, so "not found" is never shown before the request runs
+  const [loading, setLoading] = useState(!hasInitialTests && !!registration);
+  const [vehicle, setVehicle] = useState<any>(hasInitialTests ? initialVehicleData : null);
   const [error, setError] = useState<string | null>(null);
+  // Ignores responses from an earlier lookup (e.g. registration changed or "Check Again" tapped twice)
+  const latestRequestRef = useRef(0);
   const [addingVehicle, setAddingVehicle] = useState(false);
   const [locallyAddedVrn, setLocallyAddedVrn] = useState<string | null>(null);
   const [expandedTestIdxs, setExpandedTestIdxs] = useState<Record<number, boolean>>({ 0: true });
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'PASSED' | 'FAILED' | 'ADVISORIES'>('ALL');
-
-  const registration = route?.params?.registration || route?.params?.vehicleData?.registration || route?.params?.vehicleData?.registrationNumber;
-  const initialVehicleData = route?.params?.vehicleData;
 
   useEffect(() => {
     if (initialVehicleData && Array.isArray(initialVehicleData.motTests) && initialVehicleData.motTests.length > 0) {
@@ -138,20 +66,25 @@ export default function MotHistoryScreen({ route, navigation }: any) {
   }, [registration, initialVehicleData]);
 
   const fetchHistory = async (reg: string) => {
+    const requestId = ++latestRequestRef.current;
     setLoading(true);
     setError(null);
     try {
       const res = await lookupVehicle(reg);
+      if (requestId !== latestRequestRef.current) return;
       if (res && res.found && res.vehicle) {
         setVehicle(res.vehicle);
       } else {
-        setError('Vehicle details not found. Please check the registration plate and try again.');
+        setVehicle(null);
+        setError(NOT_FOUND_MESSAGE);
       }
     } catch (err: any) {
+      if (requestId !== latestRequestRef.current) return;
       console.error('[MotHistoryScreen] error fetching:', err);
-      setError(err.message || 'Vehicle details not found. Please check the registration plate and try again.');
+      setVehicle(null);
+      setError(err.message || NOT_FOUND_MESSAGE);
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestRef.current) setLoading(false);
     }
   };
 
@@ -277,13 +210,11 @@ export default function MotHistoryScreen({ route, navigation }: any) {
 
   // Resolve MotTests list (using fallback if API didn't provide historical array)
   const regNumber = (vehicle?.registrationNumber || vehicle?.registration || registration || '').toUpperCase().trim();
-  const allMotTests = useMemo(() => {
-    if (!vehicle) return [];
-    if (Array.isArray(vehicle.motTests) && vehicle.motTests.length > 0) {
-      return vehicle.motTests;
-    }
-    return generateFallbackTests(vehicle, regNumber);
-  }, [vehicle, regNumber]);
+  // Only real DVSA test records are shown - never generated placeholders
+  const allMotTests = useMemo(
+    () => (vehicle && Array.isArray(vehicle.motTests) ? vehicle.motTests : []),
+    [vehicle]
+  );
 
   // Key Statistics
   const stats = useMemo(() => {
@@ -498,12 +429,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
             style: 'cancel',
           },
           {
-            text: 'Book Without Adding',
-            style: 'default',
-            onPress: () => proceedToBooking(),
-          },
-          {
-            text: 'Add & Book Slot',
+            text: 'Add',
             style: 'default',
             onPress: () => {
               if (!token || !token.trim()) {
@@ -549,10 +475,10 @@ export default function MotHistoryScreen({ route, navigation }: any) {
           <MaterialCommunityIcons name={isBusy ? "timer-sand" : "car-off"} size={54} color={isBusy ? "#F59E0B" : "#EF4444"} />
         </View>
         <Text style={[styles.errorTitle, { color: theme.colors.text }]}>
-          {isBusy ? 'Government API Busy' : 'Vehicle Not Found'}
+          {isBusy ? 'Government API Busy' : 'No Vehicle Record Found'}
         </Text>
         <Text style={[styles.errorSubtitle, { color: theme.colors.placeholder }]}>
-          {error || 'Vehicle details not found. Please check the registration plate and try again.'}
+          {error || NOT_FOUND_MESSAGE}
         </Text>
         <TouchableOpacity
           onPress={() => registration && fetchHistory(registration)}
@@ -562,6 +488,27 @@ export default function MotHistoryScreen({ route, navigation }: any) {
           <MaterialCommunityIcons name="reload" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
           <Text style={styles.retryBtnText}>Check Again</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.errorBackBtn}
+        >
+          <Text style={[styles.errorBackBtnText, { color: theme.colors.secondary }]}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (allMotTests.length === 0) {
+    const vehicleName = [vehicle.make, vehicle.model].filter(Boolean).join(' ');
+    return (
+      <View style={[styles.centerContainer, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.errorIconCircle, { backgroundColor: theme.colors.placeholder + '15' }]}>
+          <MaterialCommunityIcons name="file-search-outline" size={54} color={theme.colors.placeholder} />
+        </View>
+        <Text style={[styles.errorTitle, { color: theme.colors.text }]}>No MOT Records Found</Text>
+        <Text style={[styles.errorSubtitle, { color: theme.colors.placeholder }]}>
+          {`There are no MOT test records for ${regNumber || 'this vehicle'}${vehicleName ? ` (${vehicleName})` : ''}. Vehicles don't need an MOT until they are 3 years old.`}
+        </Text>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.errorBackBtn}

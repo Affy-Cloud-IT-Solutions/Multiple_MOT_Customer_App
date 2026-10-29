@@ -23,7 +23,8 @@ import { fonts } from '../theme/theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { openGarageDirections } from '../utils/mapUtils';
 import { isServiceMatch } from '../components/FilterServiceBottomSheet';
-import { validateMotExpiryDate } from '../utils/validationUtils';
+import { validateNewVehicleForm } from '../utils/validationUtils';
+import { buildGarageImageList, excludeBrokenImages, getGalleryViewState } from '../utils/galleryUtils';
 import LoginRequiredModal from '../components/LoginRequiredModal';
 
 const GarageLogo = ({ uri, name, style, theme }: any) => {
@@ -120,6 +121,18 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     return selectedServices.map(s => s?.name).filter(Boolean).join(', ');
   }, [selectedServices]);
 
+  const otherServices = useMemo(() => {
+    return selectedServices.filter((s: any) => {
+      const c = (s?.category || '').toLowerCase();
+      const n = (s?.name || '').toLowerCase();
+      return !c.includes('mot') && !n.includes('mot');
+    });
+  }, [selectedServices]);
+
+  const otherServicesNames = useMemo(() => {
+    return otherServices.map((s: any) => s?.name).filter(Boolean).join(', ');
+  }, [otherServices]);
+
   const isServiceSelected = useCallback((service: any) => {
     if (!service) return false;
     const targetId = service._id || service.id;
@@ -158,33 +171,69 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   const [newModel, setNewModel] = useState('');
   const [newYear, setNewYear] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
+  // Per-field errors from the last Save attempt - drives the red borders on the add-vehicle form
+  const [newCarErrors, setNewCarErrors] = useState<Record<string, string>>({});
+  const clearNewCarError = (field: string) =>
+    setNewCarErrors(prev => (prev[field] ? { ...prev, [field]: '' } : prev));
+  useEffect(() => {
+    if (!showAddCarForm) setNewCarErrors({});
+  }, [showAddCarForm]);
   const [isSearchingNewPlate, setIsSearchingNewPlate] = useState(false);
   const [newLookupInfo, setNewLookupInfo] = useState<string | null>(null);
   const [isAddingCar, setIsAddingCar] = useState(false);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
 
-  // All photos associated with the garage for info & full gallery modal
-  const displayGarageImages = useMemo(() => {
-    if (!garage) return [];
-    const list: string[] = [];
-    if (Array.isArray(garage.images)) {
-      garage.images.forEach((img: any) => {
-        if (typeof img === 'string' && img.trim() && !list.includes(img.trim())) {
-          list.push(img.trim());
-        }
+  // All candidate photo URLs for the garage (loadable URIs, deduped, /uploads paths resolved) - see buildGarageImageList
+  const displayGarageImages = useMemo(
+    () => buildGarageImageList(garage, { baseOrigin: BASE_URL.replace(/\/api\/?$/, '') }),
+    [garage]
+  );
+
+  // URLs that have failed to actually load (reported by Image onError below)
+  const [brokenImageUrls, setBrokenImageUrls] = useState<Set<string>>(new Set());
+
+  // Reset known-broken URLs whenever we load a different garage
+  useEffect(() => {
+    setBrokenImageUrls(new Set());
+  }, [garageId]);
+
+  const handleGarageImageLoadError = useCallback((uri: string) => {
+    setBrokenImageUrls(prev => (prev.has(uri) ? prev : new Set(prev).add(uri)));
+  }, []);
+
+  // Photos that are both syntactically valid and have successfully loaded - this is what gets rendered
+  const validGarageImages = useMemo(
+    () => excludeBrokenImages(displayGarageImages, brokenImageUrls),
+    [displayGarageImages, brokenImageUrls]
+  );
+
+  // Probe remote photos up front so unavailable ones are dropped (and the photo count is right)
+  // before the user ever sees their thumbnail or slide, not only once an <Image> happens to render them
+  useEffect(() => {
+    let cancelled = false;
+    displayGarageImages
+      .filter(uri => /^https?:\/\//i.test(uri))
+      .forEach(uri => {
+        Image.prefetch(uri)
+          .then(ok => {
+            if (!ok && !cancelled) handleGarageImageLoadError(uri);
+          })
+          .catch(() => {
+            if (!cancelled) handleGarageImageLoadError(uri);
+          });
       });
-    }
-    if (garage.coverImage && typeof garage.coverImage === 'string' && garage.coverImage.trim() && !list.includes(garage.coverImage.trim())) {
-      list.unshift(garage.coverImage.trim());
-    }
-    if (garage.logoUrl && typeof garage.logoUrl === 'string' && garage.logoUrl.trim() && !list.includes(garage.logoUrl.trim())) {
-      list.push(garage.logoUrl.trim());
-    }
-    if (list.length === 0) {
-      list.push('https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=800&fit=crop');
-    }
-    return list;
-  }, [garage]);
+    return () => {
+      cancelled = true;
+    };
+  }, [displayGarageImages, handleGarageImageLoadError]);
+
+  // Index/counter/arrows for the full-screen gallery, clamped at render time so removing a photo never leaves a blank slide
+  const gallery = getGalleryViewState(validGarageImages, selectedGalleryIndex);
+
+  // Keep the stored index in sync as the valid image list shrinks (e.g. an image fails to load)
+  useEffect(() => {
+    if (gallery.index !== selectedGalleryIndex) setSelectedGalleryIndex(gallery.index);
+  }, [gallery.index, selectedGalleryIndex]);
 
   const fetchGarageDetails = async () => {
     setLoading(true);
@@ -537,6 +586,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         setNewExpiry(v.motExpiryDate || '');
         const infoStr = `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}`;
         setNewLookupInfo(infoStr);
+        setNewCarErrors({});
 
         Toast.show({
           type: 'success',
@@ -572,27 +622,29 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   };
 
   const handleSaveNewCar = async () => {
-    const regClean = newRegNo.trim().toUpperCase();
-    const makeClean = newMake.trim().toUpperCase();
-    const modelClean = newModel.trim().toUpperCase();
-    const yearClean = newYear.trim();
-    const expiryClean = newExpiry.trim();
-
-    if (!regClean || !makeClean || !modelClean || !yearClean || !expiryClean) {
-      Alert.alert('Missing Details', 'Please fill in registration, make, model, year, and MOT expiry date.');
+    // Field-by-field validation: names only the fields that are actually missing or invalid
+    const vehicleCheck = validateNewVehicleForm({
+      registration: newRegNo,
+      make: newMake,
+      model: newModel,
+      year: newYear,
+      motExpiry: newExpiry,
+    });
+    if (!vehicleCheck.isValid) {
+      setNewCarErrors(vehicleCheck.errors);
+      Alert.alert(vehicleCheck.title, vehicleCheck.message);
       return;
     }
 
-    if (!/^\d{4}$/.test(yearClean)) {
-      Alert.alert('Invalid Year', 'Please enter a valid 4-digit manufacture year (e.g. 2019).');
-      return;
-    }
+    setNewCarErrors({});
 
-    const expiryCheck = validateMotExpiryDate(expiryClean);
-    if (expiryCheck.error) {
-      Alert.alert('Validation Error', expiryCheck.error);
-      return;
-    }
+    const {
+      registration: regClean,
+      make: makeClean,
+      model: modelClean,
+      year: yearClean,
+      motExpiry: expiryClean,
+    } = vehicleCheck.values;
 
     if (!token || !token.trim()) {
       Alert.alert(
@@ -870,7 +922,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         slotTime: targetSlotTime,
         slotNumber: hasMot ? selectedSlot?.slotNumber : undefined,
         registrationNumber: selectedVehicle.registrationNumber,
-        makeModel: `${selectedVehicle.make} ${selectedVehicle.model}`.trim(),
+        makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}${otherServicesNames ? ` & Service: ${otherServicesNames}` : ''}`,
         status: 'Pending',
         date: selectedDate,
       });
@@ -1507,7 +1559,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   <View style={styles.photoCountBadge}>
                     <MaterialCommunityIcons name="camera" size={11} color="#FFFFFF" />
                     <Text style={styles.photoCountBadgeText}>
-                      {displayGarageImages.length}
+                      {validGarageImages.length}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -1526,7 +1578,11 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   >
                     <MaterialCommunityIcons name="image-multiple-outline" size={13} color={theme.colors.primary} />
                     <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: theme.colors.primary, marginLeft: 3 }}>
-                      {displayGarageImages.length > 1 ? `View all ${displayGarageImages.length} photos` : 'View photo'}
+                      {validGarageImages.length > 1
+                        ? `View all ${validGarageImages.length} photos`
+                        : validGarageImages.length === 1
+                        ? 'View photo'
+                        : 'No photos available'}
                     </Text>
                   </TouchableOpacity>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
@@ -1551,12 +1607,12 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 </View>
               </View>
 
-              {/* Photos Preview strip in Info Modal */}
-              {displayGarageImages.length > 0 && (
+              {/* Photos Preview strip in Info Modal - only valid, successfully-loaded photos are shown */}
+              {validGarageImages.length > 0 && (
                 <View style={[styles.infoModalBlock, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={[styles.infoModalBlockTitle, { color: theme.colors.placeholder }]}>
-                      GARAGE PHOTOS ({displayGarageImages.length})
+                      GARAGE PHOTOS ({validGarageImages.length})
                     </Text>
                     <TouchableOpacity
                       onPress={() => {
@@ -1571,9 +1627,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     </TouchableOpacity>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                    {displayGarageImages.map((imgUri, idx) => (
+                    {validGarageImages.map((imgUri, idx) => (
                       <TouchableOpacity
-                        key={`thumb-preview-${idx}`}
+                        key={`thumb-preview-${imgUri}`}
                         activeOpacity={0.8}
                         onPress={() => {
                           setSelectedGalleryIndex(idx);
@@ -1581,7 +1637,12 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         }}
                         style={styles.infoThumbWrap}
                       >
-                        <Image source={{ uri: imgUri }} style={styles.infoThumbImg} resizeMode="cover" />
+                        <Image
+                          source={{ uri: imgUri }}
+                          style={styles.infoThumbImg}
+                          resizeMode="cover"
+                          onError={() => handleGarageImageLoadError(imgUri)}
+                        />
                         <View style={styles.infoThumbOverlay}>
                           <Text style={styles.infoThumbOverlayText}>{idx + 1}</Text>
                         </View>
@@ -1703,7 +1764,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
             <View style={styles.galleryCounterPill}>
               <MaterialCommunityIcons name="camera" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
               <Text style={styles.galleryCounterText}>
-                {selectedGalleryIndex + 1} / {displayGarageImages.length}
+                {gallery.counterLabel}
               </Text>
             </View>
 
@@ -1712,34 +1773,47 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
           {/* Main Large Image Display with Left / Right Navigation */}
           <View style={styles.galleryMainImageContainer}>
-            <Image
-              source={{ uri: displayGarageImages[selectedGalleryIndex] }}
-              style={styles.galleryMainImage}
-              resizeMode="contain"
-            />
+            {gallery.currentUri ? (
+              <>
+                <Image
+                  key={gallery.currentUri}
+                  source={{ uri: gallery.currentUri }}
+                  style={styles.galleryMainImage}
+                  resizeMode="contain"
+                  onError={() => handleGarageImageLoadError(gallery.currentUri as string)}
+                />
 
-            {/* Left Nav Arrow */}
-            {selectedGalleryIndex > 0 && (
-              <TouchableOpacity
-                onPress={() => setSelectedGalleryIndex(prev => Math.max(0, prev - 1))}
-                style={[styles.galleryNavArrow, styles.galleryNavArrowLeft]}
-                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                activeOpacity={0.8}
-              >
-                <MaterialCommunityIcons name="chevron-left" size={32} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
+                {/* Left Nav Arrow */}
+                {gallery.hasPrev && (
+                  <TouchableOpacity
+                    onPress={() => setSelectedGalleryIndex(Math.max(0, gallery.index - 1))}
+                    style={[styles.galleryNavArrow, styles.galleryNavArrowLeft]}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons name="chevron-left" size={32} color="#FFFFFF" />
+                  </TouchableOpacity>
+                )}
 
-            {/* Right Nav Arrow */}
-            {selectedGalleryIndex < displayGarageImages.length - 1 && (
-              <TouchableOpacity
-                onPress={() => setSelectedGalleryIndex(prev => Math.min(displayGarageImages.length - 1, prev + 1))}
-                style={[styles.galleryNavArrow, styles.galleryNavArrowRight]}
-                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                activeOpacity={0.8}
-              >
-                <MaterialCommunityIcons name="chevron-right" size={32} color="#FFFFFF" />
-              </TouchableOpacity>
+                {/* Right Nav Arrow */}
+                {gallery.hasNext && (
+                  <TouchableOpacity
+                    onPress={() => setSelectedGalleryIndex(Math.min(gallery.total - 1, gallery.index + 1))}
+                    style={[styles.galleryNavArrow, styles.galleryNavArrowRight]}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons name="chevron-right" size={32} color="#FFFFFF" />
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <View style={styles.galleryEmptyState}>
+                <MaterialCommunityIcons name="image-off-outline" size={48} color="#64748B" />
+                <Text style={styles.galleryEmptyStateText}>
+                  No photos are currently available for this garage.
+                </Text>
+              </View>
             )}
           </View>
 
@@ -1754,18 +1828,18 @@ export default function GarageDetailScreen({ route, navigation }: any) {
           </View>
 
           {/* Bottom Thumbnails Strip */}
-          {displayGarageImages.length > 1 && (
+          {validGarageImages.length > 1 && (
             <View style={styles.galleryThumbnailContainer}>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.galleryThumbnailScroll}
               >
-                {displayGarageImages.map((thumbUri, idx) => {
-                  const isActive = idx === selectedGalleryIndex;
+                {validGarageImages.map((thumbUri, idx) => {
+                  const isActive = idx === gallery.index;
                   return (
                     <TouchableOpacity
-                      key={`gallery-strip-${idx}`}
+                      key={`gallery-strip-${thumbUri}`}
                       onPress={() => setSelectedGalleryIndex(idx)}
                       activeOpacity={0.8}
                       style={[
@@ -1773,7 +1847,12 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         isActive && styles.galleryStripThumbActive,
                       ]}
                     >
-                      <Image source={{ uri: thumbUri }} style={styles.galleryStripThumbImg} resizeMode="cover" />
+                      <Image
+                        source={{ uri: thumbUri }}
+                        style={styles.galleryStripThumbImg}
+                        resizeMode="cover"
+                        onError={() => handleGarageImageLoadError(thumbUri)}
+                      />
                     </TouchableOpacity>
                   );
                 })}
@@ -2135,14 +2214,14 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
                       {/* UK Number Plate Input with Attached Lookup */}
                       <Text style={[styles.formLabel, { color: theme.colors.text }]}>UK Registration Plate</Text>
-                      <View style={styles.plateInputContainer}>
+                      <View style={[styles.plateInputContainer, newCarErrors.registration ? { borderColor: theme.colors.error, borderWidth: 2 } : null]}>
                         <View style={styles.ukPlateStrip}>
                           <Text style={styles.ukFlagEmoji}>🇬🇧</Text>
                           <Text style={styles.ukStripLabel}>UK</Text>
                         </View>
                         <TextInput
                           value={newRegNo}
-                          onChangeText={(txt) => setNewRegNo(txt.toUpperCase())}
+                          onChangeText={(txt) => { setNewRegNo(txt.toUpperCase()); clearNewCarError('registration'); }}
                           placeholder="eg AB19 CDE"
                           placeholderTextColor="#6B7280"
                           style={styles.plateInputField}
@@ -2166,6 +2245,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           )}
                         </TouchableOpacity>
                       </View>
+                      {newCarErrors.registration ? (
+                        <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.registration}</Text>
+                      ) : null}
 
                       {/* Lookup Info Banner */}
                       {newLookupInfo && (
@@ -2183,23 +2265,29 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           <Text style={[styles.formLabel, { color: theme.colors.text }]}>Make</Text>
                           <TextInput
                             value={newMake}
-                            onChangeText={setNewMake}
+                            onChangeText={(t) => { setNewMake(t); clearNewCarError('make'); }}
                             placeholder="e.g. FORD"
                             placeholderTextColor={theme.colors.placeholder}
                             autoCapitalize="characters"
-                            style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                            style={[styles.formInputField, { color: theme.colors.text, borderColor: newCarErrors.make ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}
                           />
+                          {newCarErrors.make ? (
+                            <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.make}</Text>
+                          ) : null}
                         </View>
                         <View style={styles.formCol}>
                           <Text style={[styles.formLabel, { color: theme.colors.text }]}>Model</Text>
                           <TextInput
                             value={newModel}
-                            onChangeText={setNewModel}
+                            onChangeText={(t) => { setNewModel(t); clearNewCarError('model'); }}
                             placeholder="e.g. FOCUS"
                             placeholderTextColor={theme.colors.placeholder}
                             autoCapitalize="characters"
-                            style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                            style={[styles.formInputField, { color: theme.colors.text, borderColor: newCarErrors.model ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}
                           />
+                          {newCarErrors.model ? (
+                            <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.model}</Text>
+                          ) : null}
                         </View>
                       </View>
 
@@ -2209,25 +2297,31 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           <Text style={[styles.formLabel, { color: theme.colors.text }]}>Year</Text>
                           <TextInput
                             value={newYear}
-                            onChangeText={setNewYear}
+                            onChangeText={(t) => { setNewYear(t); clearNewCarError('year'); }}
                             placeholder="e.g. 2019"
                             placeholderTextColor={theme.colors.placeholder}
                             keyboardType="numeric"
                             maxLength={4}
-                            style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                            style={[styles.formInputField, { color: theme.colors.text, borderColor: newCarErrors.year ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}
                           />
+                          {newCarErrors.year ? (
+                            <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.year}</Text>
+                          ) : null}
                         </View>
                         <View style={styles.formCol}>
                           <Text style={[styles.formLabel, { color: theme.colors.text }]}>MOT Expiry (YYYY-MM-DD)</Text>
                           <TextInput
                             value={newExpiry}
-                            onChangeText={(t) => setNewExpiry(formatDateInput(t))}
+                            onChangeText={(t) => { setNewExpiry(formatDateInput(t)); clearNewCarError('motExpiry'); }}
                             placeholder="YYYY-MM-DD"
                             placeholderTextColor={theme.colors.placeholder}
                             keyboardType="numeric"
                             maxLength={10}
-                            style={[styles.formInputField, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                            style={[styles.formInputField, { color: theme.colors.text, borderColor: newCarErrors.motExpiry ? theme.colors.error : theme.colors.border, backgroundColor: theme.colors.background }]}
                           />
+                          {newCarErrors.motExpiry ? (
+                            <Text style={[styles.fieldErrorText, { color: theme.colors.error }]}>{newCarErrors.motExpiry}</Text>
+                          ) : null}
                         </View>
                       </View>
 
@@ -2630,6 +2724,15 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     <Text style={[styles.flowSectionSubtitle, { color: theme.colors.placeholder }]}>
                       Live test slots for {formatDisplayDate(selectedDate)}
                     </Text>
+
+                    {otherServices.length > 0 && (
+                      <View style={[styles.inlineNotice, { backgroundColor: theme.colors.primary + '15', borderColor: theme.colors.primary + '40', marginBottom: 12 }]}>
+                        <MaterialCommunityIcons name="information" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                        <Text style={[styles.inlineNoticeText, { color: theme.colors.text }]}>
+                          <Text style={{ fontFamily: fonts.bold }}>Same Date for All Services:</Text> Select the 45-min MOT lane slot below for {formatDisplayDate(selectedDate)}. Your other service ({otherServicesNames}) will be completed on this same day.
+                        </Text>
+                      </View>
+                    )}
 
                     {loadingSlots ? (
                       <View style={[styles.slotsLoadingContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
@@ -3816,6 +3919,18 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  galleryEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  galleryEmptyStateText: {
+    fontFamily: fonts.semiBold,
+    color: '#94A3B8',
+    fontSize: 14,
+    marginTop: 10,
+    textAlign: 'center',
+  },
   addCarToggleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3922,6 +4037,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semiBold,
     fontSize: 11,
     marginBottom: 4,
+  },
+  fieldErrorText: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    marginTop: 4,
   },
   formInputField: {
     fontFamily: fonts.regular,
