@@ -87,59 +87,32 @@ const mapBackendVehicleToFrontend = (v: any) => {
   };
 
   const regUpper = (v.registrationNumber || v.registration || '').toUpperCase().trim();
-  
-  let advisories = v.advisories || [];
-  let failures = v.failures || [];
+  // Under-3-year-old vehicles: no tests yet, DVSA gives the first MOT due date instead
+  const isNotYetDue = v.motStatus === 'Not Yet Due' || v.status === 'NOT DUE';
+  const latestTest = Array.isArray(v.motTests) ? v.motTests[0] : null;
 
-  // Only inject mock details if there is no live motTests array present
-  if (!v.motTests && advisories.length === 0 && failures.length === 0) {
-    if (regUpper === 'AB18 CDE') {
-      advisories = [
-        'Front brake pads wearing thin (minor)',
-        'Nearside rear tyre worn close to legal limit (advisory)',
-        'Front suspension arm pin or bush worn but not resulting in excessive movement (advisory)',
-      ];
-    } else if (regUpper === 'LD65 XYZ') {
-      advisories = [
-        'Nearside front tyre slightly damaged (advisory)',
-        'Monitor oil leak from gearbox area (minor)',
-      ];
-      failures = [
-        'Nearside front headlamp not working on dipped beam (major failure)',
-        'Offside rear brake disc worn below limit (major failure)',
-        'Exhaust emissions exceed limit values (major failure)',
-      ];
-    } else if (regUpper === 'MH07 KKK') {
-      // none
-    } else {
-      if (isPass) {
-        advisories = ['Rear brake discs worn, pitted or scored (minor)'];
-      } else {
-        advisories = ['Front tyres worn close to limit'];
-        failures = ['Windscreen wiper does not clear the windshield effectively (major failure)'];
-      }
-    }
-  }
-
+  // Only real DVSA values - unknown fields stay empty rather than being guessed
   return {
     registration: regUpper,
     registrationNumber: regUpper,
     make: v.make || '',
     model: v.model || '',
     year: v.year ? String(v.year) : '',
-    color: v.color || 'Grey',
-    fuelType: v.fuelType || 'Petrol',
-    engineSize: v.engineSize || '1500cc',
-    status: isPass ? 'PASS' : 'FAIL',
-    motStatus: v.motStatus || (isPass ? 'Valid' : 'Expired'),
+    color: v.color || '',
+    fuelType: v.fuelType || '',
+    engineSize: v.engineSize || '',
+    registrationDate: v.registrationDate || '',
+    motTestDueDate: v.motTestDueDate || '',
+    status: isNotYetDue ? 'NOT DUE' : (isPass ? 'PASS' : 'FAIL'),
+    motStatus: v.motStatus || (isNotYetDue ? 'Not Yet Due' : (isPass ? 'Valid' : 'Expired')),
     motExpiryDate: v.motExpiryDate || v.expiryDate || '',
     expiryDate: formatDate(v.motExpiryDate || v.expiryDate),
     lastServiceDate: v.lastServiceDate || v.testDate || '',
-    testDate: formatDate(v.lastServiceDate || v.testDate || new Date().toISOString().split('T')[0]),
-    testNumber: v.testNumber || '8910 2345 6789',
-    mileage: formatMileage(v.mileage || (v.motTests && v.motTests[0]?.odometerValue ? `${v.motTests[0].odometerValue} ${v.motTests[0].odometerUnit || 'mi'}` : '45,000 miles')),
-    advisories,
-    failures,
+    testDate: formatDate(v.lastServiceDate || v.testDate),
+    testNumber: v.testNumber || '',
+    mileage: formatMileage(v.mileage || (latestTest?.odometerValue ? `${latestTest.odometerValue} ${latestTest.odometerUnit || 'mi'}` : '')),
+    advisories: v.advisories || [],
+    failures: v.failures || [],
     motTests: v.motTests || null
   };
 };
@@ -1145,6 +1118,8 @@ export default function HomeScreen({ navigation }: any) {
             ) : (
               searchHistory.slice(0, 5).map((item) => {
                 const isPass = item.status === 'PASS';
+                const isNotDue = item.status === 'NOT DUE';
+                const badgeColor = isNotDue ? '#3B82F6' : isPass ? '#10B981' : '#EF4444';
                 const daysDiff = (() => {
                   if (!item.expiryDate || item.expiryDate === 'N/A') return null;
                   const d = new Date(item.expiryDate);
@@ -1183,7 +1158,7 @@ export default function HomeScreen({ navigation }: any) {
                           <View style={styles.recentExpiryRow}>
                             <MaterialCommunityIcons name="calendar-clock" size={13} color={theme.colors.placeholder} style={{ marginRight: 4 }} />
                             <Text style={[styles.recentExpiryText, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                              MOT: {item.expiryDate}{' '}
+                              {isNotDue ? 'First MOT' : 'MOT'}: {item.expiryDate}{' '}
                               {daysDiff !== null && (
                                 <Text style={{ color: daysDiff <= 30 ? (daysDiff <= 7 ? '#EF4444' : '#F59E0B') : '#10B981', fontFamily: fonts.bold }}>
                                   ({daysDiff >= 0 ? `${daysDiff} days left` : `${Math.abs(daysDiff)} days ago`})
@@ -1200,21 +1175,21 @@ export default function HomeScreen({ navigation }: any) {
                           style={[
                             styles.statusBadge,
                             { 
-                              backgroundColor: isPass ? '#10B98118' : '#EF444418',
-                              borderColor: isPass ? '#10B98140' : '#EF444440',
+                              backgroundColor: badgeColor + '18',
+                              borderColor: badgeColor + '40',
                             },
                           ]}
                         >
                           <MaterialCommunityIcons 
-                            name={isPass ? 'check-circle' : 'alert-circle'} 
+                            name={isNotDue ? 'calendar-clock' : isPass ? 'check-circle' : 'alert-circle'} 
                             size={12} 
-                            color={isPass ? '#10B981' : '#EF4444'} 
+                            color={badgeColor} 
                             style={{ marginRight: 3 }} 
                           />
                           <Text
                             style={[
                               styles.statusText,
-                              { color: isPass ? '#10B981' : '#EF4444' },
+                              { color: badgeColor },
                             ]}
                           >
                             {item.status}

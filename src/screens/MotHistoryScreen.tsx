@@ -339,7 +339,7 @@ export default function MotHistoryScreen({ route, navigation }: any) {
       const makeClean = (vehicle.make || 'VEHICLE').trim().toUpperCase();
       const modelClean = (vehicle.model || 'MODEL').trim().toUpperCase();
       const yearClean = String(vehicle.year || '2018').trim();
-      const targetExpiry = stats.latest?.expiryDate || vehicle.motExpiryDate || vehicle.expiryDate;
+      const targetExpiry = stats.latest?.expiryDate || vehicle.motExpiryDate || vehicle.motTestDueDate || vehicle.expiryDate;
       const expiryFormatted = formatToYyyyMmDd(targetExpiry);
 
       await addVehicle({
@@ -498,30 +498,13 @@ export default function MotHistoryScreen({ route, navigation }: any) {
     );
   }
 
-  if (allMotTests.length === 0) {
-    const vehicleName = [vehicle.make, vehicle.model].filter(Boolean).join(' ');
-    return (
-      <View style={[styles.centerContainer, { backgroundColor: theme.colors.background }]}>
-        <View style={[styles.errorIconCircle, { backgroundColor: theme.colors.placeholder + '15' }]}>
-          <MaterialCommunityIcons name="file-search-outline" size={54} color={theme.colors.placeholder} />
-        </View>
-        <Text style={[styles.errorTitle, { color: theme.colors.text }]}>No MOT Records Found</Text>
-        <Text style={[styles.errorSubtitle, { color: theme.colors.placeholder }]}>
-          {`There are no MOT test records for ${regNumber || 'this vehicle'}${vehicleName ? ` (${vehicleName})` : ''}. Vehicles don't need an MOT until they are 3 years old.`}
-        </Text>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.errorBackBtn}
-        >
-          <Text style={[styles.errorBackBtnText, { color: theme.colors.secondary }]}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   const latestTest = stats.latest;
   const isCurrentlyValid = latestTest?.testResult === 'PASSED';
   const latestDaysRemaining = getDaysRemaining(latestTest?.expiryDate);
+  // Vehicles under 3 years old have no tests yet - DVSA gives their first MOT due date instead
+  const hasTests = allMotTests.length > 0;
+  const firstMotDueDate: string = vehicle.motTestDueDate || '';
+  const firstMotDaysRemaining = getDaysRemaining(firstMotDueDate);
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -568,15 +551,26 @@ export default function MotHistoryScreen({ route, navigation }: any) {
               </View>
             ) : null}
 
-            <View style={[styles.specPill, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-              <MaterialCommunityIcons name="gas-station" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
-              <Text style={[styles.specPillText, { color: theme.colors.text }]}>{vehicle.fuelType || 'Petrol'}</Text>
-            </View>
+            {vehicle.fuelType ? (
+              <View style={[styles.specPill, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="gas-station" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
+                <Text style={[styles.specPillText, { color: theme.colors.text }]}>{vehicle.fuelType}</Text>
+              </View>
+            ) : null}
 
-            <View style={[styles.specPill, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-              <MaterialCommunityIcons name="palette-outline" size={12} color="#8B5CF6" style={{ marginRight: 4 }} />
-              <Text style={[styles.specPillText, { color: theme.colors.text }]}>{vehicle.color || 'Grey'}</Text>
-            </View>
+            {vehicle.color ? (
+              <View style={[styles.specPill, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="palette-outline" size={12} color="#8B5CF6" style={{ marginRight: 4 }} />
+                <Text style={[styles.specPillText, { color: theme.colors.text }]}>{vehicle.color}</Text>
+              </View>
+            ) : null}
+
+            {vehicle.registrationDate ? (
+              <View style={[styles.specPill, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="card-account-details-outline" size={12} color={theme.colors.secondary} style={{ marginRight: 4 }} />
+                <Text style={[styles.specPillText, { color: theme.colors.text }]}>Registered {formatDate(vehicle.registrationDate)}</Text>
+              </View>
+            ) : null}
 
             {vehicle.engineSize ? (
               <View style={[styles.specPill, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
@@ -622,6 +616,52 @@ export default function MotHistoryScreen({ route, navigation }: any) {
           )}
         </View>
 
+        {!hasTests ? (
+          /* No tests yet - show the first MOT due date like GOV.UK does */
+          <View style={[styles.statusHeroCard, { backgroundColor: '#3B82F60A', borderColor: '#3B82F640' }]}>
+            <View style={styles.statusHeroTop}>
+              <View style={[styles.statusHeroIconCircle, { backgroundColor: '#3B82F620' }]}>
+                <MaterialCommunityIcons name="calendar-clock" size={34} color="#3B82F6" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={styles.statusHeroBadgeRow}>
+                  <View style={[styles.statusPill, { backgroundColor: '#3B82F6' }]}>
+                    <Text style={styles.statusPillText}>{firstMotDueDate ? 'FIRST MOT NOT DUE YET' : 'NO MOT RECORDS'}</Text>
+                  </View>
+                  {firstMotDaysRemaining !== null && (
+                    <View
+                      style={[
+                        styles.daysPill,
+                        {
+                          backgroundColor: firstMotDaysRemaining >= 0 ? '#3B82F615' : '#EF444415',
+                          borderColor: firstMotDaysRemaining >= 0 ? '#3B82F635' : '#EF444435',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.daysPillText, { color: firstMotDaysRemaining >= 0 ? '#3B82F6' : '#EF4444' }]}>
+                        {firstMotDaysRemaining >= 0 ? `${firstMotDaysRemaining}d remaining` : `${Math.abs(firstMotDaysRemaining)}d overdue`}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <Text style={[styles.statusHeroExpiry, { color: theme.colors.text }]}>
+                  {firstMotDueDate ? (
+                    <>
+                      First MOT due: <Text style={{ fontFamily: fonts.bold }}>{formatDate(firstMotDueDate)}</Text>
+                    </>
+                  ) : (
+                    `There are no MOT test records for ${regNumber || 'this vehicle'}.`
+                  )}
+                </Text>
+                <Text style={[styles.firstMotNote, { color: theme.colors.placeholder }]}>
+                  Vehicles don't need an MOT until they are 3 years old.
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+        <>
         {/* Live MOT Status Hero Card */}
         <View
           style={[
@@ -1006,6 +1046,8 @@ export default function MotHistoryScreen({ route, navigation }: any) {
             })
           )}
         </View>
+        </>
+        )}
 
         <View style={{ height: 90 }} />
       </ScrollView>
@@ -1050,7 +1092,9 @@ export default function MotHistoryScreen({ route, navigation }: any) {
                 </View>
               </View>
               <Text style={[styles.bottomBarHint, { color: theme.colors.placeholder }]}>
-                {isCurrentlyValid ? 'Book next service or MOT early' : 'Urgent: service or test needed'}
+                {!hasTests
+                  ? (firstMotDueDate ? `First MOT due ${formatDate(firstMotDueDate)}` : 'Book a service or MOT')
+                  : isCurrentlyValid ? 'Book next service or MOT early' : 'Urgent: service or test needed'}
               </Text>
             </View>
 
@@ -1300,6 +1344,11 @@ const styles = StyleSheet.create({
   daysPillText: {
     fontFamily: fonts.semiBold,
     fontSize: 11,
+  },
+  firstMotNote: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    marginTop: 4,
   },
   statusHeroExpiry: {
     fontFamily: fonts.medium,
