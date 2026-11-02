@@ -14,6 +14,7 @@ import {
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -728,6 +729,7 @@ export default function BookingsScreen({ navigation }: any) {
         const item = selectedBookingForDetails;
         const statusCfg = getStatusConfig(item.status);
         const garageDisplayName = item.garageName || item.stationName || item.garage?.name || 'Service & Garage Centre';
+        const garageLogoUrl = item.garageLogo || item.garage?.logoUrl || (typeof item.garageId === 'object' ? item.garageId?.logoUrl : null);
         const garageAddressStr = [
           item.garageAddress || item.garage?.address,
           item.garageCity || item.garage?.city,
@@ -916,7 +918,19 @@ export default function BookingsScreen({ navigation }: any) {
                           <Text style={[styles.sheetSectionHeading, { color: theme.colors.placeholder }]}>GARAGE & LOCATION</Text>
 
                           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
-                            <MaterialCommunityIcons name="storefront-outline" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                            {garageLogoUrl ? (
+                              <Image
+                                source={{ uri: garageLogoUrl }}
+                                style={{ width: 26, height: 26, borderRadius: 6, marginRight: 8 }}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View style={{ width: 26, height: 26, borderRadius: 6, backgroundColor: theme.colors.primary + '18', alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                                <Text style={{ fontFamily: fonts.bold, fontSize: 13, color: theme.colors.primary }}>
+                                  {(garageDisplayName || 'G').charAt(0).toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
                             <Text style={[styles.sheetGarageName, { color: theme.colors.text }]} numberOfLines={1}>
                               {garageDisplayName}
                             </Text>

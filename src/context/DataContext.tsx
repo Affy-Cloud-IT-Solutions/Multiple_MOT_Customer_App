@@ -175,6 +175,8 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+// Local development backend (port 5000 reverse-tunneled to connected Android device via adb reverse: adb reverse tcp:5000 tcp:5000)
+// export const BASE_URL = 'https://api.ondoorcarservice.com/api';
 export const BASE_URL = 'https://api.ondoorcarservice.com/api';
 
 const DISMISSED_ALERTS_KEY = '@dismissed_alert_ids';

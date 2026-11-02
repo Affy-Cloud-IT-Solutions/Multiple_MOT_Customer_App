@@ -860,7 +860,7 @@ export default function HomeScreen({ navigation }: any) {
           ) : (
             <View style={styles.garagesVerticalList}>
               {sortedGarages.slice(0, 6).map((garage: any) => {
-                const coverUri = garage.coverImage || (garage.images && garage.images.length > 0 ? garage.images[0] : garage.logoUrl);
+                const garageLogo = garage.logoUrl || (garage.images && garage.images.length > 0 ? garage.images[0] : null);
                 const distanceText = garage.calculatedDistance ? `${garage.calculatedDistance.toFixed(1)} mi` : (garage.city || 'Nearby');
                 const servicesList = getGarageServices(garage);
 
@@ -882,11 +882,13 @@ export default function HomeScreen({ navigation }: any) {
                       style={styles.garageVerticalTopRow}
                     >
                       <View style={styles.garageVerticalLogoWrap}>
-                        {coverUri ? (
-                          <Image source={{ uri: coverUri }} style={styles.garageVerticalLogo} />
+                        {garageLogo ? (
+                          <Image source={{ uri: garageLogo }} style={styles.garageVerticalLogo} />
                         ) : (
                           <View style={[styles.garageVerticalLogoPlaceholder, { backgroundColor: theme.colors.secondary + '15' }]}>
-                            <MaterialCommunityIcons name="storefront" size={26} color={theme.colors.secondary} />
+                            <Text style={{ fontFamily: fonts.bold, fontSize: 18, color: theme.colors.secondary }}>
+                              {getUserInitials(garage.name)}
+                            </Text>
                           </View>
                         )}
                       </View>

@@ -441,7 +441,7 @@ export default function GarageListScreen({ route, navigation }: any) {
         })}
       >
         <GarageLogo 
-          uri={item.coverImage || item.logoUrl || (item.images && item.images.length > 0 ? item.images[0] : null)} 
+          uri={item.logoUrl || item.coverImage || (item.images && item.images.length > 0 ? item.images[0] : null)} 
           name={item.name} 
           theme={theme} 
         />
