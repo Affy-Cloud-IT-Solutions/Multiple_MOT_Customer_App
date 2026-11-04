@@ -132,76 +132,59 @@ interface BookableServiceItem {
   garageCount?: number;
 }
 
-const DEFAULT_BOOKABLE_SERVICES: BookableServiceItem[] = [
-  {
-    id: 'cat_mot',
-    title: 'MOT',
-    name: 'MOT',
-    category: 'MOT',
-    icon: 'shield-check',
-    iconBg: '#10B98115',
-    iconColor: '#10B981',
-    searchQuery: 'MOT',
-    price: 45,
-    duration: 45,
-    description: 'Annual DVSA Class 4 vehicle safety & roadworthiness inspection',
-  },
-  {
-    id: 'cat_servicing',
-    title: 'Servicing',
-    name: 'Servicing',
-    category: 'Servicing',
-    icon: 'car-cog',
-    iconBg: '#1677FF15',
-    iconColor: '#1677FF',
-    searchQuery: 'Servicing',
-    price: 79,
-    duration: 60,
-    description: 'Full, interim and major scheduled vehicle servicing',
-  },
-  {
-    id: 'cat_tyres',
-    title: 'Tyres',
-    name: 'Tyres',
-    category: 'Tyres',
-    icon: 'tire',
-    iconBg: '#F59E0B15',
-    iconColor: '#F59E0B',
-    searchQuery: 'Tyres',
-    price: 65,
-    duration: 45,
-    description: 'Tyre fitting, puncture repairs, balancing and wheel alignment',
-  },
-  {
-    id: 'cat_repairs',
-    title: 'Repairs',
-    name: 'Repairs',
-    category: 'Repairs',
-    icon: 'hammer-wrench',
-    iconBg: '#EC489915',
-    iconColor: '#EC4899',
-    searchQuery: 'Repairs',
-    price: 65,
-    duration: 60,
-    description: 'Mechanical diagnostics, brakes, suspension and general repairs',
-  },
-];
-
 const resolveServiceIcon = (name: string = '', category: string = '') => {
   const s = `${name} ${category}`.toLowerCase();
   if (/\bmot\b/i.test(s)) return { icon: 'shield-check', iconColor: '#10B981', iconBg: '#10B98115' };
   if (s.includes('full')) return { icon: 'car-cog', iconColor: '#1677FF', iconBg: '#1677FF15' };
-  if (s.includes('interim') || s.includes('oil')) return { icon: 'oil', iconColor: '#8B5CF6', iconBg: '#8B5CF615' };
+  if (s.includes('interim') || /\boil\b/i.test(s)) return { icon: 'oil', iconColor: '#8B5CF6', iconBg: '#8B5CF615' };
   if (s.includes('major')) return { icon: 'car-wrench', iconColor: '#D97706', iconBg: '#F59E0B15' };
-  if (s.includes('brake') || s.includes('pad') || s.includes('disc')) return { icon: 'car-brake-alert', iconColor: '#EF4444', iconBg: '#EF444415' };
-  if (s.includes('tyre') || s.includes('tire') || s.includes('track') || s.includes('wheel') || s.includes('align')) return { icon: 'tire', iconColor: '#F59E0B', iconBg: '#F59E0B15' };
-  if (s.includes('diag') || s.includes('scan') || s.includes('fault') || s.includes('ecu')) return { icon: 'engine', iconColor: '#06B6D4', iconBg: '#06B6D415' };
-  if (s.includes('air') || s.includes('ac') || s.includes('regas') || s.includes('condit')) return { icon: 'snowflake', iconColor: '#3B82F6', iconBg: '#3B82F615' };
-  if (s.includes('exhaust') || s.includes('dpf') || s.includes('emission') || s.includes('pipe')) return { icon: 'pipe', iconColor: '#6366F1', iconBg: '#6366F115' };
-  if (s.includes('battery') || s.includes('electric') || s.includes('alternator')) return { icon: 'car-battery', iconColor: '#EAB308', iconBg: '#EAB30815' };
   if (s.includes('clutch') || s.includes('gear') || s.includes('flywheel') || s.includes('transmiss')) return { icon: 'cog-sync', iconColor: '#9333EA', iconBg: '#9333EA15' };
+  if (s.includes('brake') || s.includes('pad') || s.includes('disc')) return { icon: 'car-brake-alert', iconColor: '#EF4444', iconBg: '#EF444415' };
+  if (s.includes('battery') || s.includes('electric') || s.includes('alternator')) return { icon: 'car-battery', iconColor: '#EAB308', iconBg: '#EAB30815' };
   if (s.includes('suspension') || s.includes('spring') || s.includes('shock') || s.includes('strut')) return { icon: 'car-traction-control', iconColor: '#4F46E5', iconBg: '#4F46E515' };
+  if (s.includes('tyre') || s.includes('tire') || s.includes('track') || (s.includes('wheel') && !s.includes('flywheel')) || s.includes('align')) return { icon: 'tire', iconColor: '#F59E0B', iconBg: '#F59E0B15' };
+  if (s.includes('diag') || s.includes('scan') || s.includes('fault') || s.includes('ecu')) return { icon: 'engine', iconColor: '#06B6D4', iconBg: '#06B6D415' };
+  if (/\b(air\s*con|aircon|air\s*conditioning|regas|ac)\b/i.test(s) || s.includes('condit')) return { icon: 'snowflake', iconColor: '#3B82F6', iconBg: '#3B82F615' };
+  if (s.includes('exhaust') || s.includes('dpf') || s.includes('emission') || s.includes('pipe') || s.includes('silencer') || s.includes('muffler')) return { icon: 'pipe', iconColor: '#6366F1', iconBg: '#6366F115' };
   return { icon: 'wrench', iconColor: '#EC4899', iconBg: '#EC489915' };
+};
+
+const resolveCategoryDetails = (category: string = '', name: string = '') => {
+  const c = (category || '').toLowerCase().trim();
+  const n = (name || '').toLowerCase().trim();
+  const combined = `${c} ${n}`;
+
+  if (/\bmot\b/i.test(combined)) {
+    return { category: category || 'MOT', icon: 'shield-check', iconColor: '#10B981', iconBg: '#10B98118' };
+  }
+  if (combined.includes('service') || combined.includes('oil') || combined.includes('interim') || combined.includes('major')) {
+    return { category: category || 'Servicing', icon: 'car-cog', iconColor: '#1677FF', iconBg: '#1677FF18' };
+  }
+  if (combined.includes('brake') || combined.includes('pad') || combined.includes('disc')) {
+    return { category: category || 'Brakes', icon: 'car-brake-alert', iconColor: '#EF4444', iconBg: '#EF444418' };
+  }
+  if (combined.includes('tyre') || combined.includes('tire') || combined.includes('wheel') || combined.includes('track') || combined.includes('align')) {
+    return { category: category || 'Tyres', icon: 'tire', iconColor: '#F59E0B', iconBg: '#F59E0B18' };
+  }
+  if (combined.includes('diag') || combined.includes('scan') || combined.includes('ecu') || combined.includes('fault')) {
+    return { category: category || 'Diagnostics', icon: 'engine', iconColor: '#06B6D4', iconBg: '#06B6D418' };
+  }
+  if (/\b(air\s*con|aircon|air\s*conditioning|regas|ac)\b/i.test(combined) || combined.includes('condit')) {
+    return { category: category || 'Air Conditioning', icon: 'snowflake', iconColor: '#3B82F6', iconBg: '#3B82F618' };
+  }
+  if (combined.includes('battery') || combined.includes('electric') || combined.includes('alternator')) {
+    return { category: category || 'Battery & Electrical', icon: 'car-battery', iconColor: '#EAB308', iconBg: '#EAB30818' };
+  }
+  if (combined.includes('exhaust') || combined.includes('dpf') || combined.includes('emission')) {
+    return { category: category || 'Exhaust', icon: 'pipe', iconColor: '#6366F1', iconBg: '#6366F118' };
+  }
+  if (combined.includes('clutch') || combined.includes('gear') || combined.includes('flywheel')) {
+    return { category: category || 'Clutch & Transmission', icon: 'cog-sync', iconColor: '#9333EA', iconBg: '#9333EA18' };
+  }
+  if (combined.includes('suspension') || combined.includes('spring') || combined.includes('shock') || combined.includes('strut')) {
+    return { category: category || 'Suspension', icon: 'car-traction-control', iconColor: '#4F46E5', iconBg: '#4F46E518' };
+  }
+  return { category: category || 'Others', icon: 'dots-horizontal-circle-outline', iconColor: '#8B5CF6', iconBg: '#8B5CF618' };
 };
 
 const ServicesSkeletonCarousel = ({ isDarkMode }: { isDarkMode: boolean }) => {
@@ -334,22 +317,25 @@ export default function HomeScreen({ navigation }: any) {
   // Dynamic Service Categories from Super Admin (MOT, Servicing, Tyres, Repairs...)
   const dynamicBookableServices = useMemo<BookableServiceItem[]>(() => {
     if (Array.isArray(serviceCategories) && serviceCategories.length > 0) {
-      return serviceCategories.map((cat, idx) => ({
-        id: cat._id || cat.id || `cat_${idx}`,
-        title: cat.name,
-        name: cat.name,
-        category: cat.name,
-        icon: cat.icon || 'wrench',
-        iconBg: cat.iconBg || '#1677FF15',
-        iconColor: cat.iconColor || '#1677FF',
-        searchQuery: cat.name,
-        price: 45,
-        duration: 45,
-        description: cat.description || '',
-      }));
+      return serviceCategories.map((cat, idx) => {
+        const design = resolveServiceIcon(cat.name, cat.name);
+        return {
+          id: cat._id || cat.id || `cat_${idx}`,
+          title: cat.name,
+          name: cat.name,
+          category: cat.name,
+          icon: cat.icon && cat.icon !== 'wrench' ? cat.icon : design.icon,
+          iconBg: cat.iconBg || design.iconBg,
+          iconColor: cat.iconColor || design.iconColor,
+          searchQuery: cat.name,
+          price: 45,
+          duration: 45,
+          description: cat.description || '',
+        };
+      });
     }
 
-    return DEFAULT_BOOKABLE_SERVICES;
+    return [];
   }, [serviceCategories]);
 
   const getGarageServices = (garage: any) => {
@@ -358,27 +344,50 @@ export default function HomeScreen({ navigation }: any) {
       if (activeSvcs.length > 0) {
         return activeSvcs.map((s: any) => {
           const sName = s.name || 'Service';
-          const iconDetails = resolveServiceIcon(sName, s.category);
+          const sCategory = s.category || '';
+
+          // Match with Super Admin configured category if present
+          const matchedCategory = Array.isArray(serviceCategories)
+            ? serviceCategories.find((c: any) => c.name && sCategory && c.name.toLowerCase().trim() === sCategory.toLowerCase().trim())
+            : null;
+
+          const catDesign = resolveCategoryDetails(sCategory, sName);
+          const categoryName = matchedCategory?.name || sCategory || catDesign.category;
+          const categoryIcon = matchedCategory?.icon && matchedCategory.icon !== 'wrench' ? matchedCategory.icon : catDesign.icon;
+          const categoryColor = matchedCategory?.iconColor || catDesign.iconColor;
+          const categoryBg = matchedCategory?.iconBg || catDesign.iconBg;
+
           return {
             id: s._id || s.id || sName,
             name: sName,
-            price: s.price || 45,
+            category: categoryName,
+            categoryIcon,
+            categoryColor,
+            categoryBg,
+            price: s.price !== undefined ? Number(s.price) : 45,
             duration: s.duration,
-            icon: iconDetails.icon,
-            iconColor: iconDetails.iconColor,
+            icon: categoryIcon,
+            iconColor: categoryColor,
+            iconBg: categoryBg,
           };
         });
       }
     }
     // Default fallback if garage has not explicitly configured custom services
+    const motDesign = resolveCategoryDetails('MOT', 'MOT Test');
     return [
       {
         id: 'mot_default',
         name: 'MOT Test',
+        category: 'MOT',
+        categoryIcon: motDesign.icon,
+        categoryColor: motDesign.iconColor,
+        categoryBg: motDesign.iconBg,
         price: 45,
         duration: 45,
-        icon: 'shield-check',
-        iconColor: '#10B981',
+        icon: motDesign.icon,
+        iconColor: motDesign.iconColor,
+        iconBg: motDesign.iconBg,
       },
     ];
   };
@@ -726,6 +735,7 @@ export default function HomeScreen({ navigation }: any) {
         </View>
 
         {/* 3. Book a Service Catalog */}
+        {dynamicBookableServices.length > 0 && (
         <View style={styles.servicesSectionWrap}>
           <View style={styles.servicesSectionHeader}>
             <View style={styles.servicesHeaderTitleRow}>
@@ -774,6 +784,7 @@ export default function HomeScreen({ navigation }: any) {
             </ScrollView>
           )}
         </View>
+        )}
 
         {/* 4. Local Garages (Vertical Garages with Horizontal Services Below Each) */}
         <View style={styles.nearbyGaragesSectionWrap}>
@@ -898,12 +909,6 @@ export default function HomeScreen({ navigation }: any) {
                           <Text style={[styles.garageVerticalName, { color: theme.colors.text }]} numberOfLines={1}>
                             {garage.name}
                           </Text>
-                          <View style={styles.garageRatingChip}>
-                            <MaterialCommunityIcons name="star" size={11} color="#F59E0B" style={{ marginRight: 2 }} />
-                            <Text style={styles.garageRatingText}>
-                              {garage.rating ? Number(garage.rating).toFixed(1) : '4.8'}
-                            </Text>
-                          </View>
                         </View>
 
                         <View style={styles.garageMetaRow}>
@@ -950,10 +955,24 @@ export default function HomeScreen({ navigation }: any) {
                               { backgroundColor: theme.colors.background, borderColor: theme.colors.border },
                             ]}
                           >
-                            <View style={[styles.serviceChipIconWrap, { backgroundColor: svc.iconColor + '15' }]}>
-                              <MaterialCommunityIcons name={svc.icon} size={14} color={svc.iconColor} />
+                            <View style={[styles.serviceChipIconWrap, { backgroundColor: svc.categoryBg || (svc.categoryColor + '18') }]}>
+                              <MaterialCommunityIcons name={svc.categoryIcon || svc.icon} size={15} color={svc.categoryColor || svc.iconColor} />
                             </View>
                             <View style={styles.serviceChipTextCol}>
+                              <View style={styles.serviceChipCategoryRow}>
+                                <MaterialCommunityIcons
+                                  name={svc.categoryIcon || svc.icon}
+                                  size={10}
+                                  color={svc.categoryColor || theme.colors.secondary}
+                                  style={{ marginRight: 3 }}
+                                />
+                                <Text
+                                  style={[styles.serviceChipCategoryText, { color: svc.categoryColor || theme.colors.secondary }]}
+                                  numberOfLines={1}
+                                >
+                                  {svc.category}
+                                </Text>
+                              </View>
                               <Text style={[styles.serviceChipTitle, { color: theme.colors.text }]} numberOfLines={1}>
                                 {svc.name}
                               </Text>
@@ -1705,34 +1724,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingVertical: 8,
+    borderRadius: 11,
     borderWidth: 1,
-    marginRight: 8,
+    marginRight: 9,
   },
   serviceChipIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 7,
+    marginRight: 8,
   },
   serviceChipTextCol: {
     marginRight: 8,
+    justifyContent: 'center',
+  },
+  serviceChipCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  serviceChipCategoryText: {
+    fontFamily: fonts.bold,
+    fontSize: 9.5,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   serviceChipTitle: {
     fontFamily: fonts.bold,
-    fontSize: 11.5,
+    fontSize: 12,
+    maxWidth: 140,
   },
   serviceChipPrice: {
     fontFamily: fonts.bold,
-    fontSize: 11.5,
+    fontSize: 12,
+    marginTop: 1,
   },
   serviceChipBookBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: 6,
+    marginLeft: 4,
   },
   serviceChipBookBtnText: {
     fontFamily: fonts.bold,

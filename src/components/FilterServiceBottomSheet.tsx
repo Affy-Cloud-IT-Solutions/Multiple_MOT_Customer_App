@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,245 +13,70 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
+import { useAppValues } from '../context/DataContext';
+import { fonts } from '../theme/theme';
 
 export interface ServiceItem {
   id: string;
   title: string;
+  name?: string;
   keyword: string;
   category: string;
   icon: string;
   iconColor: string;
   iconBg: string;
   description: string;
+  price?: number;
+  minPrice?: number;
+  duration?: number;
+  garageCount?: number;
 }
 
-export const SERVICE_CATEGORIES = [
-  'All',
-  'MOT',
-  'Servicing',
-  'Tyres',
-  'Repairs',
-] as const;
-
-export const POPULAR_SERVICES: ServiceItem[] = [
-  {
-    id: 'mot_test',
-    title: 'MOT Test',
-    keyword: 'MOT',
-    category: 'MOT',
-    icon: 'shield-check',
-    iconColor: '#10B981',
-    iconBg: '#10B98115',
-    description: 'Class 4 annual DVSA vehicle MOT inspection',
-  },
-  {
-    id: 'full_service',
-    title: 'Full Service',
-    keyword: 'Full Service',
-    category: 'Servicing',
-    icon: 'car-cog',
-    iconColor: '#1677FF',
-    iconBg: '#1677FF15',
-    description: 'Comprehensive annual full car service',
-  },
-  {
-    id: 'interim_service',
-    title: 'Interim Service',
-    keyword: 'Interim Service',
-    category: 'Servicing',
-    icon: 'oil',
-    iconColor: '#8B5CF6',
-    iconBg: '#8B5CF615',
-    description: '6-month / 6,000 miles oil & filter inspection',
-  },
-  {
-    id: 'major_service',
-    title: 'Major Service',
-    keyword: 'Major Service',
-    category: 'Servicing',
-    icon: 'car-wrench',
-    iconColor: '#D97706',
-    iconBg: '#F59E0B15',
-    description: '24-month complete overhaul & spark plugs',
-  },
-  {
-    id: 'brakes',
-    title: 'Brakes & Discs',
-    keyword: 'Brake',
-    category: 'Brakes & Tyres',
-    icon: 'car-brake-alert',
-    iconColor: '#EF4444',
-    iconBg: '#EF444415',
-    description: 'Brake pads, discs inspection & replacement',
-  },
-  {
-    id: 'tyres',
-    title: 'Tyres & Tracking',
-    keyword: 'Tyre',
-    category: 'Brakes & Tyres',
-    icon: 'tire',
-    iconColor: '#F59E0B',
-    iconBg: '#F59E0B15',
-    description: 'Tyre fitting, balancing & wheel alignment',
-  },
-  {
-    id: 'diagnostics',
-    title: 'Diagnostics Scan',
-    keyword: 'Diagnostic',
-    category: 'Diagnostics',
-    icon: 'engine',
-    iconColor: '#06B6D4',
-    iconBg: '#06B6D415',
-    description: 'Engine ECU fault codes reading & diagnosis',
-  },
-  {
-    id: 'air_con',
-    title: 'Air Con Regas',
-    keyword: 'Air Con',
-    category: 'Diagnostics',
-    icon: 'snowflake',
-    iconColor: '#0284C7',
-    iconBg: '#0284C715',
-    description: 'Air conditioning recharge & gas pressure test',
-  },
-  {
-    id: 'battery',
-    title: 'Battery & Electrical',
-    keyword: 'Battery',
-    category: 'Diagnostics',
-    icon: 'car-battery',
-    iconColor: '#EA580C',
-    iconBg: '#EA580C15',
-    description: 'Battery testing, replacement & alternator check',
-  },
-  {
-    id: 'clutch',
-    title: 'Clutch & Gearbox',
-    keyword: 'Clutch',
-    category: 'Repairs',
-    icon: 'cog-sync',
-    iconColor: '#9333EA',
-    iconBg: '#9333EA15',
-    description: 'Clutch kit, dual mass flywheel & gearbox',
-  },
-  {
-    id: 'suspension',
-    title: 'Suspension & Steering',
-    keyword: 'Suspension',
-    category: 'Brakes & Tyres',
-    icon: 'car-traction-control',
-    iconColor: '#4F46E5',
-    iconBg: '#4F46E515',
-    description: 'Shock absorbers, coil springs & ball joints',
-  },
-  {
-    id: 'exhaust',
-    title: 'Exhaust & Emissions',
-    keyword: 'Exhaust',
-    category: 'Repairs',
-    icon: 'smoke',
-    iconColor: '#059669',
-    iconBg: '#05966915',
-    description: 'Exhaust repair, catalytic converter & DPF clean',
-  },
-  {
-    id: 'repairs',
-    title: 'General Repairs',
-    keyword: 'Repair',
-    category: 'Repairs',
-    icon: 'wrench',
-    iconColor: '#EC4899',
-    iconBg: '#EC489915',
-    description: 'General mechanical & electrical auto repairs',
-  },
-];
-
+// Matching logic for garage search / filtering
 export const isServiceMatch = (service: any, filterKey: string): boolean => {
   if (!service || !filterKey) return false;
-  // If service is explicitly deactivated, don't match
-  if (service.isActive === false || service.isActive === 'false' || service.status === 'Inactive') return false;
+  if (
+    service.isActive === false ||
+    service.isActive === 'false' ||
+    service.status === 'Inactive' ||
+    service.status === 'Rejected' ||
+    service.status === 'Pending'
+  ) {
+    return false;
+  }
 
   const key = filterKey.trim().toLowerCase();
-  const name = (service.name || '').trim().toLowerCase();
+  const name = (service.name || service.title || '').trim().toLowerCase();
   const category = (service.category || '').trim().toLowerCase();
 
-  // 0. Direct case-insensitive equality (exact match for any custom service e.g. Service A, Service B, Service C)
+  // Match by ID if filterKey is an ID or exact ref
+  if (service.serviceId && String(service.serviceId).toLowerCase().trim() === key) return true;
+  if (service._id && String(service._id).toLowerCase().trim() === key) return true;
+  if (service.id && String(service.id).toLowerCase().trim() === key) return true;
+
+  // 1. Direct equality
   if (name === key) return true;
 
-  // 1. MOT Specific matching (Word boundary or category, avoid matching words like 'motor' or descriptions)
-  if (key === 'mot' || key === 'mot test' || /\bmot\b/i.test(key)) {
-    const isMotCategory = category === 'mot';
-    const isMotName = /\bmot\b/i.test(name) || name === 'mot' || name.includes('mot test');
-    return isMotCategory || isMotName;
+  // 2. MOT Specific
+  if (key === 'mot' || key === 'mot test') {
+    return /\bmot\b/i.test(name) || category === 'mot';
   }
 
-  // 2. Full Service specific matching
-  if (key.includes('full service') || key === 'full') {
-    return name.includes('full') || category.includes('full');
-  }
+  // 3. Service specific keywords
+  if (key.includes('full service')) return name.includes('full') && (name.includes('service') || category.includes('service'));
+  if (key.includes('interim')) return name.includes('interim');
+  if (key.includes('major')) return name.includes('major');
+  if (key.includes('brake')) return name.includes('brake');
+  if (key.includes('tyre') || key.includes('tire')) return name.includes('tyre') || name.includes('tire') || category.includes('tyre');
+  if (key.includes('diag') || key.includes('scan')) return name.includes('diag') || name.includes('scan');
+  if (key.includes('air con') || key.includes('ac')) return name.includes('air') || name.includes('ac');
+  if (key.includes('battery')) return name.includes('battery');
+  if (key.includes('clutch')) return name.includes('clutch');
+  if (key.includes('suspension')) return name.includes('suspension');
+  if (key.includes('exhaust')) return name.includes('exhaust');
 
-  // 3. Interim Service specific matching
-  if (key.includes('interim')) {
-    return name.includes('interim') || category.includes('interim');
-  }
-
-  // 4. Major Service specific matching
-  if (key.includes('major')) {
-    return name.includes('major') || category.includes('major');
-  }
-
-  // 5. Brake specific matching
-  if (key.includes('brake')) {
-    return name.includes('brake') || category.includes('brake');
-  }
-
-  // 6. Tyre / Tire specific matching
-  if (key.includes('tyre') || key.includes('tire')) {
-    return (
-      name.includes('tyre') ||
-      name.includes('tire') ||
-      category.includes('tyre') ||
-      category.includes('tire')
-    );
-  }
-
-  // 7. Diagnostic specific matching
-  if (key.includes('diag') || key.includes('scan')) {
-    return name.includes('diag') || category.includes('diag') || name.includes('scan');
-  }
-
-  // 8. Air Con / AC specific matching
-  if (key.includes('air') || key.includes('ac')) {
-    return (
-      name.includes('air') ||
-      name.includes('ac') ||
-      category.includes('air') ||
-      category.includes('conditioning')
-    );
-  }
-
-  // 9. Clutch / Gearbox
-  if (key.includes('clutch') || key.includes('gear')) {
-    return name.includes('clutch') || name.includes('gear') || category.includes('clutch');
-  }
-
-  // 10. Suspension / Steering
-  if (key.includes('suspension') || key.includes('steering') || key.includes('shock')) {
-    return name.includes('suspension') || name.includes('steering') || name.includes('shock') || category.includes('suspension');
-  }
-
-  // 11. Exhaust / Emission
-  if (key.includes('exhaust') || key.includes('dpf') || key.includes('emission')) {
-    return name.includes('exhaust') || name.includes('dpf') || category.includes('exhaust');
-  }
-
-  // 12. General match by name or category (case-insensitive)
-  return (
-    name.includes(key) ||
-    key.includes(name) ||
-    category.includes(key) ||
-    key.includes(category)
-  );
+  // 4. Fallback name substring match
+  return name.includes(key) || key.includes(name);
 };
 
 export interface FilterServiceBottomSheetProps {
@@ -277,112 +102,147 @@ export default function FilterServiceBottomSheet({
   onApplyServices,
   garages = [],
 }: FilterServiceBottomSheetProps) {
-  const { theme } = useAppTheme();
+  const { theme, isDarkMode } = useAppTheme();
+  const { services: contextServices, serviceCategories, fetchServices, fetchServiceCategories } = useAppValues();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [tempSelected, setTempSelected] = useState<Array<{ keyword: string; title: string }>>([]);
+  const [tempSelected, setTempSelected] = useState<Array<{ id: string; keyword: string; title: string }>>([]);
 
-  // Sync tempSelected whenever the bottom sheet opens or props change
+  // Fetch dynamic categories & services once on open
+  const hasFetchedRef = useRef(false);
   useEffect(() => {
-    if (!visible) return;
-    if (selectedServices && selectedServices.length > 0) {
-      const items = selectedServices.map((key, idx) => ({
-        keyword: key,
-        title: (selectedServiceTitles && selectedServiceTitles[idx]) || key,
-      }));
-      setTempSelected(items);
-    } else if (selectedService && selectedService.trim()) {
-      setTempSelected([{
-        keyword: selectedService.trim(),
-        title: selectedServiceTitle || selectedService.trim(),
-      }]);
-    } else {
-      setTempSelected([]);
+    if (visible && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      fetchServices().catch(() => {});
+      fetchServiceCategories().catch(() => {});
     }
-  }, [visible, selectedService, selectedServiceTitle, selectedServices, selectedServiceTitles]);
+  }, [visible, fetchServices, fetchServiceCategories]);
 
-  // Count how many garages offer a given service
-  const getGarageCountForService = useMemo(() => {
-    const cache = new Map<string, number>();
+  // Dynamic category tabs strictly from backend Super Admin categories
+  const categoryTabs = useMemo(() => {
+    if (serviceCategories && serviceCategories.length > 0) {
+      const activeCats = serviceCategories
+        .filter((c) => c.isActive !== false)
+        .map((c) => c.name);
+      return ['All', ...activeCats];
+    }
+    return ['All'];
+  }, [serviceCategories]);
 
-    return (keyword: string) => {
-      if (!keyword) return garages.length;
-      if (cache.has(keyword)) return cache.get(keyword)!;
+  // Dynamic services list strictly from backend Super Admin services (no hardcoded fallbacks)
+  const allServices: ServiceItem[] = useMemo(() => {
+    if (contextServices && contextServices.length > 0) {
+      return contextServices
+        .filter((s) => s.isActive !== false)
+        .map((s) => ({
+          id: s.id || (s as any)._id || s.name,
+          title: s.title || s.name,
+          name: s.name || s.title,
+          keyword: s.searchQuery || s.name || s.title,
+          category: s.category || 'General',
+          icon: s.icon || 'wrench',
+          iconColor: s.iconColor || '#1677FF',
+          iconBg: s.iconBg || '#1677FF15',
+          description: s.description || '',
+          price: s.price,
+          minPrice: s.minPrice,
+          duration: s.duration !== undefined ? Number(s.duration) : undefined,
+          garageCount: s.garageCount,
+        }));
+    }
+    return [];
+  }, [contextServices]);
 
-      const count = garages.filter((g) => {
-        return (
-          Array.isArray(g.services) &&
-          g.services.some((s: any) => isServiceMatch(s, keyword))
-        );
-      }).length;
+  const allServicesRef = useRef<ServiceItem[]>(allServices);
+  useEffect(() => {
+    allServicesRef.current = allServices;
+  }, [allServices]);
 
-      cache.set(keyword, count);
-      return count;
-    };
-  }, [garages]);
+  const wasVisibleRef = useRef(false);
 
-  // Merge static popular services with any custom services found in garages
-  const allServices = useMemo(() => {
-    const list: ServiceItem[] = [...POPULAR_SERVICES];
-    const existingKeywords = new Set(
-      POPULAR_SERVICES.map((s) => s.keyword.toLowerCase())
-    );
+  // Sync tempSelected ONLY when bottom sheet transitions from closed to open
+  useEffect(() => {
+    if (visible && !wasVisibleRef.current) {
+      let incomingKeys: string[] = [];
+      let incomingTitles: string[] = [];
 
-    const resolveCategory = (name: string): string => {
-      const n = name.toLowerCase();
-      if (n.includes('mot')) return 'MOT';
-      if (n.includes('service') || n.includes('oil')) return 'Servicing';
-      if (n.includes('brake') || n.includes('tyre') || n.includes('tire') || n.includes('wheel') || n.includes('suspension')) return 'Brakes & Tyres';
-      if (n.includes('diag') || n.includes('battery') || n.includes('air') || n.includes('ac') || n.includes('electric')) return 'Diagnostics';
-      return 'Repairs';
-    };
+      if (Array.isArray(selectedServices) && selectedServices.length > 0) {
+        incomingKeys = selectedServices;
+        incomingTitles = selectedServiceTitles || [];
+      } else if (selectedService && typeof selectedService === 'string' && selectedService.trim()) {
+        incomingKeys = selectedService.split(',').map((k) => k.trim()).filter(Boolean);
+        incomingTitles = (selectedServiceTitle || selectedService)
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
+      }
 
-    garages.forEach((g) => {
-      if (Array.isArray(g.services)) {
-        g.services.forEach((s: any) => {
-          const name = (s.name || '').trim();
-          if (name && !existingKeywords.has(name.toLowerCase())) {
-            existingKeywords.add(name.toLowerCase());
-            list.push({
-              id: `custom_${name.toLowerCase().replace(/\s+/g, '_')}`,
-              title: name,
-              keyword: name,
-              category: resolveCategory(name),
-              icon: 'wrench',
-              iconColor: theme.colors.primary,
-              iconBg: theme.colors.primary + '15',
-              description: s.description || 'Specialized garage service',
+      if (incomingKeys.length > 0) {
+        const items: Array<{ id: string; keyword: string; title: string }> = [];
+        incomingKeys.forEach((key, idx) => {
+          const kLower = key.toLowerCase().trim();
+          const found = allServicesRef.current.find(
+            (s) =>
+              (s.id && s.id.toLowerCase().trim() === kLower) ||
+              (s.keyword && s.keyword.toLowerCase().trim() === kLower) ||
+              (s.title && s.title.toLowerCase().trim() === kLower) ||
+              (s.name && s.name.toLowerCase().trim() === kLower)
+          );
+          if (found) {
+            if (!items.some((i) => i.id === found.id)) {
+              items.push({ id: found.id, keyword: found.keyword, title: found.title });
+            }
+          } else {
+            items.push({
+              id: `key_${kLower}`,
+              keyword: key,
+              title: incomingTitles[idx] || key,
             });
           }
         });
+        setTempSelected(items);
+      } else {
+        setTempSelected([]);
       }
-    });
-
-    return list;
-  }, [garages, theme.colors.primary]);
-
-  // Auto-switch category tab to match active selectedService if single
-  useEffect(() => {
-    if (!visible) return;
-    const firstTarget = tempSelected[0]?.keyword || selectedService;
-    if (!firstTarget) {
-      setSelectedCategory('All');
-      return;
     }
-    const matched = allServices.find((s) =>
-      isServiceMatch({ name: s.keyword, category: s.category }, firstTarget)
-    );
-    if (matched && matched.category) {
-      setSelectedCategory(matched.category);
-    }
-  }, [selectedService, allServices, visible]);
+    wasVisibleRef.current = visible;
+  }, [visible, selectedService, selectedServiceTitle, selectedServices, selectedServiceTitles]);
+
+  // Count how many garages offer a given service
+  const getGarageCountForService = useCallback(
+    (item: ServiceItem) => {
+      if (item.garageCount !== undefined && item.garageCount > 0) {
+        return item.garageCount;
+      }
+      if (!garages || garages.length === 0) return 0;
+      return garages.filter((g) => {
+        return (
+          Array.isArray(g.services) &&
+          g.services.some((s: any) => isServiceMatch(s, item.keyword || item.title))
+        );
+      }).length;
+    },
+    [garages]
+  );
 
   // Filter services list based on category tab and search query
   const filteredServices = useMemo(() => {
     let list = allServices;
 
     if (selectedCategory !== 'All') {
-      list = list.filter((s) => s.category === selectedCategory);
+      const catLower = selectedCategory.toLowerCase().trim();
+      list = list.filter((s) => {
+        const sCat = (s.category || '').toLowerCase().trim();
+        if (sCat === catLower) return true;
+        // Substring / fuzzy match: e.g. "tyres" vs "tyre replacement", "repairs" vs "repair", "diagnostic cars" vs "diagnostics"
+        if (sCat.includes(catLower) || catLower.includes(sCat)) return true;
+        if (catLower.includes('tyre') && sCat.includes('tyre')) return true;
+        if (catLower.includes('diag') && sCat.includes('diag')) return true;
+        if (catLower.includes('repair') && (sCat.includes('repair') || sCat.includes('brake'))) return true;
+        if ((catLower.includes('service') || catLower.includes('repair')) && sCat.includes('air')) return true;
+        return false;
+      });
     }
 
     const q = searchQuery.trim().toLowerCase();
@@ -399,46 +259,70 @@ export default function FilterServiceBottomSheet({
     return list;
   }, [allServices, selectedCategory, searchQuery]);
 
-  // Check if a service keyword is currently in tempSelected
-  const isItemSelected = (keyword: string) => {
-    return tempSelected.some((item) =>
-      item.keyword.toLowerCase().trim() === keyword.toLowerCase().trim() ||
-      isServiceMatch({ name: keyword }, item.keyword)
-    );
-  };
+  // STRICT, ISOLATED MULTI-SELECTION:
+  // An item is selected IF AND ONLY IF its non-empty id, keyword, or title matches an item in tempSelected.
+  const isItemSelected = useCallback(
+    (item: ServiceItem) => {
+      const targetId = (item.id || '').toLowerCase().trim();
+      const targetKey = (item.keyword || '').toLowerCase().trim();
+      const targetTitle = (item.title || item.name || '').toLowerCase().trim();
 
-  // Toggle selection for multiple services
-  const toggleSelect = (keyword: string, title: string) => {
+      return tempSelected.some((s) => {
+        const sId = (s.id || '').toLowerCase().trim();
+        const sKey = (s.keyword || '').toLowerCase().trim();
+        const sTitle = (s.title || '').toLowerCase().trim();
+        if (sId && targetId && sId === targetId) return true;
+        if (sKey && targetKey && sKey === targetKey) return true;
+        if (sTitle && targetTitle && sTitle === targetTitle) return true;
+        return false;
+      });
+    },
+    [tempSelected]
+  );
+
+  // Toggle selection for an individual service item smoothly
+  const toggleSelect = useCallback((item: ServiceItem) => {
+    const targetId = (item.id || '').toLowerCase().trim();
+    const targetKey = (item.keyword || '').toLowerCase().trim();
+    const targetTitle = (item.title || item.name || '').toLowerCase().trim();
+
     setTempSelected((prev) => {
-      const exists = prev.some((item) =>
-        item.keyword.toLowerCase().trim() === keyword.toLowerCase().trim() ||
-        isServiceMatch({ name: keyword }, item.keyword)
-      );
+      const exists = prev.some((s) => {
+        const sId = (s.id || '').toLowerCase().trim();
+        const sKey = (s.keyword || '').toLowerCase().trim();
+        const sTitle = (s.title || '').toLowerCase().trim();
+        if (sId && targetId && sId === targetId) return true;
+        if (sKey && targetKey && sKey === targetKey) return true;
+        if (sTitle && targetTitle && sTitle === targetTitle) return true;
+        return false;
+      });
+
       if (exists) {
-        return prev.filter((item) =>
-          item.keyword.toLowerCase().trim() !== keyword.toLowerCase().trim() &&
-          !isServiceMatch({ name: keyword }, item.keyword)
-        );
+        return prev.filter((s) => {
+          const sId = (s.id || '').toLowerCase().trim();
+          const sKey = (s.keyword || '').toLowerCase().trim();
+          const sTitle = (s.title || '').toLowerCase().trim();
+          const isThis = (sId && targetId && sId === targetId) ||
+                         (sKey && targetKey && sKey === targetKey) ||
+                         (sTitle && targetTitle && sTitle === targetTitle);
+          return !isThis;
+        });
       } else {
-        return [...prev, { keyword, title }];
+        return [...prev, { id: item.id, keyword: item.keyword, title: item.title || item.name || '' }];
       }
     });
-  };
+  }, []);
 
   // Count garages matching the current tempSelected filter
   const matchingGaragesCount = useMemo(() => {
     if (tempSelected.length === 0) return garages.length;
     const keys = tempSelected.map((s) => s.keyword);
-    const hasOfferingAll = garages.some((g) =>
-      Array.isArray(g.services) && keys.every((k) => g.services.some((s: any) => isServiceMatch(s, k)))
-    );
-    if (hasOfferingAll) {
-      return garages.filter((g) =>
-        Array.isArray(g.services) && keys.every((k) => g.services.some((s: any) => isServiceMatch(s, k)))
-      ).length;
-    }
+    const titles = tempSelected.map((s) => s.title);
     return garages.filter((g) =>
-      Array.isArray(g.services) && keys.some((k) => g.services.some((s: any) => isServiceMatch(s, k)))
+      Array.isArray(g.services) &&
+      keys.some((k, idx) =>
+        g.services.some((s: any) => isServiceMatch(s, k) || isServiceMatch(s, titles[idx]))
+      )
     ).length;
   }, [tempSelected, garages]);
 
@@ -515,29 +399,35 @@ export default function FilterServiceBottomSheet({
                         numberOfLines={1}
                       >
                         {tempSelected.length > 0
-                          ? `${tempSelected.length} ${tempSelected.length === 1 ? 'service' : 'services'} selected • Tap Apply below`
-                          : 'Select one or more services to filter'}
+                          ? `${tempSelected.length} selected • Tap Apply Filter`
+                          : 'Select one or multiple services'}
                       </Text>
                     </View>
                   </View>
 
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {tempSelected.length > 0 && (
-                      <TouchableOpacity
-                        onPress={() => setTempSelected([])}
-                        style={[
-                          styles.resetBtn,
-                          { backgroundColor: theme.colors.primary + '15' },
-                        ]}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Text
-                          style={[styles.resetBtnText, { color: theme.colors.primary }]}
-                        >
-                          Clear
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+                    <TouchableOpacity
+                      onPress={handleClearAll}
+                      style={[
+                        styles.headerResetBtn,
+                        {
+                          backgroundColor: theme.colors.primary + '14',
+                          borderColor: theme.colors.primary + '30',
+                        },
+                      ]}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialCommunityIcons
+                        name="refresh"
+                        size={14}
+                        color={theme.colors.primary}
+                        style={{ marginRight: 3 }}
+                      />
+                      <Text style={[styles.headerResetText, { color: theme.colors.primary }]}>
+                        Reset
+                      </Text>
+                    </TouchableOpacity>
 
                     <TouchableOpacity
                       onPress={onClose}
@@ -574,7 +464,7 @@ export default function FilterServiceBottomSheet({
                   />
                   <TextInput
                     style={[styles.searchInput, { color: theme.colors.text }]}
-                    placeholder="Search services (Full Service, MOT, Brakes)..."
+                    placeholder="Search services..."
                     placeholderTextColor={theme.colors.placeholder}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
@@ -595,48 +485,50 @@ export default function FilterServiceBottomSheet({
                   )}
                 </View>
 
-                {/* Border-Radius Category Tabs Bar */}
-                <View style={styles.categoryContainer}>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.categoryScroll}
-                  >
-                    {SERVICE_CATEGORIES.map((cat) => {
-                      const isActive = selectedCategory === cat;
-                      return (
-                        <TouchableOpacity
-                          key={cat}
-                          onPress={() => setSelectedCategory(cat)}
-                          style={[
-                            styles.categoryTab,
-                            {
-                              backgroundColor: isActive
-                                ? theme.colors.primary
-                                : theme.colors.card,
-                              borderColor: isActive
-                                ? theme.colors.primary
-                                : theme.colors.border,
-                            },
-                          ]}
-                          activeOpacity={0.75}
-                        >
-                          <Text
+                {/* Dynamic Category Tabs Bar */}
+                {categoryTabs.length > 1 && (
+                  <View style={styles.categoryContainer}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.categoryScroll}
+                    >
+                      {categoryTabs.map((cat) => {
+                        const isActive = selectedCategory.toLowerCase() === cat.toLowerCase();
+                        return (
+                          <TouchableOpacity
+                            key={cat}
+                            onPress={() => setSelectedCategory(cat)}
                             style={[
-                              styles.categoryTabText,
+                              styles.categoryTab,
                               {
-                                color: isActive ? '#FFFFFF' : theme.colors.text,
-                                fontWeight: isActive ? '700' : '500',
+                                backgroundColor: isActive
+                                  ? theme.colors.primary
+                                  : theme.colors.card,
+                                borderColor: isActive
+                                  ? theme.colors.primary
+                                  : theme.colors.border,
                               },
                             ]}
+                            activeOpacity={0.75}
                           >
-                            {cat}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
+                            <Text
+                              style={[
+                                styles.categoryTabText,
+                                {
+                                  color: isActive ? '#FFFFFF' : theme.colors.text,
+                                  fontWeight: isActive ? '700' : '500',
+                                },
+                              ]}
+                            >
+                              {cat}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
 
                 {/* Services List - Clean, compact border-radius tab rows */}
                 <ScrollView
@@ -644,119 +536,6 @@ export default function FilterServiceBottomSheet({
                   contentContainerStyle={styles.scrollList}
                   keyboardShouldPersistTaps="handled"
                 >
-                  {/* Option: All Services (Show all garages) */}
-                  {selectedCategory === 'All' && !searchQuery.trim() && (
-                    <TouchableOpacity
-                      style={[
-                        styles.serviceItemTab,
-                        {
-                          backgroundColor: tempSelected.length === 0
-                            ? theme.colors.primary + '10'
-                            : theme.colors.background,
-                          borderColor: tempSelected.length === 0
-                            ? theme.colors.primary
-                            : theme.colors.border,
-                        },
-                      ]}
-                      activeOpacity={0.7}
-                      onPress={handleClearAll}
-                    >
-                      <View
-                        style={[
-                          styles.serviceIconWrap,
-                          {
-                            backgroundColor: tempSelected.length === 0
-                              ? theme.colors.primary + '20'
-                              : theme.colors.secondary + '15',
-                          },
-                        ]}
-                      >
-                        <MaterialCommunityIcons
-                          name="apps"
-                          size={18}
-                          color={
-                            tempSelected.length === 0
-                              ? theme.colors.primary
-                              : theme.colors.secondary
-                          }
-                        />
-                      </View>
-
-                      <View style={styles.serviceTextCol}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <Text
-                            style={[
-                              styles.serviceTitle,
-                              {
-                                color: tempSelected.length === 0
-                                  ? theme.colors.primary
-                                  : theme.colors.text,
-                              },
-                            ]}
-                          >
-                            All Garages (No Filter)
-                          </Text>
-                          {tempSelected.length === 0 && (
-                            <View
-                              style={[
-                                styles.activeBadge,
-                                { backgroundColor: theme.colors.primary + '20' },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.activeBadgeText,
-                                  { color: theme.colors.primary },
-                                ]}
-                              >
-                                Active
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      </View>
-
-                      <View style={styles.rightCol}>
-                        <View
-                          style={[
-                            styles.countChip,
-                            { backgroundColor: theme.colors.secondary + '15' },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.countChipText,
-                              { color: theme.colors.secondary },
-                            ]}
-                          >
-                            {garages.length}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.multiCheckbox,
-                            {
-                              borderColor: tempSelected.length === 0
-                                ? theme.colors.primary
-                                : theme.colors.border,
-                              backgroundColor: tempSelected.length === 0
-                                ? theme.colors.primary
-                                : 'transparent',
-                            },
-                          ]}
-                        >
-                          {tempSelected.length === 0 && (
-                            <MaterialCommunityIcons
-                              name="check"
-                              size={12}
-                              color="#FFFFFF"
-                            />
-                          )}
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  )}
-
                   {/* Filtered Services List */}
                   {filteredServices.length === 0 ? (
                     <View style={styles.emptyContainer}>
@@ -772,13 +551,15 @@ export default function FilterServiceBottomSheet({
                           { color: theme.colors.placeholder },
                         ]}
                       >
-                        No services found in "{selectedCategory}"
+                        {allServices.length === 0
+                          ? 'No services available yet'
+                          : `No services in "${selectedCategory}"`}
                       </Text>
                     </View>
                   ) : (
                     filteredServices.map((item) => {
-                      const isSelected = isItemSelected(item.keyword);
-                      const count = getGarageCountForService(item.keyword);
+                      const isSelected = isItemSelected(item);
+                      const count = getGarageCountForService(item);
 
                       return (
                         <TouchableOpacity
@@ -795,7 +576,7 @@ export default function FilterServiceBottomSheet({
                             },
                           ]}
                           activeOpacity={0.7}
-                          onPress={() => toggleSelect(item.keyword, item.title)}
+                          onPress={() => toggleSelect(item)}
                         >
                           <View
                             style={[
@@ -843,35 +624,87 @@ export default function FilterServiceBottomSheet({
                                 </View>
                               )}
                             </View>
+
+                            {item.description && item.description.trim() ? (
+                              <Text
+                                style={[
+                                  styles.serviceDesc,
+                                  { color: theme.colors.placeholder },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {item.description}
+                              </Text>
+                            ) : null}
+
+                            {/* Dynamic Rate, Timing & Garage Count Badges */}
+                            <View style={styles.serviceMetaRow}>
+                              {(item.minPrice !== undefined || item.price !== undefined) && (
+                                <View
+                                  style={[
+                                    styles.metaPill,
+                                    {
+                                      backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9',
+                                      borderColor: theme.colors.border,
+                                    },
+                                  ]}
+                                >
+                                  <Text style={[styles.metaPillPrefix, { color: theme.colors.placeholder }]}>
+                                    from{' '}
+                                  </Text>
+                                  <Text style={[styles.metaPillRate, { color: theme.colors.primary }]}>
+                                    £{Number(item.minPrice !== undefined ? item.minPrice : item.price).toFixed(0)}
+                                  </Text>
+                                </View>
+                              )}
+
+                              {item.duration !== undefined && Number(item.duration) > 0 && (
+                                <View
+                                  style={[
+                                    styles.metaPill,
+                                    {
+                                      backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9',
+                                      borderColor: theme.colors.border,
+                                    },
+                                  ]}
+                                >
+                                  <MaterialCommunityIcons
+                                    name="clock-outline"
+                                    size={11}
+                                    color={theme.colors.placeholder}
+                                    style={{ marginRight: 3 }}
+                                  />
+                                  <Text style={[styles.metaPillText, { color: theme.colors.text }]}>
+                                    {item.duration} mins
+                                  </Text>
+                                </View>
+                              )}
+
+                              {count > 0 && (
+                                <View
+                                  style={[
+                                    styles.metaPill,
+                                    {
+                                      backgroundColor: theme.colors.secondary + '14',
+                                      borderColor: theme.colors.secondary + '30',
+                                    },
+                                  ]}
+                                >
+                                  <MaterialCommunityIcons
+                                    name="storefront-outline"
+                                    size={11}
+                                    color={theme.colors.secondary}
+                                    style={{ marginRight: 3 }}
+                                  />
+                                  <Text style={[styles.metaPillText, { color: theme.colors.secondary }]}>
+                                    {count} {count === 1 ? 'garage' : 'garages'}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
                           </View>
 
                           <View style={styles.rightCol}>
-                            <View
-                              style={[
-                                styles.countChip,
-                                {
-                                  backgroundColor:
-                                    count > 0
-                                      ? theme.colors.secondary + '15'
-                                      : theme.colors.border + '40',
-                                },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.countChipText,
-                                  {
-                                    color:
-                                      count > 0
-                                        ? theme.colors.secondary
-                                        : theme.colors.placeholder,
-                                  },
-                                ]}
-                              >
-                                {count} {count === 1 ? 'garage' : 'garages'}
-                              </Text>
-                            </View>
-
                             <View
                               style={[
                                 styles.multiCheckbox,
@@ -901,17 +734,57 @@ export default function FilterServiceBottomSheet({
                 </ScrollView>
 
                 {/* Sticky Action Footer */}
-                <View style={[styles.sheetFooterBar, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.card }]}>
+                <View
+                  style={[
+                    styles.sheetFooterBar,
+                    {
+                      borderTopColor: theme.colors.border,
+                      backgroundColor: theme.colors.card,
+                    },
+                  ]}
+                >
                   <TouchableOpacity
-                    style={[styles.sheetApplyBtn, { backgroundColor: theme.colors.primary }]}
+                    style={[
+                      styles.footerResetBtn,
+                      {
+                        borderColor: theme.colors.border,
+                        backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9',
+                      },
+                    ]}
+                    onPress={handleClearAll}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialCommunityIcons
+                      name="refresh"
+                      size={15}
+                      color={theme.colors.text}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={[styles.footerResetText, { color: theme.colors.text }]}>
+                      Reset
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.sheetApplyBtn,
+                      { backgroundColor: theme.colors.primary },
+                    ]}
                     onPress={handleApply}
                     activeOpacity={0.85}
                   >
-                    <MaterialCommunityIcons name="filter-check" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <MaterialCommunityIcons
+                      name="filter-check"
+                      size={17}
+                      color="#FFFFFF"
+                      style={{ marginRight: 6 }}
+                    />
                     <Text style={styles.sheetApplyText}>
                       {tempSelected.length === 0
-                        ? `Show All Garages (${garages.length})`
-                        : `Apply (${tempSelected.length} Selected) • ${matchingGaragesCount} ${matchingGaragesCount === 1 ? 'Garage' : 'Garages'}`}
+                        ? `Apply Filter (All Garages - ${garages.length})`
+                        : `Apply (${tempSelected.length} Selected) • ${matchingGaragesCount} ${
+                            matchingGaragesCount === 1 ? 'Garage' : 'Garages'
+                          }`}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -923,8 +796,6 @@ export default function FilterServiceBottomSheet({
     </Modal>
   );
 }
-
-import { fonts } from '../theme/theme';
 
 const styles = StyleSheet.create({
   backdrop: {
@@ -951,18 +822,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     marginTop: 6,
     gap: 10,
-  },
-  sheetResetBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetResetText: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
   },
   sheetApplyBtn: {
     flex: 1,
@@ -1022,14 +881,30 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 1,
   },
-  resetBtn: {
+  headerResetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 8,
+    borderWidth: 1,
   },
-  resetBtnText: {
-    fontFamily: fonts.bold,
-    fontSize: 11.5,
+  headerResetText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+  },
+  footerResetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  footerResetText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 13,
   },
   closeBtn: {
     width: 30,
@@ -1100,6 +975,38 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
   },
+  serviceDesc: {
+    fontFamily: fonts.regular,
+    fontSize: 10.5,
+    marginTop: 1.5,
+  },
+  serviceMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    borderWidth: 1,
+  },
+  metaPillPrefix: {
+    fontFamily: fonts.regular,
+    fontSize: 9.5,
+  },
+  metaPillRate: {
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+  },
+  metaPillText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 9.5,
+  },
   activeBadge: {
     paddingHorizontal: 5,
     paddingVertical: 1,
@@ -1123,14 +1030,6 @@ const styles = StyleSheet.create({
   countChipText: {
     fontFamily: fonts.bold,
     fontSize: 10,
-  },
-  radioCircle: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   emptyContainer: {
     paddingVertical: 24,

@@ -488,7 +488,7 @@ export default function GarageListScreen({ route, navigation }: any) {
                         style={{ fontFamily: fonts.semiBold, fontSize: 10, color: theme.colors.placeholder, textAlign: 'right' }}
                         numberOfLines={1}
                       >
-                        {ms.name}: £{p > 0 ? p.toFixed(0) : '45'}
+                        {ms.name}: £{p >= 0 ? p.toFixed(0) : '45'}
                       </Text>
                     );
                   })}

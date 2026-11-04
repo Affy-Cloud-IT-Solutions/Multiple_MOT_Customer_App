@@ -175,8 +175,8 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// Local development backend (port 5000 reverse-tunneled to connected Android device via adb reverse: adb reverse tcp:5000 tcp:5000)
-// export const BASE_URL = 'https://api.ondoorcarservice.com/api';
+// Live production backend
+// export const BASE_URL = 'http://localhost:5000/api';
 export const BASE_URL = 'https://api.ondoorcarservice.com/api';
 
 const DISMISSED_ALERTS_KEY = '@dismissed_alert_ids';
@@ -208,7 +208,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       .catch(() => {});
   }, []);
 
-  const fetchServiceCategories = async (): Promise<ServiceCategory[]> => {
+  const fetchServiceCategories = useCallback(async (): Promise<ServiceCategory[]> => {
     try {
       const res = await fetch(`${BASE_URL}/service-categories`);
       if (res.ok) {
@@ -222,10 +222,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     } catch (e) {
       console.log('[DATA CONTEXT] Error fetching service categories:', e);
     }
-    return serviceCategories;
-  };
+    return [];
+  }, []);
 
-  const fetchServices = async (): Promise<DynamicService[]> => {
+  const fetchServices = useCallback(async (): Promise<DynamicService[]> => {
     try {
       const res = await fetch(`${BASE_URL}/services`);
       if (res.ok) {
@@ -259,7 +259,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       console.log('[DATA CONTEXT] Error fetching dynamic services:', e);
     }
     return [];
-  };
+  }, []);
 
   const setUserLocation = async (coords: Coordinates | null) => {
     setUserLocationState(coords);
@@ -641,7 +641,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
 
       // Fetch dynamic services
-      await fetchServices();
+      await Promise.all([fetchServices(), fetchServiceCategories()]);
+    fetchServiceCategories();
     } catch (error) {
       console.error('[DATA CONTEXT] Error fetching backend data:', error);
     }

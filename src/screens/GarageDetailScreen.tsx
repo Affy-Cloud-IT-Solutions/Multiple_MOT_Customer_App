@@ -1370,7 +1370,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         </View>
 
                         {/* Description */}
-                        {service.description ? (
+                        {service.description && service.description.trim() ? (
                           <Text style={[styles.serviceDescText, { color: theme.colors.placeholder }]} numberOfLines={3}>
                             {service.description}
                           </Text>
