@@ -478,11 +478,24 @@ export default function HomeScreen({ navigation }: any) {
     if (isOutsideUK) return [];
 
     const mapped = nearbyGarages.map((g: any) => {
-      let calculatedDistance = g.distance || 0;
+      const isDefaultCoords = (
+        Math.abs((g.latitude || 0) - 51.5074) < 0.001 &&
+        Math.abs((g.longitude || 0) - (-0.1278)) < 0.001
+      );
+      const isLocationPending = Boolean(
+        g.isLocationPending === true ||
+        g.locationConfigured === false ||
+        (g.profileCompletion?.steps && g.profileCompletion.steps.location === false) ||
+        isDefaultCoords ||
+        !g.latitude ||
+        !g.longitude
+      );
+
+      let calculatedDistance: number | null = null;
       const gLat = g.latitude !== undefined && g.latitude !== null ? g.latitude : (g.location && g.location.coordinates ? g.location.coordinates[1] : null);
       const gLng = g.longitude !== undefined && g.longitude !== null ? g.longitude : (g.location && g.location.coordinates ? g.location.coordinates[0] : null);
 
-      if (userLocation && gLat && gLng) {
+      if (!isLocationPending && userLocation && gLat && gLng) {
         calculatedDistance = calculateDistanceInMiles(
           userLocation.latitude,
           userLocation.longitude,
@@ -493,11 +506,12 @@ export default function HomeScreen({ navigation }: any) {
       return {
         ...g,
         calculatedDistance,
+        isLocationPending,
       };
     });
 
     if (userLocation) {
-      mapped.sort((a, b) => (a.calculatedDistance || 9999) - (b.calculatedDistance || 9999));
+      mapped.sort((a, b) => ((a.calculatedDistance ?? 99999) - (b.calculatedDistance ?? 99999)));
     }
 
     return mapped;
@@ -880,7 +894,7 @@ export default function HomeScreen({ navigation }: any) {
                         garage.verificationDocuments.every((d: any) => d.status === 'Verified'))))
                 );
                 const garageLogo = garage.logoUrl || (garage.images && garage.images.length > 0 ? garage.images[0] : null);
-                const distanceText = garage.calculatedDistance ? `${garage.calculatedDistance.toFixed(1)} mi` : (garage.city || 'Nearby');
+                const distanceText = !garage.isLocationPending && garage.calculatedDistance ? `${garage.calculatedDistance.toFixed(1)} mi` : null;
                 const servicesList = getGarageServices(garage);
 
                 return (
@@ -933,7 +947,7 @@ export default function HomeScreen({ navigation }: any) {
                         </View>
 
                         <View style={styles.garageBadgeRow}>
-                          {garage.calculatedDistance !== undefined && garage.calculatedDistance !== null && (
+                          {!garage.isLocationPending && garage.calculatedDistance !== undefined && garage.calculatedDistance !== null && (
                             <View style={[styles.distancePill, { backgroundColor: theme.colors.primary + '12' }]}>
                               <MaterialCommunityIcons name="map-marker-distance" size={11} color={theme.colors.primary} style={{ marginRight: 2 }} />
                               <Text style={[styles.distancePillText, { color: theme.colors.primary }]}>

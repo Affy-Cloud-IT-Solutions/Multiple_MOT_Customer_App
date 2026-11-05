@@ -326,11 +326,24 @@ export default function GarageListScreen({ route, navigation }: any) {
 
     // Map each registered garage with dynamic calculated distance in miles
     const mapped = garages.map((g) => {
-      let calculatedDistance = g.distance || 0;
+      const isDefaultCoords = (
+        Math.abs((g.latitude || 0) - 51.5074) < 0.001 &&
+        Math.abs((g.longitude || 0) - (-0.1278)) < 0.001
+      );
+      const isLocationPending = Boolean(
+        g.isLocationPending === true ||
+        g.locationConfigured === false ||
+        (g.profileCompletion?.steps && g.profileCompletion.steps.location === false) ||
+        isDefaultCoords ||
+        !g.latitude ||
+        !g.longitude
+      );
+
+      let calculatedDistance: number | null = null;
       const gLat = g.latitude !== undefined && g.latitude !== null ? g.latitude : (g.location && g.location.coordinates ? g.location.coordinates[1] : null);
       const gLng = g.longitude !== undefined && g.longitude !== null ? g.longitude : (g.location && g.location.coordinates ? g.location.coordinates[0] : null);
 
-      if (activeCoordinates && gLat && gLng) {
+      if (!isLocationPending && activeCoordinates && gLat && gLng) {
         calculatedDistance = calculateDistanceInMiles(
           activeCoordinates.latitude,
           activeCoordinates.longitude,
@@ -341,6 +354,7 @@ export default function GarageListScreen({ route, navigation }: any) {
       return {
         ...g,
         calculatedDistance,
+        isLocationPending,
       };
     });
 
@@ -390,7 +404,7 @@ export default function GarageListScreen({ route, navigation }: any) {
 
     // Sorting: If "Near Me" is active, sort by nearest to device first. Otherwise sort by highest rating
     if (isNearMeActive) {
-      return filtered.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
+      return filtered.sort((a, b) => ((a.calculatedDistance ?? 99999) - (b.calculatedDistance ?? 99999)));
     }
     return filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   }, [garages, searchQuery, activeServiceFilter, activeServiceFilters, activeServiceTitles, isNearMeActive, activeCoordinates]);
@@ -407,7 +421,7 @@ export default function GarageListScreen({ route, navigation }: any) {
 
     const locationParts = [item.address, item.city, item.postcode].filter(Boolean);
     const locationText = item.address || (locationParts.length > 0 ? locationParts.join(', ') : (item.city || 'United Kingdom'));
-    const rawDist = item.calculatedDistance ?? item.distance;
+    const rawDist = !item.isLocationPending ? (item.calculatedDistance ?? item.distance) : null;
     const distanceText = (rawDist !== undefined && rawDist !== null && !isNaN(Number(rawDist)) && Number(rawDist) >= 0)
       ? `${Number(rawDist).toFixed(1)} miles`
       : null;
