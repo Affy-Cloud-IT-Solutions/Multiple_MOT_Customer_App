@@ -210,7 +210,7 @@ export default function BookingScreen({ route, navigation }: any) {
         if (response.ok) {
           const data = await response.json();
           if (!isMounted) return;
-          const approvedOnly = Array.isArray(data) ? data.filter((g: any) => g.status === 'Approved') : [];
+          const approvedOnly = Array.isArray(data) ? data.filter((g: any) => g.status !== 'Rejected' && g.status !== 'Blacklisted') : [];
           setGarages(approvedOnly);
           
           if (isReschedule) {

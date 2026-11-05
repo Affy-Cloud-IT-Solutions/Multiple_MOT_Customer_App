@@ -249,6 +249,15 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     if (gallery.index !== selectedGalleryIndex) setSelectedGalleryIndex(gallery.index);
   }, [gallery.index, selectedGalleryIndex]);
 
+  const isVerified = Boolean(
+    garage?.isFullyVerified ??
+    (garage?.profileCompletion?.percent === 100 &&
+      (garage?.verificationStatus === 'Verified' ||
+        (Array.isArray(garage?.verificationDocuments) &&
+          garage.verificationDocuments.length > 0 &&
+          garage.verificationDocuments.every((d: any) => d.status === 'Verified'))))
+  );
+
   const fetchGarageDetails = async () => {
     setLoading(true);
     setError(null);
@@ -1626,9 +1635,17 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 </TouchableOpacity>
 
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={[styles.infoModalGarageName, { color: theme.colors.text }]}>
-                    {garage.name}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                    <Text style={[styles.infoModalGarageName, { color: theme.colors.text }]}>
+                      {garage.name}
+                    </Text>
+                    {isVerified ? (
+                      <View style={styles.verifiedBadge}>
+                        <MaterialCommunityIcons name="check-decagram" size={11} color="#FFFFFF" style={{ marginRight: 3 }} />
+                        <Text style={styles.verifiedBadgeText}>Verified</Text>
+                      </View>
+                    ) : null}
+                  </View>
                   <TouchableOpacity
                     activeOpacity={0.7}
                     onPress={() => {
@@ -3779,6 +3796,22 @@ const styles = StyleSheet.create({
   infoModalGarageName: {
     fontFamily: fonts.bold,
     fontSize: 16,
+  },
+  verifiedBadge: {
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    marginLeft: 6,
+    flexShrink: 0,
+  },
+  verifiedBadgeText: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+    letterSpacing: 0.2,
   },
   infoModalBlock: {
     padding: 12,

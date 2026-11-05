@@ -304,7 +304,7 @@ export default function HomeScreen({ navigation }: any) {
       });
       if (response.ok) {
         const data = await response.json();
-        const approvedOnly = Array.isArray(data) ? data.filter((g: any) => g.status === 'Approved') : [];
+        const approvedOnly = Array.isArray(data) ? data.filter((g: any) => g.status !== 'Rejected' && g.status !== 'Blacklisted') : [];
         setNearbyGarages(approvedOnly);
       }
     } catch (e) {
@@ -871,6 +871,14 @@ export default function HomeScreen({ navigation }: any) {
           ) : (
             <View style={styles.garagesVerticalList}>
               {sortedGarages.slice(0, 6).map((garage: any) => {
+                const isVerified = Boolean(
+                  garage.isFullyVerified ??
+                  (garage.profileCompletion?.percent === 100 &&
+                    (garage.verificationStatus === 'Verified' ||
+                      (Array.isArray(garage.verificationDocuments) &&
+                        garage.verificationDocuments.length > 0 &&
+                        garage.verificationDocuments.every((d: any) => d.status === 'Verified'))))
+                );
                 const garageLogo = garage.logoUrl || (garage.images && garage.images.length > 0 ? garage.images[0] : null);
                 const distanceText = garage.calculatedDistance ? `${garage.calculatedDistance.toFixed(1)} mi` : (garage.city || 'Nearby');
                 const servicesList = getGarageServices(garage);
@@ -909,6 +917,12 @@ export default function HomeScreen({ navigation }: any) {
                           <Text style={[styles.garageVerticalName, { color: theme.colors.text }]} numberOfLines={1}>
                             {garage.name}
                           </Text>
+                          {isVerified ? (
+                            <View style={styles.verifiedBadge}>
+                              <MaterialCommunityIcons name="check-decagram" size={11} color="#FFFFFF" style={{ marginRight: 3 }} />
+                              <Text style={styles.verifiedBadgeText}>Verified</Text>
+                            </View>
+                          ) : null}
                         </View>
 
                         <View style={styles.garageMetaRow}>
@@ -1658,6 +1672,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
     marginRight: 6,
+  },
+  verifiedBadge: {
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    marginLeft: 6,
+    flexShrink: 0,
+  },
+  verifiedBadgeText: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+    letterSpacing: 0.2,
   },
   garageRatingChip: {
     flexDirection: 'row',

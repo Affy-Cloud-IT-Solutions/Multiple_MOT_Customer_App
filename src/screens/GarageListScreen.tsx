@@ -396,6 +396,15 @@ export default function GarageListScreen({ route, navigation }: any) {
   }, [garages, searchQuery, activeServiceFilter, activeServiceFilters, activeServiceTitles, isNearMeActive, activeCoordinates]);
 
   const renderGarageItem = ({ item }: { item: any }) => {
+    const isVerified = Boolean(
+      item.isFullyVerified ??
+      (item.profileCompletion?.percent === 100 &&
+        (item.verificationStatus === 'Verified' ||
+          (Array.isArray(item.verificationDocuments) &&
+            item.verificationDocuments.length > 0 &&
+            item.verificationDocuments.every((d: any) => d.status === 'Verified'))))
+    );
+
     const locationParts = [item.address, item.city, item.postcode].filter(Boolean);
     const locationText = item.address || (locationParts.length > 0 ? locationParts.join(', ') : (item.city || 'United Kingdom'));
     const rawDist = item.calculatedDistance ?? item.distance;
@@ -452,6 +461,12 @@ export default function GarageListScreen({ route, navigation }: any) {
               <Text style={[styles.garageName, { color: theme.colors.text }]} numberOfLines={1}>
                 {item.name}
               </Text>
+              {isVerified ? (
+                <View style={styles.verifiedBadge}>
+                  <MaterialCommunityIcons name="check-decagram" size={11} color="#FFFFFF" style={{ marginRight: 3 }} />
+                  <Text style={styles.verifiedBadgeText}>Verified</Text>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.addressRow}>
@@ -1157,6 +1172,22 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 14,
     flex: 1,
+  },
+  verifiedBadge: {
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    marginLeft: 6,
+    flexShrink: 0,
+  },
+  verifiedBadgeText: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
+    fontSize: 10.5,
+    letterSpacing: 0.2,
   },
   addressRow: {
     flexDirection: 'row',
