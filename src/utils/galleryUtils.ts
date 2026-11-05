@@ -31,6 +31,10 @@ export const normalizeImageUri = (raw: any, options: BuildGarageImageOptions = {
     uri = `${options.baseOrigin.replace(/\/+$/, '')}${uri}`;
   }
 
+  if (uri.includes('api.ondoorcarservice.com/uploads/')) {
+    uri = uri.replace('api.ondoorcarservice.com/uploads/', 'api.ondoorcarservice.com/api/uploads/').replace(/^http:/, 'https:');
+  }
+
   return LOADABLE_URI_PATTERN.test(uri) ? uri : null;
 };
 
