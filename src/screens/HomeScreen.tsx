@@ -324,8 +324,8 @@ export default function HomeScreen({ navigation }: any) {
           title: cat.name,
           name: cat.name,
           category: cat.name,
-          icon: cat.icon && cat.icon !== 'wrench' ? cat.icon : design.icon,
-          iconBg: cat.iconBg || design.iconBg,
+          icon: cat.icon || design.icon,
+          iconBg: cat.iconBg || (cat.iconColor ? cat.iconColor + '18' : design.iconBg),
           iconColor: cat.iconColor || design.iconColor,
           searchQuery: cat.name,
           price: 45,
@@ -353,9 +353,9 @@ export default function HomeScreen({ navigation }: any) {
 
           const catDesign = resolveCategoryDetails(sCategory, sName);
           const categoryName = matchedCategory?.name || sCategory || catDesign.category;
-          const categoryIcon = matchedCategory?.icon && matchedCategory.icon !== 'wrench' ? matchedCategory.icon : catDesign.icon;
+          const categoryIcon = matchedCategory?.icon || catDesign.icon;
           const categoryColor = matchedCategory?.iconColor || catDesign.iconColor;
-          const categoryBg = matchedCategory?.iconBg || catDesign.iconBg;
+          const categoryBg = matchedCategory?.iconBg || (matchedCategory?.iconColor ? matchedCategory.iconColor + '18' : catDesign.iconBg);
 
           return {
             id: s._id || s.id || sName,

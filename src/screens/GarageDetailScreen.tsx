@@ -71,7 +71,21 @@ const GarageCarouselImage = ({ uri, style, width }: any) => {
 
 export default function GarageDetailScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { token, user, customers, vehicles, alerts = [], addAlert, addAudit, addVehicle, refreshData, lookupVehicle, authFetch } = useAppValues();
+  const {
+    token,
+    user,
+    customers,
+    vehicles,
+    alerts = [],
+    serviceCategories = [],
+    fetchServiceCategories,
+    addAlert,
+    addAudit,
+    addVehicle,
+    refreshData,
+    lookupVehicle,
+    authFetch,
+  } = useAppValues();
   const { garageId } = route.params;
   const { width: screenWidth } = Dimensions.get('window');
 
@@ -960,29 +974,76 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     return dateStr;
   };
 
-  // Helper for category badge icons and colors
-  const getCategoryIcon = (category: string = '', name: string = '') => {
+  useEffect(() => {
+    if ((!serviceCategories || serviceCategories.length === 0) && fetchServiceCategories) {
+      fetchServiceCategories().catch(() => {});
+    }
+  }, [serviceCategories, fetchServiceCategories]);
+
+  // Helper for category badge icons and colors linked to Super Admin custom categories
+  const getCategoryMeta = useCallback((category: string = '', name: string = '') => {
+    const catClean = (category || '').trim().toLowerCase();
+    const nameClean = (name || '').trim().toLowerCase();
+
+    // 1. Match with Super Admin configured category
+    const matched = (serviceCategories || []).find((c: any) => {
+      const cName = (c.name || '').trim().toLowerCase();
+      return (cName && catClean === cName) || (cName && nameClean === cName);
+    });
+
+    if (matched) {
+      const icon = matched.icon || 'wrench';
+      const color = matched.iconColor || theme.colors.primary;
+      const bg = matched.iconBg || (color ? color + '18' : '#1677FF18');
+      return {
+        icon,
+        theme: { bg, text: color, border: color + '40' },
+      };
+    }
+
+    // 2. Intelligent keyword fallback for custom or unlinked services
     const c = (category + ' ' + name).toLowerCase();
-    if (c.includes('mot')) return 'shield-check';
-    if (c.includes('tyre') || c.includes('wheel') || c.includes('tracking')) return 'tire';
-    if (c.includes('brake') || c.includes('pad') || c.includes('disc')) return 'car-brake-alert';
-    if (c.includes('diag') || c.includes('scan') || c.includes('code') || c.includes('engine management')) return 'engine';
-    if (c.includes('air con') || c.includes('ac ') || c.includes('regas') || c.includes('climate')) return 'snowflake';
-    if (c.includes('oil') || c.includes('filter') || c.includes('fluid')) return 'oil';
-    if (c.includes('exhaust') || c.includes('dpf') || c.includes('emission')) return 'car-windshield';
-    if (c.includes('repair') || c.includes('clutch') || c.includes('engine') || c.includes('suspension')) return 'wrench';
-    return 'car-wrench';
+    let icon = 'car-wrench';
+    let themeObj = { bg: theme.colors.secondary + '15', text: theme.colors.secondary, border: theme.colors.secondary + '40' };
+
+    if (c.includes('mot')) {
+      icon = 'shield-check';
+      themeObj = { bg: '#10B98115', text: '#10B981', border: '#10B98140' };
+    } else if (c.includes('brake') || c.includes('pad') || c.includes('disc')) {
+      icon = 'car-brake-alert';
+      themeObj = { bg: '#EF444415', text: '#EF4444', border: '#EF444440' };
+    } else if (c.includes('diag') || c.includes('scan') || c.includes('code') || c.includes('engine management')) {
+      icon = 'engine';
+      themeObj = { bg: '#8B5CF615', text: '#8B5CF6', border: '#8B5CF640' };
+    } else if (c.includes('air con') || c.includes('ac ') || c.includes('regas') || c.includes('climate')) {
+      icon = 'snowflake';
+      themeObj = { bg: '#06B6D415', text: '#06B6D4', border: '#06B6D440' };
+    } else if (c.includes('oil') || c.includes('filter') || c.includes('fluid')) {
+      icon = 'oil';
+      themeObj = { bg: '#F59E0B15', text: '#F59E0B', border: '#F59E0B40' };
+    } else if (c.includes('tyre') || c.includes('wheel') || c.includes('tracking')) {
+      icon = 'tire';
+      themeObj = { bg: '#F59E0B15', text: '#F59E0B', border: '#F59E0B40' };
+    } else if (c.includes('exhaust') || c.includes('dpf') || c.includes('emission')) {
+      icon = 'pipe';
+      themeObj = { bg: '#6366F115', text: '#6366F1', border: '#6366F140' };
+    } else if (c.includes('battery') || c.includes('electric')) {
+      icon = 'car-battery';
+      themeObj = { bg: '#EAB30815', text: '#EAB308', border: '#EAB30840' };
+    } else if (c.includes('repair') || c.includes('clutch') || c.includes('suspension')) {
+      icon = 'wrench';
+      themeObj = { bg: '#EC489915', text: '#EC4899', border: '#EC489940' };
+    }
+
+    return { icon, theme: themeObj };
+  }, [serviceCategories, theme]);
+
+  const getCategoryIcon = (category: string = '', name: string = '') => {
+    return getCategoryMeta(category, name).icon;
   };
 
   const getCategoryTheme = (category: string = '', name: string = '') => {
-    const c = (category + ' ' + name).toLowerCase();
-    if (c.includes('mot')) return { bg: '#10B98115', text: '#10B981', border: '#10B98140' };
-    if (c.includes('brake')) return { bg: '#EF444415', text: '#EF4444', border: '#EF444440' };
-    if (c.includes('diag')) return { bg: '#8B5CF615', text: '#8B5CF6', border: '#8B5CF640' };
-    if (c.includes('air con') || c.includes('ac')) return { bg: '#06B6D415', text: '#06B6D4', border: '#06B6D440' };
-    if (c.includes('tyre') || c.includes('wheel')) return { bg: '#F59E0B15', text: '#F59E0B', border: '#F59E0B40' };
-    if (c.includes('repair')) return { bg: '#EC489915', text: '#EC4899', border: '#EC489940' };
-    return { bg: theme.colors.secondary + '15', text: theme.colors.secondary, border: theme.colors.secondary + '40' };
+    return getCategoryMeta(category, name).theme;
   };
 
   // Target service selected from Home / GarageList

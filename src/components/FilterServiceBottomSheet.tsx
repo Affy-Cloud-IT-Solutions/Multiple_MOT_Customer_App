@@ -135,24 +135,34 @@ export default function FilterServiceBottomSheet({
     if (contextServices && contextServices.length > 0) {
       return contextServices
         .filter((s) => s.isActive !== false)
-        .map((s) => ({
-          id: s.id || (s as any)._id || s.name,
-          title: s.title || s.name,
-          name: s.name || s.title,
-          keyword: s.searchQuery || s.name || s.title,
-          category: s.category || 'General',
-          icon: s.icon || 'wrench',
-          iconColor: s.iconColor || '#1677FF',
-          iconBg: s.iconBg || '#1677FF15',
-          description: s.description || '',
-          price: s.price,
-          minPrice: s.minPrice,
-          duration: s.duration !== undefined ? Number(s.duration) : undefined,
-          garageCount: s.garageCount,
-        }));
+        .map((s) => {
+          const matchedCategory = (serviceCategories || []).find(
+            (c: any) => c.name && s.category && c.name.toLowerCase().trim() === s.category.toLowerCase().trim()
+          );
+
+          const finalIcon = matchedCategory?.icon || s.icon || 'wrench';
+          const finalColor = matchedCategory?.iconColor || s.iconColor || '#1677FF';
+          const finalBg = matchedCategory?.iconBg || s.iconBg || (finalColor ? finalColor + '18' : '#1677FF15');
+
+          return {
+            id: s.id || (s as any)._id || s.name,
+            title: s.title || s.name,
+            name: s.name || s.title,
+            keyword: s.searchQuery || s.name || s.title,
+            category: matchedCategory?.name || s.category || 'General',
+            icon: finalIcon,
+            iconColor: finalColor,
+            iconBg: finalBg,
+            description: s.description || '',
+            price: s.price,
+            minPrice: s.minPrice,
+            duration: s.duration !== undefined ? Number(s.duration) : undefined,
+            garageCount: s.garageCount,
+          };
+        });
     }
     return [];
-  }, [contextServices]);
+  }, [contextServices, serviceCategories]);
 
   const allServicesRef = useRef<ServiceItem[]>(allServices);
   useEffect(() => {

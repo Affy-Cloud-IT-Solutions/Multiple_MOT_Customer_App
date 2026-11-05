@@ -20,7 +20,7 @@ import { fonts } from '../theme/theme';
 
 export default function BookingScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addAudit, addVehicle, lookupVehicle, user, token, cancelBooking, rescheduleBooking, authFetch } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addAudit, addVehicle, lookupVehicle, user, token, cancelBooking, rescheduleBooking, authFetch, serviceCategories = [] } = useAppValues();
 
   // Find active customer
   const customerId = user?.customerId || (customers.length > 0 ? (customers[0].id || customers[0]._id) : user?.id) || '';
@@ -1296,30 +1296,40 @@ export default function BookingScreen({ route, navigation }: any) {
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
                     {selectedServices.map((svc: any) => {
                       const isMot = (svc.name || '').toLowerCase().includes('mot') || (svc.category || '').toLowerCase().includes('mot');
+                      const matchedCat = (serviceCategories || []).find((c: any) => {
+                        const cName = (c.name || '').trim().toLowerCase();
+                        const sCat = (svc.category || '').trim().toLowerCase();
+                        const sName = (svc.name || '').trim().toLowerCase();
+                        return (cName && sCat === cName) || (cName && sName === cName);
+                      });
+                      const svcIcon = matchedCat?.icon || (isMot ? 'shield-check' : 'wrench');
+                      const svcColor = matchedCat?.iconColor || (isMot ? theme.colors.secondary : theme.colors.primary);
+                      const svcBg = matchedCat?.iconBg || (svcColor ? svcColor + '18' : theme.colors.primary + '15');
+
                       return (
                         <View
                           key={svc._id || svc.id || svc.name}
                           style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            backgroundColor: isMot ? (theme.dark ? theme.colors.secondary + '25' : theme.colors.secondary + '20') : theme.colors.primary + '15',
+                            backgroundColor: svcBg,
                             paddingHorizontal: 10,
                             paddingVertical: 5,
                             borderRadius: 16,
                             borderWidth: 1,
-                            borderColor: isMot ? theme.colors.secondary : theme.colors.primary + '40',
+                            borderColor: svcColor + '50',
                           }}
                         >
                           <MaterialCommunityIcons
-                            name={isMot ? 'car-wrench' : 'wrench'}
+                            name={svcIcon as any}
                             size={14}
-                            color={isMot ? theme.colors.secondary : theme.colors.primary}
+                            color={svcColor}
                             style={{ marginRight: 5 }}
                           />
                           <Text style={{ fontSize: 12, color: theme.colors.text, fontFamily: fonts.bold }}>
                             {svc.name}
                           </Text>
-                          <Text style={{ fontSize: 11, color: theme.colors.primary, fontFamily: fonts.bold, marginLeft: 4 }}>
+                          <Text style={{ fontSize: 11, color: svcColor, fontFamily: fonts.bold, marginLeft: 4 }}>
                             (£{Number(svc.price || 0).toFixed(0)})
                           </Text>
                         </View>
