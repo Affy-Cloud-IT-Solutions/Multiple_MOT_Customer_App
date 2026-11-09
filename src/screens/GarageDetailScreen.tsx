@@ -694,15 +694,6 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         status: 'Active',
       });
 
-      await addAlert({
-        type: 'NEW_VEHICLE',
-        customerName: `${customer.firstName} ${customer.lastName}`.trim() || user?.name || 'Customer',
-        customerId: targetCustId,
-        registrationNumber: regClean,
-        makeModel: `${makeClean} ${modelClean}`,
-        status: 'Approved',
-      });
-
       await addAudit(
         'New Vehicle Registered',
         `${customer.firstName} ${customer.lastName} registered ${makeClean} ${modelClean} (${regClean}) during booking`

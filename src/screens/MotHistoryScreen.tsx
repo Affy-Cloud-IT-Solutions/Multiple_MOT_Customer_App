@@ -355,17 +355,6 @@ export default function MotHistoryScreen({ route, navigation }: any) {
       setLocallyAddedVrn(regClean);
 
       try {
-        await addAlert({
-          type: 'NEW_VEHICLE',
-          customerName: `${customer?.firstName || user?.name || 'Customer'} ${customer?.lastName || ''}`.trim(),
-          customerId: resolvedCustomerId,
-          registrationNumber: regClean,
-          makeModel: `${makeClean} ${modelClean}`,
-          status: 'Approved',
-        });
-      } catch (_) {}
-
-      try {
         await addAudit(
           'Vehicle Added from MOT History',
           `${customer?.firstName || user?.name || 'Customer'} added vehicle ${makeClean} ${modelClean} (${regClean}) to My Vehicles`

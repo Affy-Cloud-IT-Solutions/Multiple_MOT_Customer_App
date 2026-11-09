@@ -149,6 +149,7 @@ interface DataContextType {
   addCustomer: (customer: Omit<Customer, 'id' | 'createdDate'>) => Promise<string>;
   addVehicle: (vehicle: Omit<Vehicle, 'id'>) => Promise<any>;
   updateVehicleStatus: (vehicleId: string, status: 'Active' | 'Sold' | 'Scrapped' | 'Pending') => Promise<void>;
+  deleteVehicle: (vehicleId: string) => Promise<void>;
   addAlert: (alert: Omit<AlertNotification, 'id' | 'status' | 'date'> & { status?: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected' | 'Completed' | 'Cancelled', date?: string, registrationNumber?: string, makeModel?: string }) => Promise<void>;
   approveAlert: (alertId: string) => Promise<void>;
   acknowledgeAlert: (alertId: string) => Promise<void>;
@@ -175,7 +176,6 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// Live production backend
 // export const BASE_URL = 'http://localhost:5000/api';
 export const BASE_URL = 'https://api.ondoorcarservice.com/api';
 
@@ -836,6 +836,26 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const deleteVehicle = async (vehicleId: string): Promise<void> => {
+    try {
+      const response = await authFetch(`${BASE_URL}/vehicles/${vehicleId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete vehicle');
+      }
+      setVehicles((prev) => prev.filter((v) => (v.id || v._id) !== vehicleId));
+      await refreshData();
+    } catch (error) {
+      console.error('[DATA CONTEXT] deleteVehicle error:', error);
+      throw error;
+    }
+  };
+
   const addAlert = async (alertData: Omit<AlertNotification, 'id' | 'status' | 'date'> & { status?: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected' | 'Completed' | 'Cancelled', date?: string, registrationNumber?: string, makeModel?: string }): Promise<void> => {
     try {
       const response = await authFetch(`${BASE_URL}/alerts`, {
@@ -1184,6 +1204,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         addCustomer,
         addVehicle,
         updateVehicleStatus,
+        deleteVehicle,
         addAlert,
         approveAlert,
         acknowledgeAlert,

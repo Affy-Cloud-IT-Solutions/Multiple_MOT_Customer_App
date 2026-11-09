@@ -28,7 +28,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function CustomerDetailScreen({ route, navigation }: any) {
   const { theme } = useAppTheme();
-  const { customers, vehicles, alerts, audits, rescheduleBooking, refreshData, token, authFetch } = useAppValues();
+  const { customers, vehicles, alerts, audits, rescheduleBooking, refreshData, deleteVehicle, token, authFetch } = useAppValues();
 
   const customerId = route.params?.customerId || route.params?.customer?.id || route.params?.customer?._id;
   const passedCustomer = route.params?.customer || null;
@@ -123,6 +123,47 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const handleDeleteVehicle = (vehicleId: string, reg: string, makeModel: string) => {
+    // Check if vehicle has an active booking
+    const activeBooking = alerts.find((a) => {
+      const matchReg = (a.registrationNumber || '').toUpperCase().trim() === (reg || '').toUpperCase().trim();
+      const isActiveStatus = a.status === 'Pending' || a.status === 'Approved' || a.status === 'Acknowledged';
+      return a.type === 'BOOKED' && matchReg && isActiveStatus;
+    });
+
+    if (activeBooking) {
+      const serviceName = activeBooking.serviceName || (Array.isArray(activeBooking.services) && activeBooking.services[0]?.name) || 'MOT / Service';
+      Alert.alert(
+        'Cannot Delete Vehicle',
+        `Vehicle ${reg} currently has a booked service appointment (${serviceName}). Whose vehicle service is already booked cannot be deleted.\n\nPlease cancel or complete the service first.`
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Delete Vehicle',
+      `Are you sure you want to permanently delete ${makeModel} (${reg})? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteVehicle(vehicleId);
+              Alert.alert('Vehicle Deleted', `${makeModel} (${reg}) has been removed successfully.`);
+            } catch (err: any) {
+              Alert.alert(
+                'Cannot Delete Vehicle',
+                err.message || 'Whose vehicle service is already booked cannot be deleted.'
+              );
+            }
+          },
+        },
+      ]
+    );
   };
 
 
@@ -277,8 +318,17 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
                       <View style={styles.plate}>
                         <Text style={styles.plateText}>{v.registrationNumber}</Text>
                       </View>
-                      <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor + '40' }]}>
-                        <Text style={[styles.statusText, { color: statusColor }]}>{v.status}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={[styles.statusBadge, { backgroundColor: statusBg, borderColor: statusColor + '40', marginRight: 8 }]}>
+                          <Text style={[styles.statusText, { color: statusColor }]}>{v.status}</Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => handleDeleteVehicle(v.id || v._id || '', v.registrationNumber, `${v.make} ${v.model}`)}
+                          style={{ padding: 4, borderRadius: 4, backgroundColor: theme.colors.error + '12' }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <MaterialCommunityIcons name="trash-can-outline" size={16} color={theme.colors.error} />
+                        </TouchableOpacity>
                       </View>
                     </View>
 

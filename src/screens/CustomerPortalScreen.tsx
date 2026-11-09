@@ -31,7 +31,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function CustomerPortalScreen({ route, navigation }: any) {
   const { isDarkMode, theme, toggleTheme } = useAppTheme();
-  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, lookupVehicle, refreshData, setToken, setUser, token, user, authFetch } = useAppValues();
+  const { customers, vehicles, alerts, addAlert, addVehicle, addAudit, updateVehicleStatus, deleteVehicle, lookupVehicle, refreshData, setToken, setUser, token, user, authFetch } = useAppValues();
 
   // Find active customer
   const customerId = route?.params?.customerId || user?.customerId;
@@ -268,27 +268,64 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
             setTimeout(() => {
               setLoadingAction(null);
 
-              // Update vehicle status in shared DB
+              // Update vehicle status in DB directly (reminders stopped, no garage approval needed)
               updateVehicleStatus(vehicleId, 'Sold');
-
-              const vehicleBooking = alerts.find((a) => a.type === 'BOOKED' && a.registrationNumber === reg);
-              const targetGarageId = vehicleBooking?.garageId;
-
-              // Add notification to Admin alerts
-              addAlert({
-                type: 'SOLD',
-                customerName: `${customer.firstName} ${customer.lastName}`,
-                customerId: customer.id,
-                registrationNumber: reg,
-                makeModel: makeModel,
-                garageId: targetGarageId,
-              });
 
               Alert.alert(
                 'Status Updated',
                 'Vehicle ownership updated. Automated reminders for this vehicle have been permanently deactivated.'
               );
             }, 1200);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteVehicle = (vehicleId: string, reg: string, makeModel: string) => {
+    const actionId = `delete_${vehicleId}`;
+
+    // 1. Validation: check if vehicle service is already booked
+    const activeBooking = alerts.find((a) => {
+      const matchReg = (a.registrationNumber || '').toUpperCase().trim() === (reg || '').toUpperCase().trim();
+      const isActiveStatus = a.status === 'Pending' || a.status === 'Approved' || a.status === 'Acknowledged';
+      return a.type === 'BOOKED' && matchReg && isActiveStatus;
+    });
+
+    if (activeBooking) {
+      const serviceName = activeBooking.serviceName || (Array.isArray(activeBooking.services) && activeBooking.services[0]?.name) || 'MOT / Service';
+      Alert.alert(
+        'Cannot Delete Vehicle',
+        `Vehicle ${reg} currently has a booked service appointment (${serviceName}). A vehicle with an active or booked service cannot be deleted. Please cancel or complete the service first.`
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Delete Vehicle',
+      `Are you sure you want to permanently delete ${makeModel} (${reg})? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoadingAction(actionId);
+              await deleteVehicle(vehicleId);
+              Toast.show({
+                type: 'success',
+                text1: 'Vehicle Deleted',
+                text2: `${makeModel} (${reg}) removed successfully.`,
+              });
+            } catch (err: any) {
+              Alert.alert(
+                'Cannot Delete Vehicle',
+                err.message || 'Whose vehicle service is already booked cannot be deleted.'
+              );
+            } finally {
+              setLoadingAction(null);
+            }
           },
         },
       ]
@@ -340,18 +377,6 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         year: cleaned.year,
         motExpiryDate: cleaned.motExpiry,
         status: 'Active'
-      });
-
-      // 2. Send informational alert for vehicle registration
-      await addAlert({
-        type: 'NEW_VEHICLE',
-        customerName: `${customer.firstName} ${customer.lastName}`,
-        customerId: targetCustId,
-        customerEmail: customer.email || user?.email || '',
-        customerMobile: customer.mobile || '',
-        registrationNumber: cleaned.registration,
-        makeModel: `${cleaned.make} ${cleaned.model}`.trim(),
-        status: 'Approved'
       });
 
       await addAudit(
@@ -727,6 +752,21 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                               <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>Vehicle & MOT History</Text>
                             </View>
                           </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={() => handleDeleteVehicle(v.id || v._id || '', v.registrationNumber, `${v.make} ${v.model}`)}
+                            disabled={loadingAction !== null}
+                            style={[styles.actionBtn, styles.deleteBtn, { borderColor: theme.colors.error + '40', backgroundColor: theme.colors.error + '10', maxWidth: 85 }]}
+                          >
+                            {loadingAction === `delete_${v.id || v._id}` ? (
+                              <ActivityIndicator size="small" color={theme.colors.error} />
+                            ) : (
+                              <View style={styles.actionBtnContent}>
+                                <MaterialCommunityIcons name="trash-can-outline" size={14} color={theme.colors.error} style={{ marginRight: 3 }} />
+                                <Text style={[styles.actionBtnText, { color: theme.colors.error }]}>Delete</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
                         </View>
                       </View>
                     ) : (
@@ -739,13 +779,14 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                               { 
                                 borderColor: theme.colors.primary, 
                                 borderWidth: 1, 
-                                backgroundColor: theme.colors.primary + '10' 
+                                backgroundColor: theme.colors.primary + '10',
+                                flex: 1.2
                               }
                             ]}
                           >
                             <View style={styles.actionBtnContent}>
-                              <MaterialCommunityIcons name="history" size={14} color={theme.colors.primary} style={{ marginRight: 4 }} />
-                              <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>Vehicle & MOT History</Text>
+                              <MaterialCommunityIcons name="history" size={14} color={theme.colors.primary} style={{ marginRight: 3 }} />
+                              <Text style={[styles.actionBtnText, { color: theme.colors.primary }]}>History</Text>
                             </View>
                           </TouchableOpacity>
 
@@ -753,14 +794,29 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                           <TouchableOpacity
                             onPress={() => handleMarkAsSold(v.id, v.registrationNumber, `${v.make} ${v.model}`)}
                             disabled={loadingAction !== null}
-                            style={[styles.actionBtn, styles.soldBtn, { borderColor: theme.colors.border }]}
+                            style={[styles.actionBtn, styles.soldBtn, { borderColor: theme.colors.border, flex: 1.1 }]}
                           >
                             {loadingAction === `sold_${v.id}` ? (
                               <ActivityIndicator size="small" color={theme.colors.error} />
                             ) : (
                               <View style={styles.actionBtnContent}>
-                                <MaterialCommunityIcons name="car-off" size={14} color={theme.colors.error} style={{ marginRight: 4 }} />
+                                <MaterialCommunityIcons name="car-off" size={14} color={theme.colors.error} style={{ marginRight: 3 }} />
                                 <Text style={[styles.actionBtnText, { color: theme.colors.error }]}>Mark Sold</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={() => handleDeleteVehicle(v.id || v._id || '', v.registrationNumber, `${v.make} ${v.model}`)}
+                            disabled={loadingAction !== null}
+                            style={[styles.actionBtn, styles.deleteBtn, { borderColor: theme.colors.error + '40', backgroundColor: theme.colors.error + '10', flex: 0.9 }]}
+                          >
+                            {loadingAction === `delete_${v.id || v._id}` ? (
+                              <ActivityIndicator size="small" color={theme.colors.error} />
+                            ) : (
+                              <View style={styles.actionBtnContent}>
+                                <MaterialCommunityIcons name="trash-can-outline" size={14} color={theme.colors.error} style={{ marginRight: 3 }} />
+                                <Text style={[styles.actionBtnText, { color: theme.colors.error }]}>Delete</Text>
                               </View>
                             )}
                           </TouchableOpacity>
@@ -1018,6 +1074,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   soldBtn: {
+    borderWidth: 1,
+  },
+  deleteBtn: {
     borderWidth: 1,
   },
   bookBtn: {
