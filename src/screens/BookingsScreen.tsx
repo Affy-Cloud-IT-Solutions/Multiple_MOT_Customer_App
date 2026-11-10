@@ -23,6 +23,36 @@ import { useAppValues } from '../context/DataContext';
 import CustomerHeader from '../components/CustomerHeader';
 import { openGarageDirections } from '../utils/mapUtils';
 import { fonts } from '../theme/theme';
+import { formatBookingDate, formatDateWithWeekday, formatShortDate } from '../utils/dateUtils';
+
+const monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+const toYMD = (dateVal: any): string | null => {
+  if (!dateVal) return null;
+  if (typeof dateVal === 'string') {
+    const matchIso = dateVal.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (matchIso) {
+      return `${matchIso[1]}-${matchIso[2].padStart(2, '0')}-${matchIso[3].padStart(2, '0')}`;
+    }
+    const matchUk = dateVal.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+    if (matchUk) {
+      return `${matchUk[3]}-${matchUk[2].padStart(2, '0')}-${matchUk[1].padStart(2, '0')}`;
+    }
+  }
+  try {
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+  } catch (e) {}
+  return null;
+};
 
 export default function BookingsScreen({ navigation }: any) {
   const { theme } = useAppTheme();
@@ -39,6 +69,10 @@ export default function BookingsScreen({ navigation }: any) {
 
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'CONFIRMED' | 'PENDING' | 'REJECTED' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [dateFilter, setDateFilter] = useState<'ALL' | 'CUSTOM'>('ALL');
+  const [selectedCustomDate, setSelectedCustomDate] = useState<string | null>(null);
+  const [calendarModalVisible, setCalendarModalVisible] = useState(false);
+  const [currentViewDate, setCurrentViewDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [selectedBookingForDetails, setSelectedBookingForDetails] = useState<any | null>(null);
@@ -111,6 +145,53 @@ export default function BookingsScreen({ navigation }: any) {
       });
   }, [alerts, token, customerId, customer, user]);
 
+  // Set of dates with customer bookings for calendar dots
+  const datesWithBookingsSet = useMemo(() => {
+    const set = new Set<string>();
+    allCustomerBookings.forEach((a) => {
+      const ymd = toYMD(a.date);
+      if (ymd) set.add(ymd);
+    });
+    return set;
+  }, [allCustomerBookings]);
+
+  // Calendar dates & navigation
+  const todayDateObj = useMemo(() => new Date(), []);
+  const todayYMD = useMemo(() => toYMD(todayDateObj) || '', [todayDateObj]);
+
+  const handlePrevMonth = () => {
+    setCurrentViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const handleJumpToToday = () => {
+    const today = new Date();
+    setCurrentViewDate(today);
+    setDateFilter('CUSTOM');
+    setSelectedCustomDate(todayYMD);
+    setCalendarModalVisible(false);
+  };
+
+  // Generate days grid for current viewed month
+  const calendarDays = useMemo(() => {
+    const year = currentViewDate.getFullYear();
+    const month = currentViewDate.getMonth();
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const lastDate = new Date(year, month + 1, 0).getDate();
+
+    const days: (Date | null)[] = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push(null);
+    }
+    for (let d = 1; d <= lastDate; d++) {
+      days.push(new Date(year, month, d));
+    }
+    return days;
+  }, [currentViewDate]);
+
   // Active rejected bookings alerts for banner (minus the ones the customer dismissed)
   const rejectedAlerts = useMemo(() => {
     if (!token) return [];
@@ -166,6 +247,12 @@ export default function BookingsScreen({ navigation }: any) {
 
       if (!matchFilter) return false;
 
+      // Date filter: strictly matches custom date if selected
+      if (dateFilter === 'CUSTOM' && selectedCustomDate) {
+        const itemYMD = toYMD(b.date);
+        if (itemYMD !== selectedCustomDate) return false;
+      }
+
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
       const reg = (b.registrationNumber || '').toLowerCase();
@@ -175,7 +262,7 @@ export default function BookingsScreen({ navigation }: any) {
 
       return reg.includes(q) || mm.includes(q) || gn.includes(q) || svc.includes(q);
     });
-  }, [allCustomerBookings, selectedFilter, searchQuery]);
+  }, [allCustomerBookings, selectedFilter, dateFilter, selectedCustomDate, searchQuery]);
 
   const handleCancel = (booking: any) => {
     const bookingId = booking.id || booking._id;
@@ -245,18 +332,7 @@ export default function BookingsScreen({ navigation }: any) {
 
   const formatDisplayDate = (dateStr: string) => {
     if (!dateStr) return 'Selected Date';
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('en-GB', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
+    return formatDateWithWeekday(dateStr);
   };
 
   const getSlotDisplay = (makeModel?: string, slotTime?: string, isDateOnly?: boolean, hasMot?: boolean) => {
@@ -422,22 +498,78 @@ export default function BookingsScreen({ navigation }: any) {
 
       {/* Filter Tabs & Search */}
       <View style={[styles.filterContainer, { backgroundColor: theme.colors.background }]}>
-        {/* Search Bar */}
-        <View style={[styles.searchBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <MaterialCommunityIcons name="magnify" size={18} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search by reg, vehicle or garage..."
-            placeholderTextColor={theme.colors.placeholder}
-            style={[styles.searchInput, { color: theme.colors.text }]}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <MaterialCommunityIcons name="close-circle" size={16} color={theme.colors.placeholder} />
-            </TouchableOpacity>
-          )}
+        {/* Search Bar with Calendar Icon */}
+        <View style={styles.searchRow}>
+          <View style={[styles.searchBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <MaterialCommunityIcons name="magnify" size={18} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search by reg, vehicle or garage..."
+              placeholderTextColor={theme.colors.placeholder}
+              style={[styles.searchInput, { color: theme.colors.text }]}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <MaterialCommunityIcons name="close-circle" size={16} color={theme.colors.placeholder} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Calendar Picker Button */}
+          <TouchableOpacity
+            style={[
+              styles.calendarIconBtn,
+              {
+                backgroundColor: (dateFilter === 'CUSTOM' && selectedCustomDate) ? theme.colors.secondary : theme.colors.card,
+                borderColor: (dateFilter === 'CUSTOM' && selectedCustomDate) ? theme.colors.secondary : theme.colors.border,
+              }
+            ]}
+            onPress={() => setCalendarModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="calendar-month-outline"
+              size={20}
+              color={(dateFilter === 'CUSTOM' && selectedCustomDate) ? '#FFFFFF' : theme.colors.text}
+            />
+            {(dateFilter === 'CUSTOM' && selectedCustomDate) && (
+              <View style={styles.calendarActiveDot} />
+            )}
+          </TouchableOpacity>
         </View>
+
+        {/* Active Custom Date Pill */}
+        {dateFilter === 'CUSTOM' && selectedCustomDate && (
+          <View style={styles.activeDatePillRow}>
+            <TouchableOpacity
+              style={[
+                styles.activeDatePill,
+                {
+                  backgroundColor: '#0284C715',
+                  borderColor: '#0284C7',
+                }
+              ]}
+              onPress={() => setCalendarModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons name="calendar-check" size={14} color="#0284C7" />
+              <Text style={[styles.activeDatePillText, { color: '#0284C7' }]}>
+                {formatShortDate(selectedCustomDate)}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setDateFilter('ALL');
+                  setSelectedCustomDate(null);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.clearDateCross}
+              >
+                <MaterialCommunityIcons name="close" size={14} color="#0284C7" />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Filter Chips Scroll */}
         <ScrollView
@@ -539,19 +671,35 @@ export default function BookingsScreen({ navigation }: any) {
             <Text style={[styles.emptySubtitle, { color: theme.colors.placeholder }]}>
               {searchQuery
                 ? `No appointments match "${searchQuery}".`
+                : (dateFilter === 'CUSTOM' && selectedCustomDate)
+                ? `No appointments found on ${formatShortDate(selectedCustomDate)}.`
                 : selectedFilter !== 'ALL'
                 ? `You have no ${selectedFilter.toLowerCase()} bookings.`
                 : 'You have not booked any vehicle service appointments yet.'}
             </Text>
 
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Garages')}
-              style={[styles.bookNowBtn, { backgroundColor: theme.colors.secondary }]}
-              activeOpacity={0.85}
-            >
-              <MaterialCommunityIcons name="store-search-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.bookNowBtnText}>Find Garage & Book Service</Text>
-            </TouchableOpacity>
+            {dateFilter === 'CUSTOM' && selectedCustomDate ? (
+              <TouchableOpacity
+                onPress={() => {
+                  setDateFilter('ALL');
+                  setSelectedCustomDate(null);
+                }}
+                style={[styles.bookNowBtn, { backgroundColor: theme.colors.secondary, marginTop: 12 }]}
+                activeOpacity={0.85}
+              >
+                <MaterialCommunityIcons name="calendar-refresh" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.bookNowBtnText}>Show All Dates</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Garages')}
+                style={[styles.bookNowBtn, { backgroundColor: theme.colors.secondary }]}
+                activeOpacity={0.85}
+              >
+                <MaterialCommunityIcons name="store-search-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.bookNowBtnText}>Find Garage & Book Service</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           filteredBookings.map((item) => {
@@ -1047,6 +1195,202 @@ export default function BookingsScreen({ navigation }: any) {
           </Modal>
         );
       })()}
+
+      {/* Calendar Picker Modal */}
+      <Modal visible={calendarModalVisible} transparent animationType="fade" onRequestClose={() => setCalendarModalVisible(false)}>
+        <TouchableOpacity
+          style={styles.calModalOverlay}
+          activeOpacity={1}
+          onPress={() => setCalendarModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.calendarModalCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+          >
+            {/* Calendar Month & Year Controls */}
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity onPress={handlePrevMonth} style={[styles.calNavBtn, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="chevron-left" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+
+              <View style={styles.calTitleBox}>
+                <Text style={[styles.calendarTitle, { color: theme.colors.text }]}>
+                  {monthNames[currentViewDate.getMonth()]} {currentViewDate.getFullYear()}
+                </Text>
+                <Text style={[styles.calSubTitle, { color: theme.colors.placeholder }]}>
+                  Select date to filter your bookings
+                </Text>
+              </View>
+
+              <TouchableOpacity onPress={handleNextMonth} style={[styles.calNavBtn, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <MaterialCommunityIcons name="chevron-right" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Toolbar: Jump to Today */}
+            <View style={styles.calToolbarRow}>
+              <TouchableOpacity
+                style={[styles.todayQuickBtn, { backgroundColor: theme.colors.secondary + '18', borderColor: theme.colors.secondary + '40' }]}
+                onPress={handleJumpToToday}
+              >
+                <MaterialCommunityIcons name="calendar-today" size={14} color={theme.colors.secondary} />
+                <Text style={[styles.todayQuickBtnText, { color: theme.colors.secondary }]}>Select Today</Text>
+              </TouchableOpacity>
+
+              {selectedCustomDate && (
+                <View style={[styles.activeDateTag, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                  <MaterialCommunityIcons name="calendar-check" size={14} color="#10B981" />
+                  <Text style={[styles.activeDateTagText, { color: theme.colors.text }]}>
+                    Selected: <Text style={{ fontFamily: fonts.extraBold, color: theme.colors.secondary }}>{formatShortDate(selectedCustomDate)}</Text>
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setDateFilter('ALL');
+                      setSelectedCustomDate(null);
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{ marginLeft: 6 }}
+                  >
+                    <MaterialCommunityIcons name="close-circle" size={14} color={theme.colors.placeholder} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* Weekday labels */}
+            <View style={styles.weekdayRow}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, index) => (
+                <Text
+                  key={d}
+                  style={[
+                    styles.weekdayText,
+                    { color: index === 0 ? '#EF4444' : theme.colors.placeholder }
+                  ]}
+                >
+                  {d}
+                </Text>
+              ))}
+            </View>
+
+            {/* Days Grid */}
+            <View style={styles.daysGrid}>
+              {calendarDays.map((day, idx) => {
+                if (!day) {
+                  return <View key={`empty-${idx}`} style={styles.dayCell} />;
+                }
+
+                const dateYMD = toYMD(day);
+                if (!dateYMD) return null;
+
+                const isSelected = dateFilter === 'CUSTOM' && selectedCustomDate === dateYMD;
+                const isToday = dateYMD === todayYMD;
+                const hasBookings = datesWithBookingsSet.has(dateYMD);
+                const isSunday = day.getDay() === 0;
+
+                return (
+                  <View key={dateYMD} style={styles.dayCell}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setDateFilter('CUSTOM');
+                        setSelectedCustomDate(dateYMD);
+                        setCalendarModalVisible(false);
+                      }}
+                      style={[
+                        styles.dayBtn,
+                        {
+                          backgroundColor: isSelected
+                            ? theme.colors.secondary
+                            : isToday
+                            ? theme.colors.secondary + '18'
+                            : hasBookings
+                            ? '#8B5CF618'
+                            : 'transparent',
+                          borderColor: isSelected
+                            ? theme.colors.secondary
+                            : isToday
+                            ? theme.colors.secondary
+                            : hasBookings
+                            ? '#8B5CF6'
+                            : theme.colors.border + '60',
+                          borderWidth: isSelected || isToday || hasBookings ? 1.5 : 1,
+                        }
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          {
+                            color: isSelected
+                              ? '#FFFFFF'
+                              : hasBookings
+                              ? '#8B5CF6'
+                              : isSunday
+                              ? '#EF4444'
+                              : isToday
+                              ? theme.colors.secondary
+                              : theme.colors.text,
+                            fontFamily: isSelected || isToday || hasBookings ? fonts.extraBold : fonts.semiBold,
+                          }
+                        ]}
+                      >
+                        {day.getDate()}
+                      </Text>
+                      {isToday && !isSelected && (
+                        <View style={[styles.todayDot, { backgroundColor: theme.colors.secondary }]} />
+                      )}
+                      {hasBookings && !isSelected && (
+                        <View style={[styles.pastBookingDot, { backgroundColor: '#8B5CF6' }]} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* Calendar Legend */}
+            <View style={[styles.calendarLegendRow, { borderTopColor: theme.colors.border + '40' }]}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: theme.colors.secondary }]} />
+                <Text style={[styles.legendText, { color: theme.colors.text }]}>Today</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#8B5CF6' }]} />
+                <Text style={[styles.legendText, { color: '#8B5CF6' }]}>Your Booking</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: theme.colors.border }]} />
+                <Text style={[styles.legendText, { color: theme.colors.placeholder }]}>Empty Day</Text>
+              </View>
+            </View>
+
+            {/* Calendar Bottom Actions */}
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              {selectedCustomDate ? (
+                <TouchableOpacity
+                  style={[styles.closeCalModalBtn, { flex: 1, marginTop: 0, flexDirection: 'row', justifyContent: 'center', backgroundColor: '#EF444415', borderColor: '#EF444440' }]}
+                  onPress={() => {
+                    setDateFilter('ALL');
+                    setSelectedCustomDate(null);
+                    setCalendarModalVisible(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons name="calendar-remove" size={16} color="#EF4444" style={{ marginRight: 6 }} />
+                  <Text style={[styles.closeCalModalBtnText, { color: '#EF4444', fontFamily: fonts.bold }]}>Clear Date</Text>
+                </TouchableOpacity>
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.closeCalModalBtn, { flex: 1, marginTop: 0, backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}
+                onPress={() => setCalendarModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.closeCalModalBtnText, { color: theme.colors.text }]}>Close Calendar</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1105,13 +1449,218 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 4,
   },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     height: 40,
     borderRadius: 8,
     borderWidth: 1,
+  },
+  calendarIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  calendarActiveDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+  },
+  activeDatePillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  activeDatePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  activeDatePillText: {
+    fontSize: 12,
+    fontFamily: fonts.bold,
+  },
+  clearDateCross: {
+    marginLeft: 4,
+    padding: 2,
+  },
+  calModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  calendarModalCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    width: '100%',
+    maxWidth: 380,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  calNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calTitleBox: {
+    alignItems: 'center',
+  },
+  calendarTitle: {
+    fontSize: 16,
+    fontFamily: fonts.extraBold,
+    letterSpacing: -0.2,
+  },
+  calSubTitle: {
+    fontSize: 11,
+    fontFamily: fonts.regular,
+    marginTop: 1,
+  },
+  calToolbarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 12,
+    flexWrap: 'wrap',
+  },
+  todayQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  todayQuickBtnText: {
+    fontSize: 12,
+    fontFamily: fonts.bold,
+  },
+  activeDateTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  activeDateTagText: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB20',
+    marginBottom: 8,
+  },
+  weekdayText: {
+    width: '14.28%',
+    textAlign: 'center',
+    fontSize: 11.5,
+    fontFamily: fonts.bold,
+    textTransform: 'uppercase',
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  dayCell: {
+    width: '14.28%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 2,
+  },
+  dayBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayText: {
+    fontSize: 13,
+    fontFamily: fonts.medium,
+  },
+  todayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    position: 'absolute',
+    bottom: 3,
+  },
+  pastBookingDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    position: 'absolute',
+    bottom: 3,
+  },
+  calendarLegendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingTop: 12,
+    marginTop: 8,
+    borderTopWidth: 1,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    fontFamily: fonts.semiBold,
+  },
+  closeCalModalBtn: {
+    marginTop: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  closeCalModalBtnText: {
+    fontSize: 13,
+    fontFamily: fonts.semiBold,
   },
   searchInput: {
     fontFamily: fonts.medium,
