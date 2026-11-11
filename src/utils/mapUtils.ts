@@ -878,3 +878,120 @@ export const openGarageDirections = (target: GarageLocationTarget) => {
     'The physical address or coordinates for this garage are not currently available.'
   );
 };
+
+export interface GooglePlacePrediction {
+  placeId: string;
+  description: string;
+  mainText: string;
+  secondaryText: string;
+  types: string[];
+}
+
+/**
+ * Autocomplete address/street recommendations from Google Places API (restricted to UK)
+ */
+export const fetchGooglePlacePredictions = async (
+  input: string
+): Promise<GooglePlacePrediction[]> => {
+  const q = input.trim();
+  if (!q || q.length < 2 || !GOOGLE_MAPS_API_KEY) return [];
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+      q
+    )}&components=country:gb&key=${GOOGLE_MAPS_API_KEY}`;
+
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.status === 'OK' && Array.isArray(data.predictions)) {
+        return data.predictions.map((p: any) => ({
+          placeId: p.place_id,
+          description: p.description,
+          mainText: p.structured_formatting?.main_text || p.description,
+          secondaryText: p.structured_formatting?.secondary_text || '',
+          types: p.types || [],
+        }));
+      }
+    }
+  } catch (e) {
+    console.warn('[mapUtils] fetchGooglePlacePredictions error:', e);
+  }
+  return [];
+};
+
+/**
+ * Fetch Place Details (coordinates + formatted components) from Google Places API
+ */
+export const fetchGooglePlaceDetails = async (
+  placeId: string
+): Promise<Coordinates | null> => {
+  if (!placeId || !GOOGLE_MAPS_API_KEY) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(
+      placeId
+    )}&fields=address_components,geometry,formatted_address,name&key=${GOOGLE_MAPS_API_KEY}`;
+
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.status === 'OK' && data.result) {
+        const item = data.result;
+        const lat = item.geometry?.location?.lat;
+        const lon = item.geometry?.location?.lng;
+
+        if (typeof lat === 'number' && typeof lon === 'number') {
+          let streetNumber = '';
+          let route = '';
+          let suburb = '';
+          let city = '';
+          let postcode = '';
+          let country = '';
+
+          for (const comp of item.address_components || []) {
+            const types = comp.types || [];
+            if (types.includes('street_number')) streetNumber = comp.long_name || comp.short_name;
+            else if (types.includes('route')) route = comp.long_name || comp.short_name;
+            else if (types.includes('sublocality') || types.includes('neighborhood')) suburb = comp.long_name || comp.short_name;
+            else if (types.includes('postal_town') || types.includes('locality')) city = comp.long_name || comp.short_name;
+            else if (types.includes('postal_code')) postcode = comp.long_name || comp.short_name;
+            else if (types.includes('country')) country = comp.long_name || comp.short_name;
+          }
+
+          const street = [streetNumber, route].filter(Boolean).join(' ');
+          const parts = [street, suburb, city].filter(Boolean);
+          if (postcode) parts.push(`(${postcode})`);
+
+          const addressDisplay = parts.length > 0 ? parts.join(', ') : item.name || item.formatted_address;
+
+          const coords: Coordinates = {
+            latitude: lat,
+            longitude: lon,
+            address: addressDisplay,
+            label: item.formatted_address || addressDisplay,
+            cityName: suburb && city ? `${suburb}, ${city}` : city || suburb || item.name || 'United Kingdom',
+            countryName: country || 'United Kingdom',
+            postcode,
+            road: route,
+            suburb,
+            isWithinUK: country ? (country.toLowerCase().includes('united kingdom') || country.toLowerCase() === 'uk' || country.toLowerCase() === 'gb') : true,
+          };
+
+          return coords;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[mapUtils] fetchGooglePlaceDetails error:', e);
+  }
+  return null;
+};

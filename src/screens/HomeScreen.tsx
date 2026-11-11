@@ -478,24 +478,21 @@ export default function HomeScreen({ navigation }: any) {
     if (isOutsideUK) return [];
 
     const mapped = nearbyGarages.map((g: any) => {
-      const isDefaultCoords = (
-        Math.abs((g.latitude || 0) - 51.5074) < 0.001 &&
-        Math.abs((g.longitude || 0) - (-0.1278)) < 0.001
+      const gLat = Number(g.latitude !== undefined && g.latitude !== null ? g.latitude : (g.location && g.location.coordinates ? g.location.coordinates[1] : null));
+      const gLng = Number(g.longitude !== undefined && g.longitude !== null ? g.longitude : (g.location && g.location.coordinates ? g.location.coordinates[0] : null));
+
+      const hasValidCoords = !isNaN(gLat) && !isNaN(gLng) && (gLat !== 0 || gLng !== 0);
+      const hasValidAddress = Boolean(
+        g.address &&
+        typeof g.address === 'string' &&
+        g.address.trim().length > 0 &&
+        !g.address.toLowerCase().includes('pending location')
       );
-      const isLocationPending = Boolean(
-        g.isLocationPending === true ||
-        g.locationConfigured === false ||
-        (g.profileCompletion?.steps && g.profileCompletion.steps.location === false) ||
-        isDefaultCoords ||
-        !g.latitude ||
-        !g.longitude
-      );
+
+      const isLocationPending = !hasValidAddress || !hasValidCoords;
 
       let calculatedDistance: number | null = null;
-      const gLat = g.latitude !== undefined && g.latitude !== null ? g.latitude : (g.location && g.location.coordinates ? g.location.coordinates[1] : null);
-      const gLng = g.longitude !== undefined && g.longitude !== null ? g.longitude : (g.location && g.location.coordinates ? g.location.coordinates[0] : null);
-
-      if (!isLocationPending && userLocation && gLat && gLng) {
+      if (hasValidCoords && hasValidAddress && userLocation) {
         calculatedDistance = calculateDistanceInMiles(
           userLocation.latitude,
           userLocation.longitude,
@@ -894,7 +891,9 @@ export default function HomeScreen({ navigation }: any) {
                         garage.verificationDocuments.every((d: any) => d.status === 'Verified'))))
                 );
                 const garageLogo = garage.logoUrl || (garage.images && garage.images.length > 0 ? garage.images[0] : null);
-                const distanceText = !garage.isLocationPending && garage.calculatedDistance ? `${garage.calculatedDistance.toFixed(1)} mi` : null;
+                const distanceText = !garage.isLocationPending && garage.calculatedDistance !== undefined && garage.calculatedDistance !== null
+                  ? `${garage.calculatedDistance.toFixed(1)} mi`
+                  : null;
                 const servicesList = getGarageServices(garage);
 
                 return (

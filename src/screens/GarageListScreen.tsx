@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,6 +12,7 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  Keyboard,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
@@ -25,6 +26,9 @@ import {
   Coordinates,
   UK_PRESET_LOCATIONS,
   formatPreciseLocation,
+  fetchGooglePlacePredictions,
+  fetchGooglePlaceDetails,
+  GooglePlacePrediction,
 } from '../utils/mapUtils';
 import CustomerHeader from '../components/CustomerHeader';
 import SelectAreaBottomSheet from '../components/SelectAreaBottomSheet';
@@ -106,6 +110,20 @@ export default function GarageListScreen({ route, navigation }: any) {
   const [areaModalVisible, setAreaModalVisible] = useState(false);
   const [serviceModalVisible, setServiceModalVisible] = useState(false);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
+
+  // Google Places Street Predictions
+  const [streetPredictions, setStreetPredictions] = useState<GooglePlacePrediction[]>([]);
+  const [loadingPredictions, setLoadingPredictions] = useState(false);
+  const [selectingPlaceId, setSelectingPlaceId] = useState<string | null>(null);
+  const debounceTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const activeCoordinates = userLocation || userCoordinates;
 
@@ -204,9 +222,61 @@ export default function GarageListScreen({ route, navigation }: any) {
     }
   };
 
+  const handleSearchQueryChange = (text: string) => {
+    setSearchQuery(text);
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    const trimmed = text.trim();
+    if (trimmed.length < 2) {
+      setStreetPredictions([]);
+      setLoadingPredictions(false);
+      return;
+    }
+
+    setLoadingPredictions(true);
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await fetchGooglePlacePredictions(trimmed);
+        setStreetPredictions(results);
+      } catch (e) {
+        setStreetPredictions([]);
+      } finally {
+        setLoadingPredictions(false);
+      }
+    }, 280);
+  };
+
   const handleClearSearch = () => {
     setSearchQuery('');
+    setStreetPredictions([]);
+    setLoadingPredictions(false);
     navigation.setParams({ searchQuery: '', search: '' });
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+  };
+
+  const handleSelectStreetPrediction = async (item: GooglePlacePrediction) => {
+    setSelectingPlaceId(item.placeId);
+    try {
+      const coords = await fetchGooglePlaceDetails(item.placeId);
+      if (coords) {
+        await setUserLocation(coords);
+      }
+      setIsNearMeActive(true);
+      setSearchQuery('');
+      setStreetPredictions([]);
+      Keyboard.dismiss();
+    } catch (err) {
+      console.error('Error selecting street on garage list:', err);
+      setSearchQuery(item.mainText);
+      setStreetPredictions([]);
+    } finally {
+      setSelectingPlaceId(null);
+    }
   };
 
   const handleClearServiceFilter = () => {
@@ -258,6 +328,8 @@ export default function GarageListScreen({ route, navigation }: any) {
     setRefreshing(true);
     // 1. Reset all filter and search states
     setSearchQuery('');
+    setStreetPredictions([]);
+    setLoadingPredictions(false);
     setActiveServiceFilters([]);
     setActiveServiceTitles([]);
     setActiveServiceFilter('');
@@ -326,24 +398,21 @@ export default function GarageListScreen({ route, navigation }: any) {
 
     // Map each registered garage with dynamic calculated distance in miles
     const mapped = garages.map((g) => {
-      const isDefaultCoords = (
-        Math.abs((g.latitude || 0) - 51.5074) < 0.001 &&
-        Math.abs((g.longitude || 0) - (-0.1278)) < 0.001
+      const gLat = Number(g.latitude !== undefined && g.latitude !== null ? g.latitude : (g.location && g.location.coordinates ? g.location.coordinates[1] : null));
+      const gLng = Number(g.longitude !== undefined && g.longitude !== null ? g.longitude : (g.location && g.location.coordinates ? g.location.coordinates[0] : null));
+
+      const hasValidCoords = !isNaN(gLat) && !isNaN(gLng) && (gLat !== 0 || gLng !== 0);
+      const hasValidAddress = Boolean(
+        g.address &&
+        typeof g.address === 'string' &&
+        g.address.trim().length > 0 &&
+        !g.address.toLowerCase().includes('pending location')
       );
-      const isLocationPending = Boolean(
-        g.isLocationPending === true ||
-        g.locationConfigured === false ||
-        (g.profileCompletion?.steps && g.profileCompletion.steps.location === false) ||
-        isDefaultCoords ||
-        !g.latitude ||
-        !g.longitude
-      );
+
+      const isLocationPending = !hasValidAddress || !hasValidCoords;
 
       let calculatedDistance: number | null = null;
-      const gLat = g.latitude !== undefined && g.latitude !== null ? g.latitude : (g.location && g.location.coordinates ? g.location.coordinates[1] : null);
-      const gLng = g.longitude !== undefined && g.longitude !== null ? g.longitude : (g.location && g.location.coordinates ? g.location.coordinates[0] : null);
-
-      if (!isLocationPending && activeCoordinates && gLat && gLng) {
+      if (hasValidCoords && hasValidAddress && activeCoordinates) {
         calculatedDistance = calculateDistanceInMiles(
           activeCoordinates.latitude,
           activeCoordinates.longitude,
@@ -421,7 +490,9 @@ export default function GarageListScreen({ route, navigation }: any) {
 
     const locationParts = [item.address, item.city, item.postcode].filter(Boolean);
     const locationText = item.address || (locationParts.length > 0 ? locationParts.join(', ') : (item.city || 'United Kingdom'));
-    const rawDist = !item.isLocationPending ? (item.calculatedDistance ?? item.distance) : null;
+    const rawDist = item.calculatedDistance !== null && item.calculatedDistance !== undefined
+      ? item.calculatedDistance
+      : (!item.isLocationPending ? item.distance : null);
     const distanceText = (rawDist !== undefined && rawDist !== null && !isNaN(Number(rawDist)) && Number(rawDist) >= 0)
       ? `${Number(rawDist).toFixed(1)} miles`
       : null;
@@ -615,8 +686,8 @@ export default function GarageListScreen({ route, navigation }: any) {
           <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} style={styles.searchIcon} />
           <TextInput
             value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search UK postcode (e.g. M1, SE1) or town..."
+            onChangeText={handleSearchQueryChange}
+            placeholder="Search UK street, postcode or town..."
             placeholderTextColor={theme.colors.placeholder}
             style={[styles.searchInput, { color: theme.colors.text }]}
           />
@@ -651,12 +722,81 @@ export default function GarageListScreen({ route, navigation }: any) {
         </View>
       </View>
 
+      {/* Street & Location Recommendations Dropdown */}
+      {(streetPredictions.length > 0 || loadingPredictions) && searchQuery.trim().length >= 2 && (
+        <View style={[styles.recommendationCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.secondary + '40' }]}>
+          <View style={[styles.recommendationHeader, { backgroundColor: theme.colors.secondary + '10' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <MaterialCommunityIcons name="google-maps" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+              <Text style={[styles.recommendationHeaderTitle, { color: theme.colors.secondary }]}>
+                Street Recommendations
+              </Text>
+            </View>
+            {loadingPredictions && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontFamily: fonts.medium }}>Searching...</Text>
+              </View>
+            )}
+            <TouchableOpacity onPress={() => setStreetPredictions([])} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <MaterialCommunityIcons name="close" size={16} color={theme.colors.placeholder} />
+            </TouchableOpacity>
+          </View>
+
+          {streetPredictions.map((item, index) => {
+            const isSelecting = selectingPlaceId === item.placeId;
+            const isLast = index === streetPredictions.length - 1;
+            const isStreetOrRoute = item.types.includes('route') || item.types.includes('street_address') || item.types.includes('premise') || item.types.includes('subpremise');
+
+            return (
+              <TouchableOpacity
+                key={item.placeId || index}
+                style={[
+                  styles.recommendationItem,
+                  !isLast && { borderBottomColor: theme.colors.border + '30', borderBottomWidth: 1 }
+                ]}
+                onPress={() => handleSelectStreetPrediction(item)}
+                disabled={Boolean(selectingPlaceId)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.recIconWrap, { backgroundColor: theme.colors.secondary + '15' }]}>
+                  {isSelecting ? (
+                    <ActivityIndicator size="small" color={theme.colors.secondary} />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name={isStreetOrRoute ? 'road-variant' : 'map-marker-outline'}
+                      size={18}
+                      color={theme.colors.secondary}
+                    />
+                  )}
+                </View>
+
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={[styles.recMainText, { color: theme.colors.text }]} numberOfLines={1}>
+                    {item.mainText}
+                  </Text>
+                  {item.secondaryText ? (
+                    <Text style={[styles.recSecondaryText, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                      {item.secondaryText}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.recArrowWrap}>
+                  <MaterialCommunityIcons name="arrow-top-right" size={16} color={theme.colors.secondary} />
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {/* Near Me Active Badge (when inside UK) */}
-      {isNearMeActive && userCoordinates && isWithinUK && (
+      {isNearMeActive && activeCoordinates && isWithinUK && (
         <View style={[styles.nearMeActivePill, { backgroundColor: '#10B98115', borderColor: '#10B98140' }]}>
           <MaterialCommunityIcons name="crosshairs-gps" size={14} color="#10B981" style={{ marginRight: 6 }} />
           <Text style={[styles.nearMeActiveText, { color: '#10B981', flex: 1 }]}>
-            Sorted by nearest to {formatPreciseLocation(userCoordinates)}
+            Sorted by nearest to {formatPreciseLocation(activeCoordinates)}
           </Text>
           <TouchableOpacity onPress={handleResetNearMe} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={[styles.clearFilterLink, { color: theme.colors.primary }]}>Reset</Text>
@@ -1438,5 +1578,51 @@ const styles = StyleSheet.create({
   serviceCountText: {
     fontFamily: fonts.bold,
     fontSize: 10.5,
+  },
+  recommendationCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+  },
+  recommendationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  recommendationHeaderTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    letterSpacing: -0.2,
+  },
+  recommendationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  recIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recMainText: {
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+  },
+  recSecondaryText: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  recArrowWrap: {
+    paddingLeft: 8,
   },
 });

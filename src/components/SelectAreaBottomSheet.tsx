@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,14 +14,16 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
+import { fonts } from '../theme/theme';
 import {
   Coordinates,
-  UK_PRESET_LOCATIONS,
-  NON_UK_TEST_LOCATIONS,
   requestUserLiveLocation,
   isWithinUKBoundary,
   getCoordinatesFromLocationQuery,
   formatPreciseLocation,
+  fetchGooglePlacePredictions,
+  fetchGooglePlaceDetails,
+  GooglePlacePrediction,
 } from '../utils/mapUtils';
 
 export interface SelectAreaBottomSheetProps {
@@ -43,22 +45,92 @@ export default function SelectAreaBottomSheet({
   const [searching, setSearching] = useState(false);
   const [customSearchResult, setCustomSearchResult] = useState<Coordinates | null>(null);
 
-  // Filter preset locations based on search query (name, label, city, address, postcode)
-  const filteredPresets = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const cleanQ = q.replace(/\s+/g, '');
-    const allPresets = Object.entries(UK_PRESET_LOCATIONS);
-    if (!q) return allPresets;
+  // Google Places Street Recommendations
+  const [predictions, setPredictions] = useState<GooglePlacePrediction[]>([]);
+  const [loadingPredictions, setLoadingPredictions] = useState(false);
+  const [selectingPlaceId, setSelectingPlaceId] = useState<string | null>(null);
+  const debounceTimerRef = useRef<any>(null);
 
-    return allPresets.filter(([name, coords]) => {
-      const matchName = name.toLowerCase().includes(q);
-      const matchLabel = (coords.label || '').toLowerCase().includes(q);
-      const matchCity = (coords.cityName || '').toLowerCase().includes(q);
-      const matchAddress = (coords.address || '').toLowerCase().includes(q);
-      const matchPostcode = (coords.postcode || '').toLowerCase().replace(/\s+/g, '').includes(cleanQ);
-      return matchName || matchLabel || matchCity || matchAddress || matchPostcode;
-    });
-  }, [searchQuery]);
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!visible) {
+      setSearchQuery('');
+      setPredictions([]);
+      setLoadingPredictions(false);
+      setCustomSearchResult(null);
+      setSelectingPlaceId(null);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    }
+  }, [visible]);
+
+  // Handle typing in the input field with debounced Google Places Autocomplete
+  const handleQueryChange = (text: string) => {
+    setSearchQuery(text);
+    setCustomSearchResult(null);
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    const trimmed = text.trim();
+    if (trimmed.length < 2) {
+      setPredictions([]);
+      setLoadingPredictions(false);
+      return;
+    }
+
+    setLoadingPredictions(true);
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await fetchGooglePlacePredictions(trimmed);
+        setPredictions(results);
+      } catch (e) {
+        setPredictions([]);
+      } finally {
+        setLoadingPredictions(false);
+      }
+    }, 280);
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setPredictions([]);
+    setLoadingPredictions(false);
+    setCustomSearchResult(null);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+  };
+
+  const handleSelectGooglePrediction = async (item: GooglePlacePrediction) => {
+    setSelectingPlaceId(item.placeId);
+    try {
+      const coords = await fetchGooglePlaceDetails(item.placeId);
+      if (coords) {
+        onSelectLocation(coords);
+        onClose();
+      } else {
+        const fallbackCoords = await getCoordinatesFromLocationQuery(item.description);
+        if (fallbackCoords) {
+          onSelectLocation(fallbackCoords);
+          onClose();
+        }
+      }
+    } catch (err) {
+      console.error('Error selecting prediction:', err);
+    } finally {
+      setSelectingPlaceId(null);
+    }
+  };
 
   const handleUseLiveLocation = async () => {
     setLocatingLive(true);
@@ -96,19 +168,6 @@ export default function SelectAreaBottomSheet({
   const handleSelect = (coords: Coordinates) => {
     onSelectLocation(coords);
     onClose();
-  };
-
-  const isCurrentSelection = (coords: Coordinates) => {
-    if (!currentLocation) return false;
-    // Compare city or coordinates proximity
-    if (currentLocation.cityName && coords.cityName) {
-      if (currentLocation.cityName.toLowerCase() === coords.cityName.toLowerCase()) {
-        return true;
-      }
-    }
-    const latDiff = Math.abs(currentLocation.latitude - coords.latitude);
-    const lonDiff = Math.abs(currentLocation.longitude - coords.longitude);
-    return latDiff < 0.05 && lonDiff < 0.05;
   };
 
   const currentIsUk = currentLocation ? isWithinUKBoundary(currentLocation) : false;
@@ -159,19 +218,16 @@ export default function SelectAreaBottomSheet({
                   <MaterialCommunityIcons name="magnify" size={20} color={theme.colors.placeholder} style={{ marginRight: 8 }} />
                   <TextInput
                     value={searchQuery}
-                    onChangeText={(txt) => {
-                      setSearchQuery(txt);
-                      setCustomSearchResult(null);
-                    }}
+                    onChangeText={handleQueryChange}
                     onSubmitEditing={handleSearchSubmit}
-                    placeholder="Search Address"
+                    placeholder="Search street, town or postcode..."
                     placeholderTextColor={theme.colors.placeholder}
                     style={[styles.searchInput, { color: theme.colors.text }]}
                     returnKeyType="search"
                     autoCorrect={false}
                   />
                   {searchQuery.length > 0 && (
-                    <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <TouchableOpacity onPress={handleClearSearch} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                       <MaterialCommunityIcons name="close-circle" size={16} color={theme.colors.placeholder} />
                     </TouchableOpacity>
                   )}
@@ -185,6 +241,72 @@ export default function SelectAreaBottomSheet({
                   contentContainerStyle={styles.scrollList}
                   keyboardShouldPersistTaps="handled"
                 >
+                  {/* Street & Location Recommendations Dropdown (Triggered when user writes in input field) */}
+                  {(predictions.length > 0 || loadingPredictions) && searchQuery.trim().length >= 2 && (
+                    <View style={[styles.recommendationCard, { backgroundColor: theme.colors.background, borderColor: theme.colors.secondary + '40' }]}>
+                      <View style={[styles.recommendationHeader, { backgroundColor: theme.colors.secondary + '10' }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                          <MaterialCommunityIcons name="google-maps" size={16} color={theme.colors.secondary} style={{ marginRight: 6 }} />
+                          <Text style={[styles.recommendationHeaderTitle, { color: theme.colors.secondary }]}>
+                            Street Recommendations
+                          </Text>
+                        </View>
+                        {loadingPredictions && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <ActivityIndicator size="small" color={theme.colors.secondary} />
+                            <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontFamily: fonts.medium }}>Searching...</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {predictions.map((item, index) => {
+                        const isSelecting = selectingPlaceId === item.placeId;
+                        const isLast = index === predictions.length - 1;
+                        const isStreetOrRoute = item.types.includes('route') || item.types.includes('street_address') || item.types.includes('premise') || item.types.includes('subpremise');
+
+                        return (
+                          <TouchableOpacity
+                            key={item.placeId || index}
+                            style={[
+                              styles.recommendationItem,
+                              !isLast && { borderBottomColor: theme.colors.border + '30', borderBottomWidth: 1 }
+                            ]}
+                            onPress={() => handleSelectGooglePrediction(item)}
+                            disabled={Boolean(selectingPlaceId)}
+                            activeOpacity={0.7}
+                          >
+                            <View style={[styles.recIconWrap, { backgroundColor: theme.colors.secondary + '15' }]}>
+                              {isSelecting ? (
+                                <ActivityIndicator size="small" color={theme.colors.secondary} />
+                              ) : (
+                                <MaterialCommunityIcons
+                                  name={isStreetOrRoute ? 'road-variant' : 'map-marker-outline'}
+                                  size={18}
+                                  color={theme.colors.secondary}
+                                />
+                              )}
+                            </View>
+
+                            <View style={{ flex: 1, marginLeft: 10 }}>
+                              <Text style={[styles.recMainText, { color: theme.colors.text }]} numberOfLines={1}>
+                                {item.mainText}
+                              </Text>
+                              {item.secondaryText ? (
+                                <Text style={[styles.recSecondaryText, { color: theme.colors.placeholder }]} numberOfLines={1}>
+                                  {item.secondaryText}
+                                </Text>
+                              ) : null}
+                            </View>
+
+                            <View style={styles.recArrowWrap}>
+                              <MaterialCommunityIcons name="arrow-top-right" size={16} color={theme.colors.secondary} />
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+
                   {/* Option 1: Live Hardware / IP Location */}
                   <TouchableOpacity
                     style={[
@@ -278,121 +400,6 @@ export default function SelectAreaBottomSheet({
                     </View>
                   )}
 
-                  {/* Popular UK Service Areas */}
-                  <View style={styles.sectionWrap}>
-                    <Text style={[styles.sectionHeading, { color: theme.colors.placeholder }]}>
-                      Popular UK Service Areas
-                    </Text>
-
-                    {filteredPresets.map(([name, coords]) => {
-                      const isSelected = isCurrentSelection(coords);
-                      return (
-                        <TouchableOpacity
-                          key={name}
-                          style={[
-                            styles.locationItem,
-                            {
-                              backgroundColor: isSelected ? theme.colors.secondary + '10' : theme.colors.background,
-                              borderColor: isSelected ? theme.colors.secondary : theme.colors.border,
-                            },
-                          ]}
-                          onPress={() => handleSelect(coords)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={[
-                            styles.cityIconWrap,
-                            { backgroundColor: isSelected ? theme.colors.secondary + '20' : theme.colors.card }
-                          ]}>
-                            <MaterialCommunityIcons
-                              name="map-marker"
-                              size={18}
-                              color={isSelected ? theme.colors.secondary : theme.colors.placeholder}
-                            />
-                          </View>
-
-                          <View style={{ flex: 1, marginLeft: 10 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <Text style={[styles.cityName, { color: theme.colors.text }]}>
-                                {coords.address || coords.cityName || name}
-                              </Text>
-                              <View style={styles.ukMiniBadge}>
-                                <Text style={styles.ukMiniBadgeText}>🇬🇧 UK</Text>
-                              </View>
-                            </View>
-                            <Text style={[styles.cityDesc, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                              {coords.label || `${coords.cityName}, United Kingdom`}
-                            </Text>
-                          </View>
-
-                          {isSelected ? (
-                            <View style={[styles.selectedCircle, { backgroundColor: theme.colors.secondary }]}>
-                              <MaterialCommunityIcons name="check" size={14} color="#FFFFFF" />
-                            </View>
-                          ) : (
-                            <MaterialCommunityIcons name="chevron-right" size={18} color={theme.colors.placeholder} />
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  {/* Test Outside UK Section */}
-                  <View style={styles.sectionWrap}>
-                    <View style={styles.testSectionHeader}>
-                      <MaterialCommunityIcons name="flask-outline" size={14} color="#EF4444" style={{ marginRight: 4 }} />
-                      <Text style={[styles.sectionHeading, { color: '#EF4444', marginBottom: 0 }]}>
-                        Test Non-UK Region (Outside UK Boundary)
-                      </Text>
-                    </View>
-                    <Text style={[styles.testSectionNotice, { color: theme.colors.placeholder }]}>
-                      Select Bhopal to test the "Service not available in selected area!" condition:
-                    </Text>
-
-                    {Object.entries(NON_UK_TEST_LOCATIONS).map(([testName, coords]) => {
-                      const isSelected = isCurrentSelection(coords);
-                      return (
-                        <TouchableOpacity
-                          key={testName}
-                          style={[
-                            styles.nonUkItem,
-                            {
-                              backgroundColor: isSelected ? '#EF444415' : theme.colors.background,
-                              borderColor: isSelected ? '#EF4444' : '#EF444440',
-                            },
-                          ]}
-                          onPress={() => handleSelect(coords)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={[styles.cityIconWrap, { backgroundColor: '#EF444418' }]}>
-                            <MaterialCommunityIcons name="map-marker-off" size={18} color="#EF4444" />
-                          </View>
-
-                          <View style={{ flex: 1, marginLeft: 10 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <Text style={[styles.cityName, { color: theme.colors.text }]}>
-                                {coords.address || coords.cityName}
-                              </Text>
-                              <View style={[styles.nonUkPill, { backgroundColor: '#EF444420' }]}>
-                                <Text style={styles.nonUkPillText}>{coords.countryName || 'Outside UK'}</Text>
-                              </View>
-                            </View>
-                            <Text style={[styles.cityDesc, { color: theme.colors.placeholder }]} numberOfLines={1}>
-                              {coords.label}
-                            </Text>
-                          </View>
-
-                          {isSelected ? (
-                            <View style={[styles.selectedCircle, { backgroundColor: '#EF4444' }]}>
-                              <MaterialCommunityIcons name="check" size={14} color="#FFFFFF" />
-                            </View>
-                          ) : (
-                            <MaterialCommunityIcons name="chevron-right" size={18} color={theme.colors.placeholder} />
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
                   <View style={{ height: 24 }} />
                 </ScrollView>
               </View>
@@ -403,8 +410,6 @@ export default function SelectAreaBottomSheet({
     </Modal>
   );
 }
-
-import { fonts } from '../theme/theme';
 
 const styles = StyleSheet.create({
   backdrop: {
@@ -529,29 +534,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginBottom: 8,
   },
-  testSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  testSectionNotice: {
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    marginBottom: 8,
-  },
   locationItem: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
     borderWidth: 1,
-    padding: 12,
-    marginBottom: 8,
-  },
-  nonUkItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1.2,
     padding: 12,
     marginBottom: 8,
   },
@@ -571,29 +558,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
-  ukMiniBadge: {
-    backgroundColor: '#10B98115',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    marginLeft: 6,
-  },
-  ukMiniBadgeText: {
-    fontFamily: fonts.bold,
-    color: '#10B981',
-    fontSize: 10,
-  },
-  nonUkPill: {
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    marginLeft: 6,
-  },
-  nonUkPillText: {
-    fontFamily: fonts.bold,
-    color: '#DC2626',
-    fontSize: 10,
-  },
   regionTag: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -603,11 +567,49 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 11,
   },
-  selectedCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  recommendationCard: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  recommendationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  recommendationHeaderTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+    letterSpacing: -0.2,
+  },
+  recommendationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  recIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  recMainText: {
+    fontFamily: fonts.bold,
+    fontSize: 13.5,
+  },
+  recSecondaryText: {
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  recArrowWrap: {
+    paddingLeft: 8,
   },
 });
