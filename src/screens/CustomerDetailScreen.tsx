@@ -129,7 +129,7 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
     // Check if vehicle has an active booking
     const activeBooking = alerts.find((a) => {
       const matchReg = (a.registrationNumber || '').toUpperCase().trim() === (reg || '').toUpperCase().trim();
-      const isActiveStatus = a.status === 'Pending' || a.status === 'Approved' || a.status === 'Acknowledged';
+      const isActiveStatus = a.status === 'Pending' || a.status === 'Approved' || a.status === 'Acknowledged' || a.status === 'In Progress' || a.status === 'InProgress';
       return a.type === 'BOOKED' && matchReg && isActiveStatus;
     });
 
@@ -377,6 +377,8 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
               customerBookings.map((b) => {
                 const isPending = b.status === 'Pending';
                 const isApproved = b.status === 'Approved';
+                const isInProgress = b.status === 'In Progress' || b.status === 'InProgress';
+                const isCompleted = b.status === 'Completed';
                 const isRejected = b.status === 'Rejected';
                 const isCancelled = b.status === 'Cancelled';
 
@@ -388,10 +390,18 @@ export default function CustomerDetailScreen({ route, navigation }: any) {
                   statusText = 'Pending';
                   statusColor = theme.colors.warning;
                   statusBg = theme.colors.warning + '15';
+                } else if (isInProgress) {
+                  statusText = 'In Progress';
+                  statusColor = '#8B5CF6';
+                  statusBg = '#8B5CF618';
                 } else if (isApproved) {
                   statusText = 'Confirmed';
                   statusColor = theme.colors.success;
                   statusBg = theme.colors.success + '15';
+                } else if (isCompleted) {
+                  statusText = 'Completed';
+                  statusColor = '#3B82F6';
+                  statusBg = '#3B82F615';
                 } else if (isRejected) {
                   statusText = 'Rejected';
                   statusColor = theme.colors.error;

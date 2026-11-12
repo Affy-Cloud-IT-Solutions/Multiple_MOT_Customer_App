@@ -346,7 +346,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
           const hasBooking = alerts.some(a => 
             a.type === 'BOOKED' && 
             a.registrationNumber?.toUpperCase() === v.registrationNumber?.toUpperCase() && 
-            (a.status === 'Pending' || a.status === 'Approved')
+            (a.status === 'Pending' || a.status === 'Approved' || a.status === 'In Progress' || a.status === 'InProgress')
           );
           return days <= 30 && !isPending && !hasBooking;
         });
@@ -801,7 +801,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         const hasBooking = alerts.some(a => 
           a.type === 'BOOKED' && 
           a.registrationNumber?.toUpperCase() === v.registrationNumber?.toUpperCase() && 
-          (a.status === 'Pending' || a.status === 'Approved')
+          (a.status === 'Pending' || a.status === 'Approved' || a.status === 'In Progress' || a.status === 'InProgress')
         );
         return days <= 30 && !isPending && !hasBooking;
       });
@@ -868,7 +868,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     const activeBooking = alerts.find(a => 
       a.type === 'BOOKED' && 
       a.registrationNumber?.toUpperCase() === selectedVehicle.registrationNumber?.toUpperCase() &&
-      a.status === 'Approved'
+      (a.status === 'Approved' || a.status === 'In Progress' || a.status === 'InProgress')
     );
     if (activeBooking) {
       Alert.alert(
@@ -2437,7 +2437,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         const activeBookingAlert = alerts.find(a => 
                           a.type === 'BOOKED' && 
                           a.registrationNumber?.toUpperCase() === veh.registrationNumber?.toUpperCase() && 
-                          a.status === 'Approved'
+                          (a.status === 'Approved' || a.status === 'In Progress' || a.status === 'InProgress')
                         );
 
                         const isEligible = !isPendingApproval && !isRejected && !pendingBookingAlert && !activeBookingAlert;
@@ -2630,7 +2630,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                               <Text style={{ fontFamily: fonts.bold }}>Booking Pending:</Text> A booking request for {selectedVehicle.registrationNumber} is already awaiting garage staff approval.
                             </Text>
                           </View>
-                        ) : alerts.some(a => a.type === 'BOOKED' && a.registrationNumber?.toUpperCase() === selectedVehicle.registrationNumber?.toUpperCase() && a.status === 'Approved') ? (
+                        ) : alerts.some(a => a.type === 'BOOKED' && a.registrationNumber?.toUpperCase() === selectedVehicle.registrationNumber?.toUpperCase() && (a.status === 'Approved' || a.status === 'In Progress' || a.status === 'InProgress')) ? (
                           <View style={[styles.inlineNotice, { backgroundColor: theme.colors.primary + '15', borderColor: theme.colors.primary + '40' }]}>
                             <MaterialCommunityIcons name="calendar-check" size={18} color={theme.colors.primary} style={{ marginRight: 8 }} />
                             <Text style={[styles.inlineNoticeText, { color: theme.colors.text }]}>
@@ -2946,7 +2946,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   const hasApprovedBooking = selectedVehicle && alerts.some(a => 
                     a.type === 'BOOKED' && 
                     a.registrationNumber?.toUpperCase() === selectedVehicle.registrationNumber?.toUpperCase() && 
-                    a.status === 'Approved'
+                    (a.status === 'Approved' || a.status === 'In Progress' || a.status === 'InProgress')
                   );
                   const isVehicleEligible = selectedVehicle && !isPendingApproval && !isRejected && !hasPendingBooking && !hasApprovedBooking;
 

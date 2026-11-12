@@ -68,7 +68,7 @@ export default function BookingsScreen({ navigation }: any) {
   } = useAppValues();
 
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'CONFIRMED' | 'PENDING' | 'REJECTED' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'CONFIRMED' | 'IN_PROGRESS' | 'PENDING' | 'REJECTED' | 'COMPLETED' | 'CANCELLED'>('ALL');
   const [dateFilter, setDateFilter] = useState<'ALL' | 'CUSTOM'>('ALL');
   const [selectedCustomDate, setSelectedCustomDate] = useState<string | null>(null);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
@@ -205,6 +205,7 @@ export default function BookingsScreen({ navigation }: any) {
   const counts = useMemo(() => {
     let pending = 0;
     let confirmed = 0;
+    let inProgress = 0;
     let rejected = 0;
     let completed = 0;
     let cancelled = 0;
@@ -212,6 +213,7 @@ export default function BookingsScreen({ navigation }: any) {
     allCustomerBookings.forEach((b) => {
       const s = (b.status || '').toLowerCase();
       if (s === 'pending') pending++;
+      else if (s === 'in progress' || s === 'inprogress') inProgress++;
       else if (s === 'approved' || s === 'confirmed' || s === 'acknowledged') confirmed++;
       else if (s === 'completed') completed++;
       else if (s === 'rejected') rejected++;
@@ -221,6 +223,7 @@ export default function BookingsScreen({ navigation }: any) {
     return {
       ALL: allCustomerBookings.length,
       CONFIRMED: confirmed,
+      IN_PROGRESS: inProgress,
       PENDING: pending,
       REJECTED: rejected,
       COMPLETED: completed,
@@ -234,12 +237,14 @@ export default function BookingsScreen({ navigation }: any) {
       const s = (b.status || '').toLowerCase();
       const isPending = s === 'pending';
       const isConfirmed = s === 'approved' || s === 'confirmed' || s === 'acknowledged';
+      const isInProgress = s === 'in progress' || s === 'inprogress';
       const isCompleted = s === 'completed';
       const isRejected = s === 'rejected';
       const isCancelled = s === 'cancelled';
 
       let matchFilter = true;
       if (selectedFilter === 'CONFIRMED') matchFilter = isConfirmed;
+      else if (selectedFilter === 'IN_PROGRESS') matchFilter = isInProgress;
       else if (selectedFilter === 'PENDING') matchFilter = isPending;
       else if (selectedFilter === 'REJECTED') matchFilter = isRejected;
       else if (selectedFilter === 'COMPLETED') matchFilter = isCompleted;
@@ -356,10 +361,26 @@ export default function BookingsScreen({ navigation }: any) {
 
   const getStatusConfig = (rawStatus?: string) => {
     const s = (rawStatus || 'Pending').toLowerCase();
+    if (s === 'in progress' || s === 'inprogress') {
+      return {
+        isPending: false,
+        isConfirmed: false,
+        isInProgress: true,
+        isCompleted: false,
+        isCancelled: false,
+        isRejected: false,
+        color: '#8B5CF6',
+        bg: '#8B5CF618',
+        icon: 'car-wrench',
+        text: 'In Workshop',
+        desc: 'Vehicle is currently inside the workshop ramp. Service has started.',
+      };
+    }
     if (s === 'approved' || s === 'confirmed' || s === 'acknowledged') {
       return {
         isPending: false,
         isConfirmed: true,
+        isInProgress: false,
         isCompleted: false,
         isCancelled: false,
         isRejected: false,
@@ -374,6 +395,7 @@ export default function BookingsScreen({ navigation }: any) {
       return {
         isPending: false,
         isConfirmed: false,
+        isInProgress: false,
         isCompleted: true,
         isCancelled: false,
         isRejected: false,
@@ -388,6 +410,7 @@ export default function BookingsScreen({ navigation }: any) {
       return {
         isPending: false,
         isConfirmed: false,
+        isInProgress: false,
         isCompleted: false,
         isCancelled: true,
         isRejected: false,
@@ -402,6 +425,7 @@ export default function BookingsScreen({ navigation }: any) {
       return {
         isPending: false,
         isConfirmed: false,
+        isInProgress: false,
         isCompleted: false,
         isCancelled: false,
         isRejected: true,
@@ -415,6 +439,7 @@ export default function BookingsScreen({ navigation }: any) {
     return {
       isPending: true,
       isConfirmed: false,
+      isInProgress: false,
       isCompleted: false,
       isCancelled: false,
       isRejected: false,
@@ -580,6 +605,7 @@ export default function BookingsScreen({ navigation }: any) {
           {[
             { key: 'ALL', label: 'All', count: counts.ALL },
             { key: 'CONFIRMED', label: 'Approved', count: counts.CONFIRMED },
+            { key: 'IN_PROGRESS', label: 'In Workshop', count: counts.IN_PROGRESS },
             { key: 'PENDING', label: 'Pending', count: counts.PENDING },
             { key: 'REJECTED', label: 'Rejected', count: counts.REJECTED },
             { key: 'COMPLETED', label: 'Completed', count: counts.COMPLETED },
@@ -820,6 +846,49 @@ export default function BookingsScreen({ navigation }: any) {
                   </View>
                 </View>
 
+                {/* Active In-Workshop / Ramp Banner */}
+                {statusCfg.isInProgress && (
+                  <View style={[styles.cardProgressBox, { backgroundColor: '#8B5CF612', borderColor: '#8B5CF635' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <MaterialCommunityIcons name="car-wrench" size={15} color="#8B5CF6" style={{ marginRight: 6 }} />
+                        <Text style={{ color: '#8B5CF6', fontFamily: fonts.bold, fontSize: 12 }}>
+                          Service In Progress • On Ramp
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#8B5CF6', marginRight: 4 }} />
+                        <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: '#8B5CF6', textTransform: 'uppercase' }}>Live</Text>
+                      </View>
+                    </View>
+                    <Text style={{ color: theme.colors.text, fontSize: 11.5, fontFamily: fonts.regular, lineHeight: 16 }}>
+                      The garage technician has taken your vehicle into the bay and commenced service{item.serviceStartedAt ? ` at ${new Date(item.serviceStartedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}.
+                    </Text>
+                  </View>
+                )}
+
+                {/* Completed Service Outcome & Notes */}
+                {statusCfg.isCompleted && (
+                  <View style={[styles.cardCompletedBox, { backgroundColor: '#3B82F610', borderColor: '#3B82F630' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+                      <MaterialCommunityIcons name="check-decagram" size={15} color="#3B82F6" style={{ marginRight: 6 }} />
+                      <Text style={{ color: '#3B82F6', fontFamily: fonts.bold, fontSize: 12 }}>
+                        Service & MOT Completed
+                      </Text>
+                    </View>
+                    {item.serviceNotes ? (
+                      <Text style={{ color: theme.colors.text, fontSize: 11.5, fontFamily: fonts.regular, lineHeight: 16 }}>
+                        <Text style={{ fontFamily: fonts.bold, color: theme.colors.text }}>Technician Note: </Text>
+                        {item.serviceNotes}
+                      </Text>
+                    ) : (
+                      <Text style={{ color: theme.colors.placeholder, fontSize: 11.5, fontFamily: fonts.regular }}>
+                        All workshop checks and tests have been completed. Vehicle is ready for collection.
+                      </Text>
+                    )}
+                  </View>
+                )}
+
                 {/* Rejection Details Callout on Card */}
                 {statusCfg.isRejected && (
                   <View style={[styles.cardRejectionBox, { backgroundColor: '#DC262610', borderColor: '#DC262630' }]}>
@@ -970,6 +1039,126 @@ export default function BookingsScreen({ navigation }: any) {
                             <Text style={[styles.sheetStatusDesc, { color: theme.colors.text }]}>{statusCfg.desc}</Text>
                           </View>
                         </View>
+
+                        {/* 4-Step Progress Tracking Stepper */}
+                        {!statusCfg.isCancelled && !statusCfg.isRejected && (
+                          <View style={[styles.sheetSectionBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                            <Text style={[styles.sheetSectionHeading, { color: theme.colors.placeholder }]}>SERVICE PROGRESS TRACKER</Text>
+                            <View style={styles.stepperContainer}>
+                              {/* Step 1: Booked */}
+                              <View style={styles.stepItem}>
+                                <View style={[styles.stepDot, { backgroundColor: '#10B981' }]}>
+                                  <MaterialCommunityIcons name="check" size={13} color="#FFFFFF" />
+                                </View>
+                                <Text style={[styles.stepLabel, { color: theme.colors.text, fontFamily: fonts.semiBold }]}>Booked</Text>
+                              </View>
+                              <View style={[styles.stepLine, { backgroundColor: (statusCfg.isConfirmed || statusCfg.isInProgress || statusCfg.isCompleted) ? '#10B981' : theme.colors.border }]} />
+
+                              {/* Step 2: Confirmed */}
+                              <View style={styles.stepItem}>
+                                <View style={[
+                                  styles.stepDot,
+                                  {
+                                    backgroundColor: (statusCfg.isConfirmed || statusCfg.isInProgress || statusCfg.isCompleted) ? '#10B981' : '#F59E0B'
+                                  }
+                                ]}>
+                                  <MaterialCommunityIcons
+                                    name={(statusCfg.isConfirmed || statusCfg.isInProgress || statusCfg.isCompleted) ? "check" : "timer-sand"}
+                                    size={13}
+                                    color="#FFFFFF"
+                                  />
+                                </View>
+                                <Text style={[
+                                  styles.stepLabel,
+                                  {
+                                    color: (statusCfg.isConfirmed || statusCfg.isInProgress || statusCfg.isCompleted) ? theme.colors.text : '#F59E0B',
+                                    fontFamily: statusCfg.isPending ? fonts.bold : fonts.semiBold
+                                  }
+                                ]}>
+                                  Confirmed
+                                </Text>
+                              </View>
+                              <View style={[styles.stepLine, { backgroundColor: (statusCfg.isInProgress || statusCfg.isCompleted) ? '#8B5CF6' : theme.colors.border }]} />
+
+                              {/* Step 3: In Workshop */}
+                              <View style={styles.stepItem}>
+                                <View style={[
+                                  styles.stepDot,
+                                  {
+                                    backgroundColor: statusCfg.isCompleted ? '#10B981' : (statusCfg.isInProgress ? '#8B5CF6' : theme.colors.border)
+                                  }
+                                ]}>
+                                  <MaterialCommunityIcons
+                                    name={statusCfg.isCompleted ? "check" : (statusCfg.isInProgress ? "car-wrench" : "circle-outline")}
+                                    size={13}
+                                    color={statusCfg.isCompleted || statusCfg.isInProgress ? "#FFFFFF" : theme.colors.placeholder}
+                                  />
+                                </View>
+                                <Text style={[
+                                  styles.stepLabel,
+                                  {
+                                    color: statusCfg.isInProgress ? '#8B5CF6' : (statusCfg.isCompleted ? theme.colors.text : theme.colors.placeholder),
+                                    fontFamily: statusCfg.isInProgress ? fonts.bold : fonts.medium
+                                  }
+                                ]}>
+                                  In Workshop
+                                </Text>
+                              </View>
+                              <View style={[styles.stepLine, { backgroundColor: statusCfg.isCompleted ? '#3B82F6' : theme.colors.border }]} />
+
+                              {/* Step 4: Ready / Done */}
+                              <View style={styles.stepItem}>
+                                <View style={[
+                                  styles.stepDot,
+                                  {
+                                    backgroundColor: statusCfg.isCompleted ? '#3B82F6' : theme.colors.border
+                                  }
+                                ]}>
+                                  <MaterialCommunityIcons
+                                    name={statusCfg.isCompleted ? "check-decagram" : "circle-outline"}
+                                    size={13}
+                                    color={statusCfg.isCompleted ? "#FFFFFF" : theme.colors.placeholder}
+                                  />
+                                </View>
+                                <Text style={[
+                                  styles.stepLabel,
+                                  {
+                                    color: statusCfg.isCompleted ? '#3B82F6' : theme.colors.placeholder,
+                                    fontFamily: statusCfg.isCompleted ? fonts.bold : fonts.medium
+                                  }
+                                ]}>
+                                  Completed
+                                </Text>
+                              </View>
+                            </View>
+
+                            {/* Live status timeline note */}
+                            {item.serviceStartedAt && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.colors.border + '40' }}>
+                                <MaterialCommunityIcons name="clock-start" size={14} color="#8B5CF6" style={{ marginRight: 6 }} />
+                                <Text style={{ fontSize: 11.5, color: theme.colors.text, fontFamily: fonts.medium }}>
+                                  Service Started: {new Date(item.serviceStartedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on {new Date(item.serviceStartedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                  {item.serviceStartedBy ? ` by ${item.serviceStartedBy}` : ''}
+                                </Text>
+                              </View>
+                            )}
+                            {item.serviceCompletedAt && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                                <MaterialCommunityIcons name="clock-check" size={14} color="#3B82F6" style={{ marginRight: 6 }} />
+                                <Text style={{ fontSize: 11.5, color: theme.colors.text, fontFamily: fonts.medium }}>
+                                  Service Completed: {new Date(item.serviceCompletedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} on {new Date(item.serviceCompletedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                  {item.serviceCompletedBy ? ` by ${item.serviceCompletedBy}` : ''}
+                                </Text>
+                              </View>
+                            )}
+                            {item.serviceNotes && (
+                              <View style={{ marginTop: 8, backgroundColor: theme.colors.card, padding: 8, borderRadius: 6, borderWidth: 1, borderColor: theme.colors.border }}>
+                                <Text style={{ fontSize: 11, fontFamily: fonts.bold, color: theme.colors.text, marginBottom: 2 }}>Garage Technician Notes:</Text>
+                                <Text style={{ fontSize: 11.5, fontFamily: fonts.regular, color: theme.colors.text }}>{item.serviceNotes}</Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
 
                         {/* Service & Schedule Box */}
                         <View style={[styles.sheetSectionBox, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
@@ -2164,5 +2353,45 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     color: '#FFFFFF',
     fontSize: 11,
+  },
+  cardProgressBox: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+    marginTop: 8,
+  },
+  cardCompletedBox: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+    marginTop: 8,
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  stepItem: {
+    alignItems: 'center',
+    width: 68,
+  },
+  stepDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  stepLabel: {
+    fontSize: 10.5,
+    textAlign: 'center',
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    marginTop: -18,
+    marginHorizontal: 2,
   },
 });

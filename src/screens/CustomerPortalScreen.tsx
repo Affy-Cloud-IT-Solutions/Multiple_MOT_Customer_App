@@ -288,7 +288,7 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
     // 1. Validation: check if vehicle service is already booked
     const activeBooking = alerts.find((a) => {
       const matchReg = (a.registrationNumber || '').toUpperCase().trim() === (reg || '').toUpperCase().trim();
-      const isActiveStatus = a.status === 'Pending' || a.status === 'Approved' || a.status === 'Acknowledged';
+      const isActiveStatus = a.status === 'Pending' || a.status === 'Approved' || a.status === 'Acknowledged' || a.status === 'In Progress' || a.status === 'InProgress';
       return a.type === 'BOOKED' && matchReg && isActiveStatus;
     });
 

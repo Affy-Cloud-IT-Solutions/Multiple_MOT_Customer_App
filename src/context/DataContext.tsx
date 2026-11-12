@@ -51,7 +51,12 @@ export interface AlertNotification {
   registrationNumber: string;
   makeModel: string;
   date: string;
-  status: 'Pending' | 'Approved' | 'Acknowledged' | 'Rejected' | 'Completed' | 'Cancelled';
+  status: 'Pending' | 'Approved' | 'Acknowledged' | 'In Progress' | 'InProgress' | 'Rejected' | 'Completed' | 'Cancelled';
+  serviceStartedAt?: string;
+  serviceStartedBy?: string;
+  serviceCompletedAt?: string;
+  serviceCompletedBy?: string;
+  serviceNotes?: string;
   rejectionReason?: string;
   garageId?: string;
   garageName?: string;
