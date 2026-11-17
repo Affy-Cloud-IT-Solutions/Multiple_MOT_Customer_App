@@ -33,6 +33,7 @@ export default function ProfileScreen({ navigation }: any) {
     setToken,
     setUser,
     logout,
+    isLoggingOut,
     customers = [],
     vehicles = [],
     alerts = [],
@@ -513,7 +514,7 @@ export default function ProfileScreen({ navigation }: any) {
       {/* Logout Button */}
       <TouchableOpacity
         onPress={user ? handleLogout : () => navigation.navigate('Login')}
-        disabled={loggingOut}
+        disabled={loggingOut || isLoggingOut}
         style={[
           styles.actionButtonContainer,
           {
@@ -521,11 +522,11 @@ export default function ProfileScreen({ navigation }: any) {
             backgroundColor: user
               ? theme.colors.error + '0A'
               : theme.colors.primary + '0A',
-            opacity: loggingOut ? 0.7 : 1,
+            opacity: (loggingOut || isLoggingOut) ? 0.7 : 1,
           },
         ]}
       >
-        {loggingOut ? (
+        {(loggingOut || isLoggingOut) ? (
           <ActivityIndicator
             color={user ? theme.colors.error : theme.colors.primary}
             size="small"

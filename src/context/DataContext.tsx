@@ -80,6 +80,9 @@ export interface AlertNotification {
   stationName?: string;
   rescheduled?: boolean;
   cancellationReason?: string;
+  invoiceId?: string;
+  hasInvoice?: boolean;
+  invoiceTotal?: number;
   cancelledBy?: string;
   cancelledAt?: string;
 }
@@ -98,6 +101,49 @@ export interface UserProfile {
   role: 'admin' | 'garage_admin' | 'staff' | 'customer';
   customerId?: string;
   garageId?: string;
+}
+
+export interface InvoiceLineItem {
+  _id?: string;
+  itemType: 'SERVICE' | 'PART' | 'LABOUR' | 'OTHER';
+  inventoryItemId?: string;
+  partNumber?: string;
+  description: string;
+  quantity: number;
+  unit?: string;
+  unitPrice: number;
+  totalPrice: number;
+  stockDeducted?: boolean;
+  deductedQuantity?: number;
+}
+
+export interface Invoice {
+  _id: string;
+  invoiceNumber: string;
+  bookingId: string;
+  garageId: any;
+  customerId?: string;
+  customerName: string;
+  customerEmail?: string;
+  customerMobile?: string;
+  customerAddress?: string;
+  registrationNumber: string;
+  makeModel?: string;
+  items: InvoiceLineItem[];
+  subtotal: number;
+  vatRate: number;
+  vatAmount: number;
+  discountAmount?: number;
+  grandTotal: number;
+  status: 'Draft' | 'Issued' | 'Paid' | 'Cancelled';
+  paymentStatus: 'Pending' | 'Paid' | 'Partially Paid';
+  paymentMethod: 'Card' | 'Cash' | 'Bank Transfer' | 'Online' | 'Pending';
+  notes?: string;
+  issuedAt?: string;
+  paidAt?: string;
+  createdByName?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface DynamicService {
@@ -148,6 +194,7 @@ interface DataContextType {
   refreshSession: () => Promise<RefreshOutcome>;
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
   logout: () => Promise<void>;
+  isLoggingOut: boolean;
   user: UserProfile | null;
   setUser: (user: UserProfile | null) => void;
   refreshData: () => Promise<void>;
@@ -177,14 +224,15 @@ interface DataContextType {
   fetchServices: () => Promise<DynamicService[]>;
   serviceCategories: ServiceCategory[];
   fetchServiceCategories: () => Promise<ServiceCategory[]>;
+  fetchBookingInvoice: (bookingId: string) => Promise<Invoice | null>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-export const LOCAL_IP = '192.168.1.45';
-// export const BASE_URL = `http://${LOCAL_IP}:5000/api`;
+export const LOCAL_IP = '192.168.1.15';
+export const BASE_URL = `http://${LOCAL_IP}:5000/api`;
 // export const BASE_URL = 'http://10.0.2.2:5000/api'; // Android Emulator alias
-export const BASE_URL = 'https://api.ondoorcarservice.com/api'; // Production server
+// export const BASE_URL = 'https://api.ondoorcarservice.com/api'; // Production server
 // export const BASE_URL = 'http://localhost:5000/api';
 
 const DISMISSED_ALERTS_KEY = '@dismissed_alert_ids';
@@ -205,6 +253,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [services, setServices] = useState<DynamicService[]>([]);
   const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
   // Notifications dismissed on this device, so a dismissed banner stays hidden even if the server call fails
   useEffect(() => {
@@ -527,19 +576,27 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [refreshSession, handleSessionExpired]);
 
   const logout = useCallback(async () => {
+    setIsLoggingOut(true);
     try {
       const activeRefreshToken = refreshTokenRef.current || await AsyncStorage.getItem('user_refresh_token');
       if (activeRefreshToken) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3500);
         await fetch(`${BASE_URL}/auth/logout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: activeRefreshToken })
+          body: JSON.stringify({ refreshToken: activeRefreshToken }),
+          signal: controller.signal,
         }).catch(err => console.warn('Logout request warning:', err));
+        clearTimeout(timer);
       }
+    } catch (e) {
+      console.warn('Logout error:', e);
     } finally {
       setTokens(null, null);
       setUserState(null);
       resetToLogin();
+      setIsLoggingOut(false);
     }
   }, [setTokens]);
 
@@ -1190,6 +1247,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const fetchBookingInvoice = useCallback(async (bookingId: string): Promise<Invoice | null> => {
+    try {
+      const res = await authFetch(`${BASE_URL}/invoices/booking/${bookingId}`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.invoice || null;
+      }
+      return null;
+    } catch (err) {
+      console.error('[CUSTOMER DATA CONTEXT] fetchBookingInvoice error:', err);
+      return null;
+    }
+  }, [authFetch]);
+
   return (
     <DataContext.Provider
       value={{
@@ -1206,6 +1277,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         refreshSession,
         authFetch,
         logout,
+        isLoggingOut,
         user,
         setUser,
         refreshData,
@@ -1234,6 +1306,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         fetchServices,
         serviceCategories,
         fetchServiceCategories,
+        fetchBookingInvoice,
       }}
     >
       {children}

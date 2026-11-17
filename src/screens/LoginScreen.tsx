@@ -27,7 +27,6 @@ import {
   AlertCircleIcon,
   ArrowRightIcon,
   HeaderBackgroundSvg,
-  TrustShieldSvg,
 } from '../components/SvgIcons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -49,7 +48,6 @@ export default function LoginScreen({ navigation }: any) {
 
   useEffect(() => {
     const checkPersistedSession = async () => {
-      setLoading(true);
       try {
         const storedToken = await AsyncStorage.getItem('user_token');
         const storedRefreshToken = await AsyncStorage.getItem('user_refresh_token');
@@ -97,8 +95,6 @@ export default function LoginScreen({ navigation }: any) {
         }
       } catch (err) {
         console.error('Error reading persisted session:', err);
-      } finally {
-        setLoading(false);
       }
     };
     checkPersistedSession();
@@ -395,24 +391,6 @@ export default function LoginScreen({ navigation }: any) {
                 Create Account
               </Text>
             </TouchableOpacity>
-          </View>
-
-          {/* Trust Security Badges Footer */}
-          <View style={styles.trustBadgesRow}>
-            <View style={styles.trustBadge}>
-              <TrustShieldSvg size={14} color="#10B981" />
-              <Text style={[styles.trustBadgeText, { color: theme.colors.placeholder }]}>
-                DVSA Integrated
-              </Text>
-            </View>
-            <View style={[styles.dotDivider, { backgroundColor: theme.colors.border }]} />
-            <View style={[styles.dotDivider, { backgroundColor: theme.colors.border }]} />
-            <View style={styles.trustBadge}>
-              <TrustShieldSvg size={14} color="#10B981" />
-              <Text style={[styles.trustBadgeText, { color: theme.colors.placeholder }]}>
-                Verified Garages
-              </Text>
-            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -24,6 +24,7 @@ import CustomerHeader from '../components/CustomerHeader';
 import { openGarageDirections } from '../utils/mapUtils';
 import { fonts } from '../theme/theme';
 import { formatBookingDate, formatDateWithWeekday, formatShortDate } from '../utils/dateUtils';
+import CustomerInvoiceModal from '../components/CustomerInvoiceModal';
 
 const monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -76,6 +77,13 @@ export default function BookingsScreen({ navigation }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [selectedBookingForDetails, setSelectedBookingForDetails] = useState<any | null>(null);
+  const [customerInvoiceModalVisible, setCustomerInvoiceModalVisible] = useState(false);
+  const [selectedInvoiceBooking, setSelectedInvoiceBooking] = useState<any>(null);
+
+  const openInvoiceModal = (booking: any) => {
+    setSelectedInvoiceBooking(booking);
+    setCustomerInvoiceModalVisible(true);
+  };
 
   // Active customer resolution
   const customerId = user?.customerId || user?.id || '';
@@ -904,6 +912,33 @@ export default function BookingsScreen({ navigation }: any) {
                   </View>
                 )}
 
+                {/* 4.5 Itemized Invoice Action Button */}
+                {(statusCfg.isCompleted || statusCfg.isInProgress || item.hasInvoice || item.invoiceId) && (
+                  <View style={[styles.invoiceBtnRow, { borderTopColor: theme.colors.border + '40' }]}>
+                    <TouchableOpacity
+                      onPress={() => openInvoiceModal(item)}
+                      style={[styles.viewInvoiceCardBtn, { backgroundColor: '#10B98115', borderColor: '#10B981' }]}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <MaterialCommunityIcons name="receipt" size={15} color="#10B981" style={{ marginRight: 6 }} />
+                        <Text style={[styles.viewInvoiceBtnText, { color: '#10B981' }]}>
+                          View Invoice & Parts Breakdown
+                        </Text>
+                      </View>
+                      {item.invoiceTotal ? (
+                        <View style={styles.invoiceTotalBadge}>
+                          <Text style={styles.invoiceTotalBadgeText}>
+                            £{Number(item.invoiceTotal).toFixed(2)}
+                          </Text>
+                        </View>
+                      ) : (
+                        <MaterialCommunityIcons name="chevron-right" size={16} color="#10B981" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 {/* 5. Reschedule & Cancel Action Buttons */}
                 {(statusCfg.isPending || statusCfg.isConfirmed) && (
                   <View style={[styles.cardBottomRow, { borderTopColor: theme.colors.border + '50' }]}>
@@ -1342,6 +1377,23 @@ export default function BookingsScreen({ navigation }: any) {
                           </View>
                         )}
 
+                        {/* View Invoice in BottomSheet */}
+                        {(statusCfg.isCompleted || statusCfg.isInProgress || item.hasInvoice || item.invoiceId) && (
+                          <TouchableOpacity
+                            onPress={() => {
+                              setSelectedBookingForDetails(null);
+                              openInvoiceModal(item);
+                            }}
+                            style={[styles.sheetViewInvoiceBtn, { backgroundColor: '#10B981' }]}
+                            activeOpacity={0.8}
+                          >
+                            <MaterialCommunityIcons name="receipt" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                            <Text style={styles.sheetViewInvoiceBtnText}>
+                              View Invoice
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+
                         {/* Action buttons inside bottomsheet */}
                         {(statusCfg.isPending || statusCfg.isConfirmed) && (
                           <View style={{ marginTop: 12, gap: 8 }}>
@@ -1384,6 +1436,16 @@ export default function BookingsScreen({ navigation }: any) {
           </Modal>
         );
       })()}
+
+      {/* Customer VAT Invoice Modal */}
+      <CustomerInvoiceModal
+        visible={customerInvoiceModalVisible}
+        booking={selectedInvoiceBooking}
+        onClose={() => {
+          setCustomerInvoiceModalVisible(false);
+          setSelectedInvoiceBooking(null);
+        }}
+      />
 
       {/* Calendar Picker Modal */}
       <Modal visible={calendarModalVisible} transparent animationType="fade" onRequestClose={() => setCalendarModalVisible(false)}>
@@ -2393,5 +2455,48 @@ const styles = StyleSheet.create({
     height: 2,
     marginTop: -18,
     marginHorizontal: 2,
+  },
+  invoiceBtnRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+  },
+  viewInvoiceCardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  viewInvoiceBtnText: {
+    fontSize: 12,
+    fontFamily: fonts.bold,
+  },
+  invoiceTotalBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  invoiceTotalBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontFamily: fonts.bold,
+  },
+  sheetViewInvoiceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  sheetViewInvoiceBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: fonts.bold,
   },
 });

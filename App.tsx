@@ -7,6 +7,7 @@ import { DataProvider } from './src/context/DataContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import './src/utils/AlertManager'; // Register global Alert override
 import CustomAlertModal from './src/components/CustomAlertModal';
+import SignOutLoadingModal from './src/components/SignOutLoadingModal';
 import Toast from 'react-native-toast-message';
 import { navigationRef } from './src/navigation/NavigationService';
 
@@ -21,6 +22,7 @@ function AppContent() {
       />
       <RootNavigator />
       <CustomAlertModal />
+      <SignOutLoadingModal />
       <Toast />
     </NavigationContainer>
   );
