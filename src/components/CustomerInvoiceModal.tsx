@@ -106,6 +106,9 @@ export default function CustomerInvoiceModal({ visible, booking, onClose }: Prop
   const vatRate = Number(invoice?.vatRate ?? 20);
   const vatAmount = Number(invoice?.vatAmount ?? (subtotal * (vatRate / 100)));
   const discountAmount = Number(invoice?.discountAmount ?? 0);
+  const discountLabel = invoice?.discountType === 'PERCENT' && invoice?.discountValue
+    ? `Discount (${invoice.discountValue}% OFF):`
+    : 'Discount:';
   const grandTotal = Number(invoice?.grandTotal ?? (subtotal + vatAmount - discountAmount));
   const paymentStatus = invoice?.paymentStatus || (booking?.status === 'Completed' ? 'Paid' : 'Pending');
   const invoiceNumber = invoice?.invoiceNumber || booking?.invoiceNumber || '';
@@ -264,7 +267,7 @@ export default function CustomerInvoiceModal({ visible, booking, onClose }: Prop
                 </View>
                 {discountAmount > 0 ? (
                   <View style={styles.receiptTotalsRow}>
-                    <Text style={[styles.receiptTotalsKey, { color: '#DC2626' }]}>Discount:</Text>
+                    <Text style={[styles.receiptTotalsKey, { color: '#DC2626' }]}>{discountLabel}</Text>
                     <Text style={[styles.receiptTotalsVal, { color: '#DC2626' }]}>-£{discountAmount.toFixed(2)}</Text>
                   </View>
                 ) : null}
