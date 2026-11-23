@@ -197,6 +197,49 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   const [isAddingCar, setIsAddingCar] = useState(false);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
 
+  // Marketplace Strategy & Concierge Helpline
+  // When Concierge Mode is ON: all garages route to Call to Book.
+  // When Concierge Mode is OFF: full normal booking process with live slots for all garages.
+  const isConciergeBooking = Boolean(
+    garage?.isConciergeMode !== undefined
+      ? garage.isConciergeMode
+      : garage?.bookingMode === 'CONCIERGE_CALL'
+  );
+  const conciergePhone = garage?.conciergePhoneNumber || garage?.phone || '9999999999';
+
+  const handleCallToBook = async (service?: any) => {
+    const sName = service?.name || selectedServiceNames || 'MOT / Car Service';
+    const reg = selectedVehicle?.registrationNumber || '';
+    const currentCustomer = customers.find(c => c.id === user?.customerId || c._id === user?.customerId);
+    const custPhone = currentCustomer?.mobile || (user as any)?.mobile || (user as any)?.phone || 'Unknown';
+
+    const custName = user?.name || (currentCustomer ? `${currentCustomer.firstName} ${currentCustomer.lastName}`.trim() : 'Customer');
+
+    // Asynchronously log lead to backend so marketing manager can track it
+    try {
+      authFetch(`${BASE_URL}/leads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: custName,
+          customerPhone: custPhone,
+          customerEmail: user?.email || currentCustomer?.email || '',
+          vehicleRegistration: reg,
+          garageId: garage?._id || garage?.id,
+          garageName: garage?.name || 'Workshop',
+          serviceName: sName,
+          leadType: 'PHONE_CALL',
+          source: 'CUSTOMER_APP',
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    const dialUrl = `tel:${conciergePhone}`;
+    Linking.openURL(dialUrl).catch(() => {
+      Alert.alert('Booking Helpline', `Please call our booking helpline directly: ${conciergePhone}`);
+    });
+  };
+
   // All candidate photo URLs for the garage (loadable URIs, deduped, /uploads paths resolved) - see buildGarageImageList
   const displayGarageImages = useMemo(
     () => buildGarageImageList(garage, { baseOrigin: BASE_URL.replace(/\/api\/?$/, '') }),
@@ -751,6 +794,11 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   };
 
   const handleOpenBookingModal = (service?: any, explicitServices?: any[]) => {
+    if (isConciergeBooking) {
+      handleCallToBook(service);
+      return;
+    }
+
     const isUserLoggedIn = Boolean(token && String(token).trim().length > 0 && user);
     if (!isUserLoggedIn) {
       setIsLoginModalVisible(true);
@@ -1264,6 +1312,29 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Horizontal Padded Content Container */}
         <View style={styles.contentContainer}>
+          {/* Central Concierge Booking Helpline Banner */}
+          {isConciergeBooking && (
+            <View style={[styles.conciergeBanner, { backgroundColor: '#10B98115', borderColor: '#10B98150' }]}>
+              <MaterialCommunityIcons name="phone-in-talk" size={24} color="#10B981" style={{ marginRight: 10 }} />
+              <View style={{ flex: 1, paddingRight: 6 }}>
+                <Text style={[styles.conciergeBannerTitle, { color: '#065F46' }]}>
+                  Central Phone Booking Active
+                </Text>
+                <Text style={[styles.conciergeBannerSubtitle, { color: '#047857' }]}>
+                  Call our manager helpline at <Text style={{ fontFamily: fonts.bold }}>{conciergePhone}</Text> to secure your appointment at this workshop.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.conciergeCallPill, { backgroundColor: '#10B981' }]}
+                onPress={() => handleCallToBook()}
+                activeOpacity={0.85}
+              >
+                <MaterialCommunityIcons name="phone" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Text style={styles.conciergeCallPillText}>Call</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Garage Services & Pricing Catalog - Starts directly with Services & Pricing */}
           <View style={styles.servicesSection}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -1477,13 +1548,13 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         </TouchableOpacity>
 
                         <TouchableOpacity
-                          style={[styles.bookBtn, { backgroundColor: theme.colors.primary }]}
-                          onPress={() => handleOpenBookingModal(service)}
+                          style={[styles.bookBtn, { backgroundColor: isConciergeBooking ? '#10B981' : theme.colors.primary }]}
+                          onPress={() => isConciergeBooking ? handleCallToBook(service) : handleOpenBookingModal(service)}
                           activeOpacity={0.8}
                         >
-                          <MaterialCommunityIcons name="calendar-plus" size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
+                          <MaterialCommunityIcons name={isConciergeBooking ? "phone" : "calendar-plus"} size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
                           <Text style={styles.bookBtnText}>
-                            Book Now
+                            {isConciergeBooking ? 'Call to Book' : 'Book Now'}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -1563,12 +1634,12 @@ export default function GarageDetailScreen({ route, navigation }: any) {
             </View>
 
             <TouchableOpacity
-              style={[styles.floatingBarActionBtn, { backgroundColor: theme.colors.primary }]}
-              onPress={() => handleOpenBookingModal()}
+              style={[styles.floatingBarActionBtn, { backgroundColor: isConciergeBooking ? '#10B981' : theme.colors.primary }]}
+              onPress={() => isConciergeBooking ? handleCallToBook() : handleOpenBookingModal()}
               activeOpacity={0.85}
             >
-              <Text style={styles.floatingBarActionText}>Book Now</Text>
-              <MaterialCommunityIcons name="arrow-right" size={17} color="#FFFFFF" style={{ marginLeft: 5 }} />
+              <MaterialCommunityIcons name={isConciergeBooking ? "phone" : "arrow-right"} size={17} color="#FFFFFF" style={{ marginRight: isConciergeBooking ? 6 : 0, marginLeft: isConciergeBooking ? 0 : 5 }} />
+              <Text style={styles.floatingBarActionText}>{isConciergeBooking ? 'Call to Book' : 'Book Now'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1764,7 +1835,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
               {/* Contact Telephone */}
               {garage.phone ? (
                 <View style={[styles.infoModalBlock, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                  <Text style={[styles.infoModalBlockTitle, { color: theme.colors.placeholder }]}>CONTACT TELEPHONE</Text>
+                  <Text style={[styles.infoModalBlockTitle, { color: theme.colors.placeholder }]}>
+                    {isConciergeBooking ? 'CENTRAL BOOKING HELPLINE' : 'CONTACT TELEPHONE'}
+                  </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                       <MaterialCommunityIcons name="phone-outline" size={18} color={theme.colors.secondary} style={{ marginRight: 8 }} />
@@ -1773,11 +1846,11 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       </Text>
                     </View>
                     <TouchableOpacity
-                      onPress={() => Linking.openURL(`tel:${garage.phone}`)}
-                      style={[styles.callBtn, { backgroundColor: theme.colors.secondary + '15', borderColor: theme.colors.secondary + '40' }]}
+                      onPress={() => handleCallToBook()}
+                      style={[styles.callBtn, { backgroundColor: '#10B98120', borderColor: '#10B98160' }]}
                     >
-                      <MaterialCommunityIcons name="phone" size={14} color={theme.colors.secondary} style={{ marginRight: 4 }} />
-                      <Text style={[styles.callBtnText, { color: theme.colors.secondary }]}>Call</Text>
+                      <MaterialCommunityIcons name="phone" size={14} color="#10B981" style={{ marginRight: 4 }} />
+                      <Text style={[styles.callBtnText, { color: '#10B981' }]}>Call</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -4451,5 +4524,36 @@ const styles = StyleSheet.create({
   allIncludedText: {
     fontFamily: fonts.semiBold,
     fontSize: 12,
+  },
+  conciergeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  conciergeBannerTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 13,
+  },
+  conciergeBannerSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 11.5,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  conciergeCallPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginLeft: 4,
+  },
+  conciergeCallPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: '#FFFFFF',
   },
 });
