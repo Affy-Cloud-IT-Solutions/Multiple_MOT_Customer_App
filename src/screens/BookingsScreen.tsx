@@ -70,6 +70,7 @@ export default function BookingsScreen({ navigation }: any) {
 
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'CONFIRMED' | 'IN_PROGRESS' | 'PENDING' | 'REJECTED' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [sortBy, setSortBy] = useState<'RECENT' | 'APPOINTMENT_DATE'>('RECENT');
   const [dateFilter, setDateFilter] = useState<'ALL' | 'CUSTOM'>('ALL');
   const [selectedCustomDate, setSelectedCustomDate] = useState<string | null>(null);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
@@ -147,11 +148,25 @@ export default function BookingsScreen({ navigation }: any) {
         return false;
       })
       .sort((a, b) => {
+        if (sortBy === 'APPOINTMENT_DATE') {
+          const dateA = new Date(a.date || 0).getTime();
+          const dateB = new Date(b.date || 0).getTime();
+          return dateB - dateA;
+        }
+
+        // Default: RECENT (sort by when booking was placed / created)
+        const anyA = a as any;
+        const anyB = b as any;
+        const timeA = new Date(anyA.createdAt || anyA.timestamp || anyA.bookingDate || anyA.date || 0).getTime();
+        const timeB = new Date(anyB.createdAt || anyB.timestamp || anyB.bookingDate || anyB.date || 0).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+
+        // Secondary fallback: appointment date
         const dateA = new Date(a.date || 0).getTime();
         const dateB = new Date(b.date || 0).getTime();
         return dateB - dateA;
       });
-  }, [alerts, token, customerId, customer, user]);
+  }, [alerts, token, customerId, customer, user, sortBy]);
 
   // Set of dates with customer bookings for calendar dots
   const datesWithBookingsSet = useMemo(() => {
@@ -647,6 +662,70 @@ export default function BookingsScreen({ navigation }: any) {
             );
           })}
         </ScrollView>
+
+        {/* Sort Filter Bar (Recent Wise vs Appointment Date) */}
+        <View style={styles.sortBarContainer}>
+          <Text style={[styles.sortLabel, { color: theme.colors.placeholder }]}>Sort:</Text>
+          <TouchableOpacity
+            onPress={() => setSortBy('RECENT')}
+            style={[
+              styles.sortButton,
+              {
+                backgroundColor: sortBy === 'RECENT' ? theme.colors.secondary + '20' : theme.colors.card,
+                borderColor: sortBy === 'RECENT' ? theme.colors.secondary : theme.colors.border,
+              },
+            ]}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="clock-time-four-outline"
+              size={13}
+              color={sortBy === 'RECENT' ? theme.colors.secondary : theme.colors.placeholder}
+              style={{ marginRight: 4 }}
+            />
+            <Text
+              style={[
+                styles.sortButtonText,
+                {
+                  color: sortBy === 'RECENT' ? theme.colors.secondary : theme.colors.text,
+                  fontFamily: sortBy === 'RECENT' ? fonts.bold : fonts.medium,
+                },
+              ]}
+            >
+              Most Recent
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setSortBy('APPOINTMENT_DATE')}
+            style={[
+              styles.sortButton,
+              {
+                backgroundColor: sortBy === 'APPOINTMENT_DATE' ? theme.colors.secondary + '20' : theme.colors.card,
+                borderColor: sortBy === 'APPOINTMENT_DATE' ? theme.colors.secondary : theme.colors.border,
+              },
+            ]}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="calendar-month-outline"
+              size={13}
+              color={sortBy === 'APPOINTMENT_DATE' ? theme.colors.secondary : theme.colors.placeholder}
+              style={{ marginRight: 4 }}
+            />
+            <Text
+              style={[
+                styles.sortButtonText,
+                {
+                  color: sortBy === 'APPOINTMENT_DATE' ? theme.colors.secondary : theme.colors.text,
+                  fontFamily: sortBy === 'APPOINTMENT_DATE' ? fonts.bold : fonts.medium,
+                },
+              ]}
+            >
+              Appointment Date
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Bookings List */}
@@ -1932,6 +2011,29 @@ const styles = StyleSheet.create({
   filterChipText: {
     fontFamily: fonts.semiBold,
     fontSize: 12,
+  },
+  sortBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 2,
+    paddingBottom: 6,
+  },
+  sortLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 11.5,
+    marginRight: 2,
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  sortButtonText: {
+    fontSize: 11,
   },
   listContent: {
     paddingHorizontal: 14,
