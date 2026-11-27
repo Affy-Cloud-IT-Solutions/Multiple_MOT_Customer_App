@@ -34,9 +34,76 @@ export interface Vehicle {
   year: string;
   motExpiryDate: string;
   lastServiceDate?: string;
+  engineCapacity?: number;
+  engineSize?: string;
   status: 'Active' | 'Sold' | 'Scrapped' | 'Pending' | 'Rejected';
   rejectionReason?: string;
 }
+
+export interface ServicingTierPrice {
+  interim: number;
+  full: number;
+  major: number;
+  oilChange?: number;
+}
+
+export interface GaragePricing {
+  pricingModel?: 'TIERED_CC' | 'FLAT';
+  useOverride?: boolean;
+  labourRates?: {
+    mechanical: number;
+    ev: number;
+  };
+  servicing?: any;
+  servicingTiers: {
+    up_to_1200: ServicingTierPrice;
+    '1201_to_1500': ServicingTierPrice;
+    '1501_to_2000': ServicingTierPrice;
+    '2001_to_2400': ServicingTierPrice;
+    '2401_to_3500': ServicingTierPrice;
+    '3501_plus': ServicingTierPrice;
+  };
+  mot?: {
+    enabled?: boolean;
+    class4Standalone?: number;
+    comboWithFullMajor?: number;
+    comboWithInterim?: number;
+  };
+  delivery?: {
+    dropOff?: { enabled: boolean; price: number; leadDays: number; maxMiles: number };
+    collectAndDeliver?: { enabled: boolean; price: number; leadDays: number; maxMiles: number };
+    courtesyCar?: { enabled: boolean; price: number; leadDays: number };
+  };
+  customProducts?: Array<{
+    name: string;
+    category?: string;
+    price: number;
+    description?: string;
+    isActive?: boolean;
+  }>;
+}
+
+/** Resolves any UK vehicle CC or engine size string (e.g. 1598, "1598cc", "1.6L") to its BookMyGarage 6-tier bracket */
+export function resolveEngineBracket(cc?: number | string | null): 'up_to_1200' | '1201_to_1500' | '1501_to_2000' | '2001_to_2400' | '2401_to_3500' | '3501_plus' {
+  if (!cc) return '1501_to_2000';
+  let num = typeof cc === 'number' ? cc : parseInt(String(cc).replace(/[^\d]/g, ''), 10);
+  if (isNaN(num) || num <= 0) return '1501_to_2000';
+  if (num <= 1200) return 'up_to_1200';
+  if (num <= 1500) return '1201_to_1500';
+  if (num <= 2000) return '1501_to_2000';
+  if (num <= 2400) return '2001_to_2400';
+  if (num <= 3500) return '2401_to_3500';
+  return '3501_plus';
+}
+
+export const CC_BRACKET_NAMES: Record<string, string> = {
+  up_to_1200: '0 - 1200cc',
+  '1201_to_1500': '1201 - 1500cc',
+  '1501_to_2000': '1501 - 2000cc',
+  '2001_to_2400': '2001 - 2400cc',
+  '2401_to_3500': '2401 - 3500cc',
+  '3501_plus': '3501cc+',
+};
 
 export interface AlertNotification {
   id: string;
@@ -82,6 +149,9 @@ export interface AlertNotification {
   cancellationReason?: string;
   invoiceId?: string;
   hasInvoice?: boolean;
+  mobilityOption?: 'dropOff' | 'collectAndDeliver' | 'courtesyCar';
+  deliveryFee?: number;
+  engineBracket?: string;
   invoiceTotal?: number;
   cancelledBy?: string;
   cancelledAt?: string;
@@ -227,6 +297,8 @@ interface DataContextType {
   serviceCategories: ServiceCategory[];
   fetchServiceCategories: () => Promise<ServiceCategory[]>;
   fetchBookingInvoice: (bookingId: string) => Promise<Invoice | null>;
+  fetchGaragePricing: (garageId: string) => Promise<GaragePricing | null>;
+  calculateGarageQuote: (garageId: string, quoteParams: any) => Promise<any>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -1263,6 +1335,38 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [authFetch]);
 
+  const fetchGaragePricing = useCallback(async (garageId: string): Promise<GaragePricing | null> => {
+    try {
+      const res = await fetch(`${BASE_URL}/garages/${garageId}/pricing`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.pricing || null;
+      }
+      return null;
+    } catch (err) {
+      console.error('[CUSTOMER DATA CONTEXT] fetchGaragePricing error:', err);
+      return null;
+    }
+  }, []);
+
+  const calculateGarageQuote = useCallback(async (garageId: string, quoteParams: any): Promise<any> => {
+    try {
+      const res = await fetch(`${BASE_URL}/garages/${garageId}/calculate-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(quoteParams),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.quote || null;
+      }
+      return null;
+    } catch (err) {
+      console.error('[CUSTOMER DATA CONTEXT] calculateGarageQuote error:', err);
+      return null;
+    }
+  }, []);
+
   return (
     <DataContext.Provider
       value={{
@@ -1309,6 +1413,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         serviceCategories,
         fetchServiceCategories,
         fetchBookingInvoice,
+        fetchGaragePricing,
+        calculateGarageQuote,
       }}
     >
       {children}

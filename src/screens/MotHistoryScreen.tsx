@@ -349,6 +349,8 @@ export default function MotHistoryScreen({ route, navigation }: any) {
         model: modelClean,
         year: yearClean,
         motExpiryDate: expiryFormatted,
+        engineCapacity: vehicle.engineCapacity ? Number(vehicle.engineCapacity) : (vehicle.engineSize ? (parseInt(String(vehicle.engineSize).replace(/\D/g, ''), 10) || undefined) : undefined),
+        engineSize: vehicle.engineSize || (vehicle.engineCapacity ? `${vehicle.engineCapacity}cc` : undefined),
         status: 'Active',
       });
 

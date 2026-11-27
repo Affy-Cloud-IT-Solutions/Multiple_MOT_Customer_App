@@ -115,6 +115,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
   const [model, setModel] = useState('');
   const [year, setYear] = useState('');
   const [expiry, setExpiry] = useState('');
+  const [engineCapacity, setEngineCapacity] = useState<number | undefined>(undefined);
+  const [engineSize, setEngineSize] = useState<string>('');
   // Per-field errors from the last Add Vehicle attempt - drives the red borders on the form
   const [vehicleErrors, setVehicleErrors] = useState<Record<string, string>>({});
   const clearVehicleError = (field: string) =>
@@ -147,6 +149,9 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         setModel(v.model || '');
         setYear(v.year ? String(v.year) : '');
         setExpiry(v.motExpiryDate || '');
+        const cap = v.engineCapacity ? Number(v.engineCapacity) : (v.engineSize ? (parseInt(String(v.engineSize).replace(/\D/g, ''), 10) || undefined) : undefined);
+        setEngineCapacity(cap);
+        setEngineSize(v.engineSize || (cap ? `${cap}cc` : ''));
         setVehicleErrors({});
         const infoStr = `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}`;
         setLookupSuccessInfo(infoStr);
@@ -376,6 +381,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
         model: cleaned.model,
         year: cleaned.year,
         motExpiryDate: cleaned.motExpiry,
+        engineCapacity,
+        engineSize,
         status: 'Active'
       });
 
@@ -392,6 +399,8 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
       setModel('');
       setYear('');
       setExpiry('');
+      setEngineCapacity(undefined);
+      setEngineSize('');
       setLookupSuccessInfo(null);
       setShowAddForm(false);
 
@@ -670,6 +679,13 @@ export default function CustomerPortalScreen({ route, navigation }: any) {
                             <Text style={{ fontSize: 11, color: theme.colors.placeholder, marginLeft: 4, fontFamily: fonts.regular }}>
                               • {v.year}
                             </Text>
+                          ) : null}
+                          {(v.engineCapacity || v.engineSize) ? (
+                            <View style={{ backgroundColor: theme.colors.primary + '15', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, marginLeft: 6 }}>
+                              <Text style={{ fontSize: 10, color: theme.colors.primary, fontFamily: fonts.bold }}>
+                                {v.engineSize || `${v.engineCapacity}cc`}
+                              </Text>
+                            </View>
                           ) : null}
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>

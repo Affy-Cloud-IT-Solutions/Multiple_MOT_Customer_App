@@ -369,17 +369,34 @@ export default function BookingsScreen({ navigation }: any) {
     }
     if (slotTime) return slotTime;
     if (makeModel && makeModel.includes(' - Slot: ')) {
-      return makeModel.split(' - Slot: ')[1];
+      const part = makeModel.split(' - Slot: ')[1];
+      return part.split(' | Mobility: ')[0].split(' & Service: ')[0];
     }
     return 'Regular Slot';
   };
 
   const getVehicleDisplay = (makeModel?: string) => {
     if (!makeModel) return 'Vehicle Service Appointment';
-    if (makeModel.includes(' - Slot: ')) {
-      return makeModel.split(' - Slot: ')[0];
+    let base = makeModel;
+    if (base.includes(' | Mobility: ')) {
+      base = base.split(' | Mobility: ')[0];
     }
-    return makeModel;
+    if (base.includes(' - Slot: ')) {
+      return base.split(' - Slot: ')[0];
+    }
+    if (base.includes(' - Workshop Drop-off')) {
+      return base.split(' - Workshop Drop-off')[0];
+    }
+    return base;
+  };
+
+  const getMobilityDisplay = (item: any) => {
+    if (item.mobilityOption === 'collectAndDeliver') return 'Collect & Deliver';
+    if (item.mobilityOption === 'courtesyCar') return 'Courtesy Car';
+    if (item.makeModel && item.makeModel.includes(' | Mobility: ')) {
+      return item.makeModel.split(' | Mobility: ')[1];
+    }
+    return null;
   };
 
   const getStatusConfig = (rawStatus?: string) => {
@@ -858,6 +875,13 @@ export default function BookingsScreen({ navigation }: any) {
                   <Text style={[styles.vehicleName, { color: theme.colors.text }]} numberOfLines={1}>
                     {getVehicleDisplay(item.makeModel)}
                   </Text>
+                  {getMobilityDisplay(item) ? (
+                    <View style={{ backgroundColor: theme.colors.primary + '15', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, marginLeft: 6 }}>
+                      <Text style={{ fontSize: 9.5, color: theme.colors.primary, fontFamily: fonts.bold }}>
+                        {getMobilityDisplay(item)}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 {/* 3. Type of Service */}
@@ -1137,11 +1161,18 @@ export default function BookingsScreen({ navigation }: any) {
                             </TouchableOpacity>
                           </View>
 
-                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                             <MaterialCommunityIcons name="car-sports" size={18} color={theme.colors.secondary} style={{ marginRight: 6 }} />
                             <Text style={[styles.sheetVehicleName, { color: theme.colors.text }]}>
                               {getVehicleDisplay(item.makeModel)}
                             </Text>
+                            {getMobilityDisplay(item) ? (
+                              <View style={{ backgroundColor: theme.colors.primary + '15', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginLeft: 8 }}>
+                                <Text style={{ fontSize: 10.5, color: theme.colors.primary, fontFamily: fonts.bold }}>
+                                  {getMobilityDisplay(item)}
+                                </Text>
+                              </View>
+                            ) : null}
                           </View>
                         </View>
 

@@ -18,7 +18,7 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
 import { useAppTheme } from '../context/ThemeContext';
-import { useAppValues, BASE_URL } from '../context/DataContext';
+import { useAppValues, BASE_URL, resolveEngineBracket, CC_BRACKET_NAMES } from '../context/DataContext';
 import { fonts } from '../theme/theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { openGarageDirections } from '../utils/mapUtils';
@@ -26,6 +26,7 @@ import { isServiceMatch } from '../components/FilterServiceBottomSheet';
 import { validateNewVehicleForm } from '../utils/validationUtils';
 import { buildGarageImageList, excludeBrokenImages, getGalleryViewState } from '../utils/galleryUtils';
 import LoginRequiredModal from '../components/LoginRequiredModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const GarageLogo = ({ uri, name, style, theme }: any) => {
   const [error, setError] = useState(false);
@@ -69,8 +70,11 @@ const GarageCarouselImage = ({ uri, style, width }: any) => {
   );
 };
 
+// Global tracking of recent calls to prevent duplicate leads even across tab switches / remounts (15s window)
+const recentLeadCallsByGarage: Record<string, number> = {};
+
 export default function GarageDetailScreen({ route, navigation }: any) {
-  const { theme } = useAppTheme();
+  const { theme, isDarkMode } = useAppTheme();
   const {
     token,
     user,
@@ -85,6 +89,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     refreshData,
     lookupVehicle,
     authFetch,
+    fetchGaragePricing,
+    calculateGarageQuote,
   } = useAppValues();
   const { garageId } = route.params;
   const { width: screenWidth } = Dimensions.get('window');
@@ -112,6 +118,33 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
 
+  // Active customer & vehicles resolution
+  const customerId = user?.customerId || user?.id || 'c1';
+  const customer: any = customers.find((c) =>
+    String(c.id).toLowerCase() === String(customerId).toLowerCase() ||
+    String(c._id).toLowerCase() === String(customerId).toLowerCase()
+  ) || {
+    id: customerId,
+    _id: customerId,
+    firstName: user?.name?.split(' ')[0] || 'Customer',
+    lastName: user?.name?.split(' ').slice(1).join(' ') || '',
+    email: user?.email || '',
+    mobile: '',
+  };
+
+  const activeCustomerVehicles = useMemo(() => {
+    return vehicles.filter((v) =>
+      (
+        (v.customerId && (
+          String(v.customerId).toLowerCase() === String(customer.id).toLowerCase() ||
+          String(v.customerId).toLowerCase() === String(customer._id || '').toLowerCase() ||
+          String(v.customerId).toLowerCase() === String(user?.id || '').toLowerCase()
+        )) ||
+        (!v.customerId && user?.role === 'customer')
+      ) && v.status !== 'Sold' && v.status !== 'Scrapped'
+    );
+  }, [vehicles, customer, user]);
+
   // Multi-Service Select Helpers
   const hasMot = useMemo(() => {
     return selectedServices.some((s: any) => {
@@ -123,9 +156,115 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
   const isDateOnly = !hasMot;
 
+  // CC Tier Bracket for vehicle
+  const vehicleCc = useMemo(() => {
+    if (!selectedVehicle) return null;
+    return selectedVehicle.engineCapacity || selectedVehicle.engineSize || null;
+  }, [selectedVehicle]);
+
+  const activeCcBracket = useMemo(() => {
+    return resolveEngineBracket(vehicleCc);
+  }, [vehicleCc]);
+
+  const getRoutineServiceKey = useCallback((serviceName: string = ''): 'interim' | 'full' | 'major' | 'oilChange' | null => {
+    const n = serviceName.trim().toLowerCase();
+    if (n.includes('interim')) return 'interim';
+    if (n.includes('major')) return 'major';
+    if (n.includes('full')) return 'full';
+    if (n.includes('oil')) return 'oilChange';
+    return null;
+  }, []);
+
+  const hasFullOrMajorSelected = useMemo(() => {
+    return selectedServices.some(s => {
+      const k = getRoutineServiceKey(s?.name);
+      return k === 'full' || k === 'major';
+    });
+  }, [selectedServices, getRoutineServiceKey]);
+
+  // Dynamic Effective Price calculation for any service (BookMyGarage engine)
+  const getServiceEffectivePrice = useCallback((service: any) => {
+    if (!service) return 0;
+    const routineKey = getRoutineServiceKey(service.name);
+    const garagePricing = garage?.pricing;
+
+    // 1. Routine Servicing: CC-specific bracket price
+    if (routineKey && garagePricing) {
+      let tierObj: any = null;
+      if (Array.isArray(garagePricing.servicing)) {
+        tierObj = garagePricing.servicing.find((s: any) => 
+          s.bracket === activeCcBracket || 
+          s.bracket === activeCcBracket?.replace('_to_', '-')?.replace('_and_above', '+')
+        );
+      } else if (garagePricing.servicing && typeof garagePricing.servicing === 'object') {
+        const altKey = activeCcBracket?.replace('-', '_to_')?.replace('+', '_and_above');
+        tierObj = garagePricing.servicing[activeCcBracket] || 
+                  garagePricing.servicing[altKey] || 
+                  garagePricing.servicing['bracket_' + altKey] || 
+                  garagePricing.servicing['1501-2000cc'];
+      } else if (garagePricing.servicingTiers) {
+        tierObj = garagePricing.servicingTiers[activeCcBracket] || garagePricing.servicingTiers['1501_to_2000'];
+      }
+
+      if (tierObj) {
+        if (routineKey === 'oilChange' && (tierObj.oilChange !== undefined || tierObj.oilFilter !== undefined)) {
+          return Number(tierObj.oilChange ?? tierObj.oilFilter);
+        }
+        if (tierObj[routineKey] !== undefined) {
+          return Number(tierObj[routineKey]);
+        }
+      }
+    }
+
+    // 2. MOT Combo Discount logic
+    const isMot = (service.category || '').toLowerCase().includes('mot') || (service.name || '').toLowerCase().includes('mot');
+    if (isMot && garagePricing?.mot) {
+      if (hasFullOrMajorSelected && (garagePricing.mot.comboWithFullMajor !== undefined || garagePricing.mot.comboPriceWithService !== undefined)) {
+        return Number(garagePricing.mot.comboWithFullMajor ?? garagePricing.mot.comboPriceWithService);
+      }
+      const hasInterim = selectedServices.some(s => getRoutineServiceKey(s?.name) === 'interim');
+      if (hasInterim && garagePricing.mot.comboWithInterim !== undefined) {
+        return Number(garagePricing.mot.comboWithInterim);
+      }
+      if (garagePricing.mot.standalonePrice !== undefined || garagePricing.mot.class4Standalone !== undefined) {
+        return Number(garagePricing.mot.standalonePrice ?? garagePricing.mot.class4Standalone);
+      }
+    }
+
+    return Number(service.price) || 0;
+  }, [garage?.pricing, activeCcBracket, selectedServices, hasFullOrMajorSelected, getRoutineServiceKey]);
+
+  // Mobility / Delivery option state: 'dropOff' | 'collectAndDeliver' | 'courtesyCar'
+  const [selectedMobilityOption, setSelectedMobilityOption] = useState<'dropOff' | 'collectAndDeliver' | 'courtesyCar'>('dropOff');
+
+  const deliveryFee = useMemo(() => {
+    const del = garage?.pricing?.delivery;
+    if (!del) return 0;
+    if (selectedMobilityOption === 'collectAndDeliver' && del.collectAndDeliver?.enabled) {
+      return Number(del.collectAndDeliver.price ?? 15);
+    }
+    if (selectedMobilityOption === 'courtesyCar' && del.courtesyCar?.enabled) {
+      return Number(del.courtesyCar.price ?? 20);
+    }
+    return 0;
+  }, [garage?.pricing, selectedMobilityOption]);
+
   const totalSelectedPrice = useMemo(() => {
-    return selectedServices.reduce((sum, s) => sum + (Number(s?.price) || 0), 0);
-  }, [selectedServices]);
+    const servicesSum = selectedServices.reduce((sum, s) => {
+      return sum + getServiceEffectivePrice(s);
+    }, 0);
+    return servicesSum + deliveryFee;
+  }, [selectedServices, getServiceEffectivePrice, deliveryFee]);
+
+  const totalSavings = useMemo(() => {
+    const isMotSelected = selectedServices.some(s => (s?.category || '').toLowerCase().includes('mot') || (s?.name || '').toLowerCase().includes('mot'));
+    if (isMotSelected && hasFullOrMajorSelected && garage?.pricing?.mot) {
+      const standalone = Number(garage.pricing.mot.class4Standalone || 54.85);
+      const combo = Number(garage.pricing.mot.comboWithFullMajor || 34.85);
+      return Math.max(0, standalone - combo);
+    }
+    return 0;
+  }, [selectedServices, hasFullOrMajorSelected, garage?.pricing]);
 
   const totalSelectedDuration = useMemo(() => {
     return selectedServices.reduce((sum, s) => sum + (Number(s?.duration) || 45), 0);
@@ -158,15 +297,17 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     if (!service) return;
     const targetId = service._id || service.id;
     const targetName = (service.name || '').trim().toLowerCase();
+    const effectivePrice = getServiceEffectivePrice(service);
+
     setSelectedServices(prev => {
       const exists = prev.some(s => (targetId && (s._id === targetId || s.id === targetId)) || (s.name && s.name.trim().toLowerCase() === targetName));
       if (exists) {
         return prev.filter(s => !((targetId && (s._id === targetId || s.id === targetId)) || (s.name && s.name.trim().toLowerCase() === targetName)));
       } else {
-        return [...prev, service];
+        return [...prev, { ...service, price: effectivePrice }];
       }
     });
-  }, []);
+  }, [getServiceEffectivePrice]);
 
   const removeServiceFromSelection = useCallback((service: any) => {
     if (!service) return;
@@ -174,6 +315,22 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     const targetName = (service.name || '').trim().toLowerCase();
     setSelectedServices(prev => prev.filter(s => !((targetId && (s._id === targetId || s.id === targetId)) || (s.name && s.name.trim().toLowerCase() === targetName))));
   }, []);
+
+  const handleAddMotCombo = useCallback(() => {
+    const candidateMot = (garage?.services || []).find((s: any) =>
+      (s?.category || '').toLowerCase().includes('mot') || (s?.name || '').toLowerCase().includes('mot')
+    ) || {
+      name: 'MOT Test (Class 4)',
+      category: 'MOT',
+      duration: 45,
+    };
+    const comboPrice = Number(garage?.pricing?.mot?.comboWithFullMajor || 34.85);
+
+    setSelectedServices(prev => {
+      const filtered = prev.filter((s: any) => !((s?.category || '').toLowerCase().includes('mot') || (s?.name || '').toLowerCase().includes('mot')));
+      return [...filtered, { ...candidateMot, price: comboPrice }];
+    });
+  }, [garage?.services, garage?.pricing]);
   const [isInfoModalVisible, setIsInfoModalVisible] = useState(false);
   const [isGalleryModalVisible, setIsGalleryModalVisible] = useState(false);
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
@@ -185,6 +342,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   const [newModel, setNewModel] = useState('');
   const [newYear, setNewYear] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
+  const [newEngineCapacity, setNewEngineCapacity] = useState<number | undefined>(undefined);
+  const [newEngineSize, setNewEngineSize] = useState<string>('');
   // Per-field errors from the last Save attempt - drives the red borders on the add-vehicle form
   const [newCarErrors, setNewCarErrors] = useState<Record<string, string>>({});
   const clearNewCarError = (field: string) =>
@@ -207,6 +366,103 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   );
   const conciergePhone = garage?.conciergePhoneNumber || garage?.phone || '9999999999';
 
+  // Active target vehicle for this screen
+  const currentTargetVehicle =
+    selectedVehicle ||
+    route?.params?.vehicle ||
+    route?.params?.selectedVehicle ||
+    (activeCustomerVehicles && activeCustomerVehicles.length > 0 ? activeCustomerVehicles[0] : null);
+
+  const currentTargetReg = (currentTargetVehicle?.registrationNumber || '').toUpperCase().trim();
+
+  // Booking & Call state for this specific vehicle
+  const isVehicleAlreadyBooked = Boolean(
+    currentTargetReg && alerts.some(a => 
+      a.type === 'BOOKED' && 
+      a.registrationNumber?.toUpperCase() === currentTargetReg && 
+      (a.status === 'Approved' || a.status === 'In Progress' || a.status === 'InProgress')
+    )
+  );
+
+  const isVehicleBookingPending = Boolean(
+    currentTargetReg && alerts.some(a => 
+      a.type === 'BOOKED' && 
+      a.registrationNumber?.toUpperCase() === currentTargetReg && 
+      a.status === 'Pending'
+    )
+  );
+
+  // Persistent tracking of which vehicles have had a call inquiry initiated for this garage
+  const [calledVehiclesMap, setCalledVehiclesMap] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const gId = String(garageId || garage?._id || garage?.id || '');
+    if (gId) {
+      AsyncStorage.getItem(`@called_leads_${gId}`).then((stored) => {
+        if (stored) {
+          try {
+            setCalledVehiclesMap(JSON.parse(stored));
+          } catch {}
+        }
+      }).catch(() => {});
+    }
+  }, [garageId, garage]);
+
+  const hasVehicleBeenCalled = Boolean(currentTargetReg && calledVehiclesMap[currentTargetReg]);
+
+  const getCallToBookMeta = () => {
+    if (isCallingToBook) {
+      return {
+        text: 'Calling...',
+        icon: null,
+        loading: true,
+        bg: '#10B981',
+        textColor: '#FFFFFF',
+        disabled: true,
+      };
+    }
+    if (isVehicleAlreadyBooked) {
+      return {
+        text: 'Already Booked',
+        icon: 'check-circle',
+        loading: false,
+        bg: isDarkMode ? '#1E293B' : '#E2E8F0',
+        textColor: theme.colors.placeholder,
+        disabled: true,
+      };
+    }
+    if (isVehicleBookingPending) {
+      return {
+        text: 'Booking Pending',
+        icon: 'clock-outline',
+        loading: false,
+        bg: '#F59E0B18',
+        borderColor: '#F59E0B50',
+        textColor: '#D97706',
+        disabled: true,
+      };
+    }
+    if (hasVehicleBeenCalled) {
+      return {
+        text: 'Inquiry Sent ✓',
+        icon: 'phone-check',
+        loading: false,
+        bg: isDarkMode ? '#064E3B40' : '#ECFDF5',
+        borderColor: '#10B98160',
+        textColor: '#059669',
+        disabled: true,
+      };
+    }
+    return {
+      text: 'Call to Book',
+      icon: 'phone',
+      loading: false,
+      bg: '#10B981',
+      textColor: '#FFFFFF',
+      disabled: false,
+    };
+  };
+
   // Loading state to prevent duplicate rapid clicks when initiating call-to-book
   const [isCallingToBook, setIsCallingToBook] = useState(false);
 
@@ -217,43 +473,53 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     const sName = service?.name || selectedServiceNames || 'MOT / Car Service';
 
     // Resolve vehicle registration & make/model reliably:
-    // 1. Currently selected vehicle in state
-    // 2. Vehicle passed in route params
-    // 3. First eligible customer vehicle from context
-    const targetVeh =
-      selectedVehicle ||
-      route?.params?.vehicle ||
-      route?.params?.selectedVehicle ||
-      (activeCustomerVehicles && activeCustomerVehicles.length > 0 ? activeCustomerVehicles[0] : null);
-
-    const reg = (targetVeh?.registrationNumber || '').toUpperCase().trim();
+    const targetVeh = currentTargetVehicle;
+    const reg = currentTargetReg;
     const makeModel = targetVeh ? `${targetVeh.make || ''} ${targetVeh.model || ''}`.trim() : '';
 
     const currentCustomer = customers.find(c => c.id === user?.customerId || c._id === user?.customerId);
     const custPhone = currentCustomer?.mobile || (user as any)?.mobile || (user as any)?.phone || 'Unknown';
     const custName = user?.name || (currentCustomer ? `${currentCustomer.firstName} ${currentCustomer.lastName}`.trim() : 'Customer');
 
-    // Asynchronously log lead to backend with resolved registration & vehicle details
-    try {
-      await authFetch(`${BASE_URL}/leads`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerName: custName,
-          customerPhone: custPhone,
-          customerEmail: user?.email || currentCustomer?.email || '',
-          registrationNumber: reg,
-          vehicleRegistration: reg,
-          makeModel: makeModel,
-          vehicleMakeModel: makeModel,
-          garageId: garage?._id || garage?.id,
-          garageName: garage?.name || 'Workshop',
-          serviceName: sName,
-          leadType: 'PHONE_CALL',
-          source: 'CUSTOMER_APP',
-        }),
-      }).catch(() => {});
-    } catch {}
+    const gId = String(garage?._id || garage?.id || 'default');
+    const now = Date.now();
+    const lastCallTime = recentLeadCallsByGarage[gId] || 0;
+    const isRecentLeadSent = (now - lastCallTime) < 15000;
+    recentLeadCallsByGarage[gId] = now;
+
+    // Save called state for this specific vehicle persistently
+    if (reg) {
+      setCalledVehiclesMap(prev => {
+        const next = { ...prev, [reg]: true };
+        const gKey = String(garageId || garage?._id || garage?.id || 'default');
+        AsyncStorage.setItem(`@called_leads_${gKey}`, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+    }
+
+    // Asynchronously log lead to backend only if a lead was not already sent in the last 15 seconds
+    if (!isRecentLeadSent) {
+      try {
+        await authFetch(`${BASE_URL}/leads`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerName: custName,
+            customerPhone: custPhone,
+            customerEmail: user?.email || currentCustomer?.email || '',
+            registrationNumber: reg,
+            vehicleRegistration: reg,
+            makeModel: makeModel,
+            vehicleMakeModel: makeModel,
+            garageId: garage?._id || garage?.id,
+            garageName: garage?.name || 'Workshop',
+            serviceName: sName,
+            leadType: 'PHONE_CALL',
+            source: 'CUSTOMER_APP',
+          }),
+        }).catch(() => {});
+      } catch {}
+    }
 
     const dialUrl = `tel:${conciergePhone}`;
     Linking.openURL(dialUrl).catch(() => {
@@ -354,7 +620,15 @@ export default function GarageDetailScreen({ route, navigation }: any) {
           console.warn('Fallback garage services fetch failed:', e);
         }
       }
-      setGarage({ ...data, services });
+      let pricing = data.pricing;
+      if (!pricing) {
+        try {
+          pricing = await fetchGaragePricing(garageId);
+        } catch (pe) {
+          // ignore
+        }
+      }
+      setGarage({ ...data, services, pricing });
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Could not connect to server.');
@@ -366,33 +640,6 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   useEffect(() => {
     fetchGarageDetails();
   }, [garageId, token]);
-
-  // Active customer & vehicles resolution
-  const customerId = user?.customerId || user?.id || 'c1';
-  const customer: any = customers.find((c) =>
-    String(c.id).toLowerCase() === String(customerId).toLowerCase() ||
-    String(c._id).toLowerCase() === String(customerId).toLowerCase()
-  ) || {
-    id: customerId,
-    _id: customerId,
-    firstName: user?.name?.split(' ')[0] || 'Customer',
-    lastName: user?.name?.split(' ').slice(1).join(' ') || '',
-    email: user?.email || '',
-    mobile: '',
-  };
-
-  const activeCustomerVehicles = useMemo(() => {
-    return vehicles.filter((v) =>
-      (
-        (v.customerId && (
-          String(v.customerId).toLowerCase() === String(customer.id).toLowerCase() ||
-          String(v.customerId).toLowerCase() === String(customer._id || '').toLowerCase() ||
-          String(v.customerId).toLowerCase() === String(user?.id || '').toLowerCase()
-        )) ||
-        (!v.customerId && user?.role === 'customer')
-      ) && v.status !== 'Sold' && v.status !== 'Scrapped'
-    );
-  }, [vehicles, customer, user]);
 
   const getDaysUntilExpiry = (expiryDateStr?: string) => {
     if (!expiryDateStr) return -1;
@@ -676,6 +923,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         setNewModel(v.model || '');
         setNewYear(v.year ? String(v.year) : '');
         setNewExpiry(v.motExpiryDate || '');
+        const cap = v.engineCapacity ? Number(v.engineCapacity) : (v.engineSize ? (parseInt(String(v.engineSize).replace(/\D/g, ''), 10) || undefined) : undefined);
+        setNewEngineCapacity(cap);
+        setNewEngineSize(v.engineSize || (cap ? `${cap}cc` : ''));
         const infoStr = `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}`;
         setNewLookupInfo(infoStr);
         setNewCarErrors({});
@@ -760,6 +1010,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         model: modelClean,
         year: yearClean,
         motExpiryDate: expiryClean,
+        engineCapacity: newEngineCapacity,
+        engineSize: newEngineSize,
         status: 'Active',
       });
 
@@ -777,6 +1029,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         model: modelClean,
         year: yearClean,
         motExpiryDate: expiryClean,
+        engineCapacity: newEngineCapacity,
+        engineSize: newEngineSize,
         status: 'Active',
       };
 
@@ -787,6 +1041,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       setNewModel('');
       setNewYear('');
       setNewExpiry('');
+      setNewEngineCapacity(undefined);
+      setNewEngineSize('');
       setNewLookupInfo(null);
 
       Toast.show({
@@ -821,8 +1077,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
   const handleOpenBookingModal = (service?: any, explicitServices?: any[]) => {
     if (isConciergeBooking) {
-      handleCallToBook(service);
-      return;
+      return; // In Concierge mode, phone calls must only be initiated by explicit user tap
     }
 
     const isUserLoggedIn = Boolean(token && String(token).trim().length > 0 && user);
@@ -983,8 +1238,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
     setSubmittingBooking(true);
     try {
       const targetGarageId = garage.id || garage._id || garageId;
-      const targetPrice = totalSelectedPrice;
-      const targetDuration = totalSelectedDuration;
+      const targetPrice = isNaN(totalSelectedPrice) || totalSelectedPrice < 0 ? 0 : totalSelectedPrice;
+      const targetDuration = isNaN(totalSelectedDuration) || totalSelectedDuration <= 0 ? 45 : totalSelectedDuration;
       const targetSlotTime = hasMot ? (selectedSlot?.time || selectedTime) : 'Full Day Drop-off';
 
       const targetCustId = customer.id || customer._id || user?.customerId || user?.id;
@@ -997,12 +1252,15 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         customerMobile: customer.mobile || '',
         garageId: targetGarageId,
         serviceName: selectedServiceNames,
-        services: selectedServices.map((s: any) => ({
-          name: s.name,
-          category: s.category || 'Servicing',
-          price: Number(s.price) || 0,
-          duration: Number(s.duration) || 45,
-        })),
+        services: selectedServices.map((s: any) => {
+          const eff = getServiceEffectivePrice(s);
+          return {
+            name: s.name,
+            category: s.category || 'Servicing',
+            price: isNaN(eff) || eff < 0 ? 0 : eff,
+            duration: Number(s.duration) || 45,
+          };
+        }),
         hasMot,
         isDateOnly: !hasMot,
         price: targetPrice,
@@ -1010,7 +1268,10 @@ export default function GarageDetailScreen({ route, navigation }: any) {
         slotTime: targetSlotTime,
         slotNumber: hasMot ? selectedSlot?.slotNumber : undefined,
         registrationNumber: selectedVehicle.registrationNumber,
-        makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}${otherServicesNames ? ` & Service: ${otherServicesNames}` : ''}`,
+        makeModel: `${selectedVehicle.make} ${selectedVehicle.model}${activeCcBracket ? ` [${activeCcBracket}]` : ''} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}${otherServicesNames ? ` & Service: ${otherServicesNames}` : ''} | Mobility: ${selectedMobilityOption === 'collectAndDeliver' ? `Collect & Deliver (+£${deliveryFee})` : selectedMobilityOption === 'courtesyCar' ? `Courtesy Car (+£${deliveryFee})` : 'Drop-off (Free)'}`,
+        mobilityOption: selectedMobilityOption,
+        deliveryFee,
+        engineBracket: activeCcBracket,
         status: 'Pending',
         date: selectedDate,
       });
@@ -1123,85 +1384,112 @@ export default function GarageDetailScreen({ route, navigation }: any) {
   // Target service selected from Home / GarageList
   const targetServiceQuery = route?.params?.serviceName || route?.params?.serviceFilter || route?.params?.serviceTitle || '';
 
-  // State for services category filtering & search
-  const [selectedServiceCategory, setSelectedServiceCategory] = useState<string>('All');
-  const [serviceSearchText, setServiceSearchText] = useState<string>('');
-
-  // Extract all active garage services (deduplicated by id/name)
+  // Build active garage services using standard BookMyGarage structure:
+  // 1. MOT Test (Class 4)
+  // 2. Full Service (Popular)
+  // 3. Interim Service
+  // 4. Major Service
+  // 5. Oil & Filter Change
+  // 6. Custom workshop add-ons from garage.pricing.customProducts
   const allActiveServices = useMemo(() => {
-    if (!garage?.services || !Array.isArray(garage.services) || garage.services.length === 0) {
-      return [];
-    }
-    const rawActive = garage.services.filter((s: any) => s.isActive !== false);
-    const candidateList = rawActive.length > 0 ? rawActive : garage.services;
-    const seen = new Set<string>();
-    const unique: any[] = [];
-    candidateList.forEach((s: any) => {
-      if (!s) return;
-      const key = (s._id || s.id || (s.name || '').trim().toLowerCase()).toString();
-      if (!seen.has(key)) {
-        seen.add(key);
-        unique.push(s);
-      }
+    const list: any[] = [];
+    const garagePricing = garage?.pricing;
+
+    // 1. MOT Test (Class 4)
+    list.push({
+      _id: 'svc_mot_class4',
+      id: 'svc_mot_class4',
+      name: 'MOT Test (Class 4)',
+      category: 'MOT',
+      duration: 45,
+      description: 'Official DVSA roadworthiness & emissions inspection for Class 4 passenger vehicles.',
+      price: Number(garagePricing?.mot?.standalonePrice || garagePricing?.mot?.class4Standalone || 45),
     });
-    return unique;
-  }, [garage?.services]);
+
+    // 2. Full Service (Popular)
+    list.push({
+      _id: 'svc_full_service',
+      id: 'svc_full_service',
+      name: 'Full Service',
+      category: 'Servicing',
+      duration: 180,
+      description: 'Comprehensive 70+ point annual service including full filter renewal, fluid checks & safety inspection.',
+      popular: true,
+      price: 120,
+    });
+
+    // 3. Interim Service
+    list.push({
+      _id: 'svc_interim_service',
+      id: 'svc_interim_service',
+      name: 'Interim Service',
+      category: 'Servicing',
+      duration: 90,
+      description: 'Essential 6-month / 6,000-mile 35+ point service with engine oil & filter renewal and safety check.',
+      price: 80,
+    });
+
+    // 4. Major Service
+    list.push({
+      _id: 'svc_major_service',
+      id: 'svc_major_service',
+      name: 'Major Service',
+      category: 'Servicing',
+      duration: 240,
+      description: 'Comprehensive 24-month master service including spark plugs / fuel filter, full diagnostic scan & fluid renewal.',
+      price: 170,
+    });
+
+    // 5. Oil & Filter Change
+    list.push({
+      _id: 'svc_oil_filter',
+      id: 'svc_oil_filter',
+      name: 'Oil & Filter Change',
+      category: 'Servicing',
+      duration: 45,
+      description: 'Engine oil drain & refill with manufacturer-grade synthetic oil plus brand new oil filter replacement.',
+      price: 45,
+    });
+
+    // 6. Custom Workshop Add-on Products from garage.pricing.customProducts
+    if (Array.isArray(garagePricing?.customProducts) && garagePricing.customProducts.length > 0) {
+      garagePricing.customProducts.forEach((cp: any, idx: number) => {
+        if (!cp || !cp.name) return;
+        list.push({
+          _id: cp._id || cp.id || `cp_${idx}`,
+          id: cp.id || cp._id || `cp_${idx}`,
+          name: cp.name,
+          category: 'Workshop Add-on',
+          duration: Number(cp.duration) || 60,
+          description: cp.description || 'Workshop specialised vehicle service add-on.',
+          price: Number(cp.price) || 0,
+        });
+      });
+    }
+
+    return list;
+  }, [garage?.pricing]);
 
   const unselectedServices = useMemo(() => {
     return allActiveServices.filter((s: any) => !isServiceSelected(s));
   }, [allActiveServices, isServiceSelected]);
 
-  // Unique categories list
-  const availableCategories = useMemo(() => {
-    const cats = new Set<string>();
-    allActiveServices.forEach((s: any) => {
-      if (s.category && s.category.trim()) {
-        cats.add(s.category.trim());
-      } else {
-        cats.add('Servicing');
-      }
-    });
-    return ['All', ...Array.from(cats)];
-  }, [allActiveServices]);
-
-  // Filtered services by category & search query
+  // Display services, placing targeted service from navigation on top
   const displayServices = useMemo(() => {
-    let list = allActiveServices.filter((s: any) => {
-      const sCat = (s.category || 'Servicing').trim();
-      const matchCat = selectedServiceCategory === 'All' || sCat.toLowerCase() === selectedServiceCategory.toLowerCase();
-      
-      const q = serviceSearchText.trim().toLowerCase();
-      if (!q) return matchCat;
-
-      const isMotSearch = /\bmot\b/i.test(q);
-      const isMotService = /\bmot\b/i.test(s.name || '') || /\bmot\b/i.test(sCat);
-      if (isMotSearch && isMotService) {
-        return matchCat;
-      }
-
-      const matchQuery =
-        isServiceMatch(s, q) ||
-        (s.name && s.name.toLowerCase().includes(q)) ||
-        (s.description && s.description.toLowerCase().includes(q)) ||
-        (s.category && s.category.toLowerCase().includes(q));
-      
-      return matchCat && matchQuery;
-    });
-
-    // If a target service was selected from Home/GarageList, sort matching service(s) to top!
-    if (targetServiceQuery && !serviceSearchText) {
-      list = [...list].sort((a: any, b: any) => {
+    let list = [...allActiveServices];
+    if (targetServiceQuery) {
+      list.sort((a: any, b: any) => {
         const aMatch = isServiceMatch(a, targetServiceQuery) ? 1 : 0;
         const bMatch = isServiceMatch(b, targetServiceQuery) ? 1 : 0;
         return bMatch - aMatch;
       });
     }
-
     return list;
-  }, [allActiveServices, selectedServiceCategory, serviceSearchText, targetServiceQuery]);
+  }, [allActiveServices, targetServiceQuery]);
 
   // Flow B Support: Auto-open booking modal if arriving with autoOpenBooking param
   useEffect(() => {
+    if (isConciergeBooking) return; // In Concierge mode, viewing a garage must never auto-dial or auto-create leads
     if (garage && route?.params?.autoOpenBooking && !hasAutoOpened && allActiveServices.length > 0) {
       setHasAutoOpened(true);
       const targetQuery = route?.params?.serviceName || route?.params?.serviceFilter || '';
@@ -1351,17 +1639,41 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                 </Text>
               </View>
               <TouchableOpacity
-                style={[styles.conciergeCallPill, { backgroundColor: '#10B981', opacity: isCallingToBook ? 0.6 : 1 }]}
-                onPress={() => handleCallToBook()}
+                style={[
+                  styles.conciergeCallPill,
+                  {
+                    backgroundColor: hasVehicleBeenCalled ? (isDarkMode ? '#064E3B40' : '#ECFDF5') : '#10B981',
+                    borderColor: hasVehicleBeenCalled ? '#10B98160' : undefined,
+                    borderWidth: hasVehicleBeenCalled ? 1 : 0,
+                    opacity: isCallingToBook ? 0.6 : 1,
+                  },
+                ]}
+                onPress={() => {
+                  if (hasVehicleBeenCalled) {
+                    const dialUrl = `tel:${conciergePhone}`;
+                    Linking.openURL(dialUrl).catch(() => {
+                      Alert.alert('Booking Helpline', `Please call our booking helpline directly: ${conciergePhone}`);
+                    });
+                  } else {
+                    handleCallToBook();
+                  }
+                }}
                 disabled={isCallingToBook}
                 activeOpacity={0.85}
               >
                 {isCallingToBook ? (
                   <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
                 ) : (
-                  <MaterialCommunityIcons name="phone" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <MaterialCommunityIcons
+                    name={hasVehicleBeenCalled ? 'phone-check' : 'phone'}
+                    size={13}
+                    color={hasVehicleBeenCalled ? '#059669' : '#FFFFFF'}
+                    style={{ marginRight: 4 }}
+                  />
                 )}
-                <Text style={styles.conciergeCallPillText}>{isCallingToBook ? 'Calling...' : 'Call'}</Text>
+                <Text style={[styles.conciergeCallPillText, hasVehicleBeenCalled && { color: '#059669' }]}>
+                  {isCallingToBook ? 'Calling...' : hasVehicleBeenCalled ? 'Called ✓' : 'Call'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1383,68 +1695,55 @@ export default function GarageDetailScreen({ route, navigation }: any) {
               </View>
             </View>
 
-            {/* Category Filter Tabs */}
-            {availableCategories.length > 1 && (
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false} 
-                style={{ marginVertical: 8 }}
-                contentContainerStyle={{ gap: 8 }}
-              >
-                {availableCategories.map((cat) => {
-                  const isSelected = selectedServiceCategory === cat;
-                  return (
-                    <TouchableOpacity
-                      key={cat}
-                      onPress={() => {
-                        setSelectedServiceCategory(cat);
-                        setServiceSearchText('');
-                      }}
-                      style={[
-                        styles.categoryPill,
-                        {
-                          backgroundColor: isSelected ? theme.colors.primary : theme.colors.card,
-                          borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                        }
-                      ]}
-                    >
-                      <Text style={[
-                        styles.categoryPillText,
-                        { color: isSelected ? '#FFFFFF' : theme.colors.text, fontWeight: isSelected ? '700' : '600' }
-                      ]}>
-                        {cat}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            )}
-
-            {/* Search Input for Services if 3+ services */}
-            {allActiveServices.length > 3 && (
-              <View style={[styles.serviceSearchBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                <MaterialCommunityIcons name="magnify" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
-                <TextInput
-                  value={serviceSearchText}
-                  onChangeText={setServiceSearchText}
-                  placeholder="Search services (e.g. Full Service, MOT, Brakes, AC)..."
-                  placeholderTextColor={theme.colors.placeholder}
-                  style={[styles.serviceSearchInput, { color: theme.colors.text }]}
-                />
-                {serviceSearchText.length > 0 && (
-                  <TouchableOpacity onPress={() => setServiceSearchText('')}>
-                    <MaterialCommunityIcons name="close-circle" size={16} color={theme.colors.placeholder} />
+            {/* Vehicle CC Engine Tier Banner */}
+            <View style={[styles.vehicleTierBanner, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.tierIconBadge, { backgroundColor: theme.colors.primary + '18' }]}>
+                  <MaterialCommunityIcons name="engine" size={18} color={theme.colors.primary} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={[styles.tierBannerVehicleName, { color: theme.colors.text }]} numberOfLines={1}>
+                    {selectedVehicle
+                      ? `${selectedVehicle.registrationNumber} • ${selectedVehicle.make} ${selectedVehicle.model}`
+                      : 'Standard 1.6L Vehicle Rates'}
+                  </Text>
+                  <Text style={[styles.tierBannerSub, { color: theme.colors.placeholder }]}>
+                    Engine Band: <Text style={{ fontFamily: fonts.bold, color: theme.colors.primary }}>{CC_BRACKET_NAMES[activeCcBracket] || '1501 - 2000cc'}</Text>
+                    {selectedVehicle?.engineSize ? ` (${selectedVehicle.engineSize})` : ''} • Exact CC quote active
+                  </Text>
+                </View>
+                {activeCustomerVehicles.length > 1 && (
+                  <TouchableOpacity
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 5,
+                      borderRadius: 6,
+                      backgroundColor: theme.colors.primary + '15',
+                      marginLeft: 8,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                    }}
+                    onPress={() => {
+                      const currIdx = activeCustomerVehicles.findIndex(v => (v.id || v._id) === (selectedVehicle?.id || selectedVehicle?._id));
+                      const nextIdx = (currIdx + 1) % activeCustomerVehicles.length;
+                      setSelectedVehicle(activeCustomerVehicles[nextIdx]);
+                    }}
+                  >
+                    <MaterialCommunityIcons name="swap-horizontal" size={14} color={theme.colors.primary} style={{ marginRight: 3 }} />
+                    <Text style={{ fontFamily: fonts.bold, fontSize: 11, color: theme.colors.primary }}>
+                      Switch
+                    </Text>
                   </TouchableOpacity>
                 )}
               </View>
-            )}
+            </View>
 
             {/* Services Cards List */}
             {displayServices.length === 0 ? (
               <View style={[styles.serviceEmptyBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <MaterialCommunityIcons name="wrench-outline" size={28} color={theme.colors.placeholder} />
                 <Text style={[styles.serviceEmptyText, { color: theme.colors.placeholder }]}>
-                  No services matching "{serviceSearchText}".
+                  No services currently available for this garage.
                 </Text>
               </View>
             ) : (
@@ -1502,6 +1801,11 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                               {service.category || (isMot ? 'MOT' : 'Servicing')}
                             </Text>
                           </View>
+                          {service.popular && (
+                            <View style={{ backgroundColor: '#F59E0B18', borderColor: '#F59E0B50', borderWidth: 1, paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 4 }}>
+                              <Text style={{ color: '#D97706', fontSize: 10, fontFamily: fonts.bold }}>⭐ POPULAR</Text>
+                            </View>
+                          )}
                         </View>
 
                         {/* Timing / Duration */}
@@ -1543,14 +1847,33 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
                     {/* Bottom Action Row: Pricing, Multi-Select Checkbox & Book Button */}
                     <View style={[styles.serviceCardBottomRow, { borderTopColor: theme.colors.border + '50' }]}>
-                      <View>
-                        <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase' }}>
-                          Standard Rate
-                        </Text>
-                        <Text style={[styles.servicePriceText, { color: theme.colors.text }]}>
-                          £{service.price ? Number(service.price).toFixed(2) : '0.00'}
-                        </Text>
-                      </View>
+                      {(() => {
+                        const effectivePrice = getServiceEffectivePrice(service);
+                        const routineKey = getRoutineServiceKey(service.name);
+                        const isRoutine = Boolean(routineKey);
+                        const isMotService = (service.category || '').toLowerCase().includes('mot') || (service.name || '').toLowerCase().includes('mot');
+                        const isComboApplied = isMotService && hasFullOrMajorSelected;
+
+                        return (
+                          <View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <Text style={{ fontSize: 9.5, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase' }}>
+                                {isRoutine
+                                  ? `${CC_BRACKET_NAMES[activeCcBracket] || 'Standard'} Rate`
+                                  : (isComboApplied ? 'MOT Combo Rate' : 'Standard Rate')}
+                              </Text>
+                              {isComboApplied && (
+                                <View style={{ backgroundColor: '#10B9811A', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, marginLeft: 4 }}>
+                                  <Text style={{ color: '#10B981', fontSize: 8.5, fontFamily: fonts.bold }}>-£20 SAVING</Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text style={[styles.servicePriceText, { color: theme.colors.text }]}>
+                              £{effectivePrice.toFixed(2)}
+                            </Text>
+                          </View>
+                        );
+                      })()}
 
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <TouchableOpacity
@@ -1578,27 +1901,40 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                           </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                          style={[
-                            styles.bookBtn,
-                            {
-                              backgroundColor: isConciergeBooking ? '#10B981' : theme.colors.primary,
-                              opacity: isCallingToBook && isConciergeBooking ? 0.6 : 1,
-                            },
-                          ]}
-                          onPress={() => isConciergeBooking ? handleCallToBook(service) : handleOpenBookingModal(service)}
-                          disabled={isCallingToBook && isConciergeBooking}
-                          activeOpacity={0.8}
-                        >
-                          {isCallingToBook && isConciergeBooking ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
-                          ) : (
-                            <MaterialCommunityIcons name={isConciergeBooking ? "phone" : "calendar-plus"} size={15} color="#FFFFFF" style={{ marginRight: 4 }} />
-                          )}
-                          <Text style={styles.bookBtnText}>
-                            {isConciergeBooking ? (isCallingToBook ? 'Calling...' : 'Call to Book') : 'Book Now'}
-                          </Text>
-                        </TouchableOpacity>
+                        {(() => {
+                          const callMeta = getCallToBookMeta();
+                          const isBtnDisabled = isConciergeBooking ? callMeta.disabled : false;
+                          return (
+                            <TouchableOpacity
+                              style={[
+                                styles.bookBtn,
+                                {
+                                  backgroundColor: isConciergeBooking ? callMeta.bg : theme.colors.primary,
+                                  borderColor: isConciergeBooking && callMeta.borderColor ? callMeta.borderColor : undefined,
+                                  borderWidth: isConciergeBooking && callMeta.borderColor ? 1 : 0,
+                                  opacity: isCallingToBook && isConciergeBooking ? 0.6 : 1,
+                                },
+                              ]}
+                              onPress={() => isConciergeBooking ? handleCallToBook(service) : handleOpenBookingModal(service)}
+                              disabled={isBtnDisabled}
+                              activeOpacity={0.8}
+                            >
+                              {isCallingToBook && isConciergeBooking ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
+                              ) : (
+                                <MaterialCommunityIcons
+                                  name={isConciergeBooking ? ((callMeta.icon || 'phone') as any) : "calendar-plus"}
+                                  size={15}
+                                  color={isConciergeBooking ? callMeta.textColor : "#FFFFFF"}
+                                  style={{ marginRight: 4 }}
+                                />
+                              )}
+                              <Text style={[styles.bookBtnText, isConciergeBooking && { color: callMeta.textColor }]}>
+                                {isConciergeBooking ? callMeta.text : 'Book Now'}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })()}
                       </View>
                     </View>
                   </View>
@@ -1612,6 +1948,81 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       {/* Floating Bottom Bar when services are selected - Large amount display & Selected Services Breakdown */}
       {selectedServices.length > 0 && !isBookingModalVisible && (
         <View style={[styles.floatingBottomBar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
+          {/* 0. High-Converting MOT Combo Upsell Banner */}
+          {hasFullOrMajorSelected && !hasMot && (
+            <View style={[styles.motComboBanner, { backgroundColor: isDarkMode ? '#1E293B' : '#FFFBEB', borderColor: '#F59E0B' }]}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="star-shooting" size={14} color="#D97706" style={{ marginRight: 4 }} />
+                  <Text style={{ fontSize: 11.5, fontFamily: fonts.bold, color: isDarkMode ? '#FCD34D' : '#92400E' }}>
+                    Add MOT for £{Number(garage?.pricing?.mot?.comboWithFullMajor || 34.85).toFixed(2)}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 10, fontFamily: fonts.regular, color: isDarkMode ? '#E2E8F0' : '#78350F' }}>
+                  Save £20.00 when bundled with your service!
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={{ backgroundColor: '#D97706', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}
+                onPress={handleAddMotCombo}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 11, fontFamily: fonts.bold }}>+ Add MOT</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* 0.5. Mobility & Delivery Selector */}
+          {(garage?.pricing?.delivery?.collectAndDeliver?.enabled || garage?.pricing?.delivery?.courtesyCar?.enabled) && (
+            <View style={styles.mobilitySelectorRow}>
+              <TouchableOpacity
+                style={[
+                  styles.mobilityPill,
+                  selectedMobilityOption === 'dropOff'
+                    ? { backgroundColor: theme.colors.primary + '18', borderColor: theme.colors.primary }
+                    : { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                ]}
+                onPress={() => setSelectedMobilityOption('dropOff')}
+              >
+                <Text style={[styles.mobilityPillText, { color: selectedMobilityOption === 'dropOff' ? theme.colors.primary : theme.colors.placeholder }]}>
+                  Drop-off (Free)
+                </Text>
+              </TouchableOpacity>
+
+              {garage?.pricing?.delivery?.collectAndDeliver?.enabled && (
+                <TouchableOpacity
+                  style={[
+                    styles.mobilityPill,
+                    selectedMobilityOption === 'collectAndDeliver'
+                      ? { backgroundColor: theme.colors.primary + '18', borderColor: theme.colors.primary }
+                      : { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => setSelectedMobilityOption('collectAndDeliver')}
+                >
+                  <Text style={[styles.mobilityPillText, { color: selectedMobilityOption === 'collectAndDeliver' ? theme.colors.primary : theme.colors.placeholder }]}>
+                    Collect & Deliver (+£{Number(garage.pricing.delivery.collectAndDeliver.price ?? 15)})
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {garage?.pricing?.delivery?.courtesyCar?.enabled && (
+                <TouchableOpacity
+                  style={[
+                    styles.mobilityPill,
+                    selectedMobilityOption === 'courtesyCar'
+                      ? { backgroundColor: theme.colors.primary + '18', borderColor: theme.colors.primary }
+                      : { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => setSelectedMobilityOption('courtesyCar')}
+                >
+                  <Text style={[styles.mobilityPillText, { color: selectedMobilityOption === 'courtesyCar' ? theme.colors.primary : theme.colors.placeholder }]}>
+                    Courtesy Car (+£{Number(garage.pricing.delivery.courtesyCar.price ?? 20)})
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           {/* 1. Selected Services with Price Chips / Pills */}
           <View style={styles.floatingBarServicesListWrap}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
@@ -1632,7 +2043,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
               contentContainerStyle={{ gap: 6, paddingVertical: 2 }}
             >
               {selectedServices.map((srv: any, idx: number) => {
-                const srvPrice = Number(srv.price !== undefined ? srv.price : (srv.minPrice || 0));
+                const srvPrice = getServiceEffectivePrice(srv);
                 return (
                   <View
                     key={srv.id || srv._id || srv.name || idx}
@@ -1673,29 +2084,47 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   {totalSelectedPrice.toFixed(2)}
                 </Text>
               </View>
+              {totalSavings > 0 && (
+                <Text style={{ fontSize: 10, fontFamily: fonts.bold, color: '#10B981', marginTop: 1 }}>
+                  You save £{totalSavings.toFixed(2)} today!
+                </Text>
+              )}
             </View>
 
-            <TouchableOpacity
-              style={[
-                styles.floatingBarActionBtn,
-                {
-                  backgroundColor: isConciergeBooking ? '#10B981' : theme.colors.primary,
-                  opacity: isCallingToBook && isConciergeBooking ? 0.6 : 1,
-                },
-              ]}
-              onPress={() => isConciergeBooking ? handleCallToBook() : handleOpenBookingModal()}
-              disabled={isCallingToBook && isConciergeBooking}
-              activeOpacity={0.85}
-            >
-              {isCallingToBook && isConciergeBooking ? (
-                <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
-              ) : (
-                <MaterialCommunityIcons name={isConciergeBooking ? "phone" : "arrow-right"} size={17} color="#FFFFFF" style={{ marginRight: isConciergeBooking ? 6 : 0, marginLeft: isConciergeBooking ? 0 : 5 }} />
-              )}
-              <Text style={styles.floatingBarActionText}>
-                {isConciergeBooking ? (isCallingToBook ? 'Calling...' : 'Call to Book') : 'Book Now'}
-              </Text>
-            </TouchableOpacity>
+            {(() => {
+              const callMeta = getCallToBookMeta();
+              const isBtnDisabled = isConciergeBooking ? callMeta.disabled : false;
+              return (
+                <TouchableOpacity
+                  style={[
+                    styles.floatingBarActionBtn,
+                    {
+                      backgroundColor: isConciergeBooking ? callMeta.bg : theme.colors.primary,
+                      borderColor: isConciergeBooking && callMeta.borderColor ? callMeta.borderColor : undefined,
+                      borderWidth: isConciergeBooking && callMeta.borderColor ? 1 : 0,
+                      opacity: isCallingToBook && isConciergeBooking ? 0.6 : 1,
+                    },
+                  ]}
+                  onPress={() => isConciergeBooking ? handleCallToBook() : handleOpenBookingModal()}
+                  disabled={isBtnDisabled}
+                  activeOpacity={0.85}
+                >
+                  {isCallingToBook && isConciergeBooking ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name={isConciergeBooking ? ((callMeta.icon || 'phone') as any) : "arrow-right"}
+                      size={17}
+                      color={isConciergeBooking ? callMeta.textColor : "#FFFFFF"}
+                      style={{ marginRight: isConciergeBooking ? 6 : 0, marginLeft: isConciergeBooking ? 0 : 5 }}
+                    />
+                  )}
+                  <Text style={[styles.floatingBarActionText, isConciergeBooking && { color: callMeta.textColor }]}>
+                    {isConciergeBooking ? callMeta.text : 'Book Now'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })()}
           </View>
         </View>
       )}
@@ -2346,7 +2775,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
                               <View style={styles.addMoreActionsCol}>
                                 <Text style={[styles.addMoreItemPrice, { color: theme.colors.text }]}>
-                                  +£{svc.price ? Number(svc.price).toFixed(2) : '0.00'}
+                                  +£{getServiceEffectivePrice(svc).toFixed(2)}
                                 </Text>
                                 <TouchableOpacity
                                   style={[styles.addMoreAddBtn, { backgroundColor: theme.colors.primary }]}
@@ -3055,6 +3484,35 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       {selectedVehicle ? `${selectedVehicle.registrationNumber} (${selectedVehicle.make} ${selectedVehicle.model})` : 'None Selected'}
                     </Text>
                   </View>
+
+                  {activeCcBracket ? (
+                    <View style={styles.summaryRow}>
+                      <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Engine CC Tier:</Text>
+                      <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+                        {activeCcBracket} ({CC_BRACKET_NAMES[activeCcBracket] || 'Standard'})
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.summaryRow}>
+                    <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Mobility / Delivery:</Text>
+                    <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+                      {selectedMobilityOption === 'collectAndDeliver' 
+                        ? `Collect & Deliver (+£${deliveryFee.toFixed(2)})`
+                        : selectedMobilityOption === 'courtesyCar'
+                        ? `Courtesy Car (+£${deliveryFee.toFixed(2)})`
+                        : 'Customer Drop-off (Free)'}
+                    </Text>
+                  </View>
+
+                  {totalSavings > 0 ? (
+                    <View style={styles.summaryRow}>
+                      <Text style={[styles.summaryLabel, { color: '#10B981', fontWeight: 'bold' }]}>MOT Bundle Savings:</Text>
+                      <Text style={[styles.summaryValue, { color: '#10B981', fontWeight: 'bold' }]}>
+                        -£{totalSavings.toFixed(2)}
+                      </Text>
+                    </View>
+                  ) : null}
 
                   <View style={styles.summaryRow}>
                     <Text style={[styles.summaryLabel, { color: theme.colors.placeholder }]}>Appointment:</Text>
@@ -4622,5 +5080,57 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 12,
     color: '#FFFFFF',
+  },
+  vehicleTierBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  tierIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tierBannerVehicleName: {
+    fontFamily: fonts.bold,
+    fontSize: 12.5,
+  },
+  tierBannerSub: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    marginTop: 1,
+  },
+  motComboBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  mobilitySelectorRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 8,
+  },
+  mobilityPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  mobilityPillText: {
+    fontSize: 10.5,
+    fontFamily: fonts.semiBold,
   },
 });

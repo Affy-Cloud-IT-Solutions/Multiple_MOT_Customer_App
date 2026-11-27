@@ -101,6 +101,7 @@ const mapBackendVehicleToFrontend = (v: any) => {
     color: v.color || '',
     fuelType: v.fuelType || '',
     engineSize: v.engineSize || '',
+    engineCapacity: v.engineCapacity ? Number(v.engineCapacity) : (v.engineSize ? (parseInt(String(v.engineSize).replace(/\D/g, ''), 10) || undefined) : undefined),
     registrationDate: v.registrationDate || '',
     motTestDueDate: v.motTestDueDate || '',
     status: isNotYetDue ? 'NOT DUE' : (isPass ? 'PASS' : 'FAIL'),
@@ -272,6 +273,7 @@ export default function HomeScreen({ navigation }: any) {
   const [loadingGarages, setLoadingGarages] = useState(false);
   const [loadingServices, setLoadingServices] = useState(services.length === 0 && serviceCategories.length === 0);
   const [areaModalVisible, setAreaModalVisible] = useState(false);
+  const [selectedHomeCategory, setSelectedHomeCategory] = useState<string>('All');
 
   const fetchDynamicServices = async (showMinLoader = false) => {
     const startTime = Date.now();
@@ -314,80 +316,236 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
-  // Dynamic Service Categories from Super Admin (MOT, Servicing, Tyres, Repairs...)
-  const dynamicBookableServices = useMemo<BookableServiceItem[]>(() => {
-    if (Array.isArray(serviceCategories) && serviceCategories.length > 0) {
-      return serviceCategories.map((cat, idx) => {
-        const design = resolveServiceIcon(cat.name, cat.name);
-        return {
-          id: cat._id || cat.id || `cat_${idx}`,
-          title: cat.name,
-          name: cat.name,
-          category: cat.name,
-          icon: cat.icon || design.icon,
-          iconBg: cat.iconBg || (cat.iconColor ? cat.iconColor + '18' : design.iconBg),
-          iconColor: cat.iconColor || design.iconColor,
-          searchQuery: cat.name,
-          price: 45,
-          duration: 45,
-          description: cat.description || '',
-        };
-      });
-    }
+  // Current Servicing & Pricing Flow Categories & Bookable Offerings
+  const allCurrentFlowServices = useMemo<BookableServiceItem[]>(() => [
+    // 1. MOT Category
+    {
+      id: 'home_svc_mot',
+      title: 'Class 4 MOT',
+      name: 'MOT Test (Class 4)',
+      category: 'MOT',
+      icon: 'shield-check',
+      iconBg: '#10B98118',
+      iconColor: '#10B981',
+      searchQuery: 'MOT',
+      price: 45,
+      duration: 45,
+      description: 'Official DVSA Class 4 MOT Inspection',
+    },
+    {
+      id: 'home_svc_combo',
+      title: 'MOT & Service',
+      name: 'MOT & Service Combo',
+      category: 'MOT',
+      icon: 'star-shooting',
+      iconBg: '#F59E0B18',
+      iconColor: '#F59E0B',
+      searchQuery: 'MOT & Service',
+      price: 145,
+      duration: 225,
+      description: 'Save up to £20 when booking together',
+    },
+    // 2. Routine Servicing Category (CC Engine Tiers)
+    {
+      id: 'home_svc_full',
+      title: 'Full Service',
+      name: 'Full Service',
+      category: 'Servicing',
+      icon: 'car-cog',
+      iconBg: '#1677FF18',
+      iconColor: '#1677FF',
+      searchQuery: 'Full Service',
+      price: 120,
+      duration: 180,
+      description: 'Comprehensive 70+ point annual service',
+    },
+    {
+      id: 'home_svc_interim',
+      title: 'Interim Service',
+      name: 'Interim Service',
+      category: 'Servicing',
+      icon: 'car-wrench',
+      iconBg: '#0284C718',
+      iconColor: '#0284C7',
+      searchQuery: 'Interim Service',
+      price: 80,
+      duration: 90,
+      description: 'Essential 6-month / 6,000-mile service',
+    },
+    {
+      id: 'home_svc_major',
+      title: 'Major Service',
+      name: 'Major Service',
+      category: 'Servicing',
+      icon: 'car-settings',
+      iconBg: '#8B5CF618',
+      iconColor: '#8B5CF6',
+      searchQuery: 'Major Service',
+      price: 170,
+      duration: 240,
+      description: 'Complete 24-month master service',
+    },
+    {
+      id: 'home_svc_oil',
+      title: 'Oil & Filter',
+      name: 'Oil & Filter Change',
+      category: 'Servicing',
+      icon: 'oil',
+      iconBg: '#F9731618',
+      iconColor: '#F97316',
+      searchQuery: 'Oil & Filter Change',
+      price: 45,
+      duration: 45,
+      description: 'Engine oil drain & fresh filter renewal',
+    },
+    // 3. Mobility & Delivery Category
+    {
+      id: 'home_svc_collect',
+      title: 'Collect & Deliver',
+      name: 'Collect & Deliver',
+      category: 'Mobility',
+      icon: 'truck-delivery',
+      iconBg: '#10B98118',
+      iconColor: '#10B981',
+      searchQuery: 'Collect & Deliver',
+      price: 15,
+      duration: 60,
+      description: 'Vehicle collection & return from home or work',
+    },
+    {
+      id: 'home_svc_courtesy',
+      title: 'Courtesy Car',
+      name: 'Courtesy Car',
+      category: 'Mobility',
+      icon: 'car-key',
+      iconBg: '#6366F118',
+      iconColor: '#6366F1',
+      searchQuery: 'Courtesy Car',
+      price: 20,
+      duration: 60,
+      description: 'Drive away replacement car while yours is serviced',
+    },
+    // 4. Workshop Add-ons Category
+    {
+      id: 'home_svc_aircon',
+      title: 'Air Con Regas',
+      name: 'Air Conditioning Regas',
+      category: 'Workshop Add-ons',
+      icon: 'snowflake',
+      iconBg: '#06B6D418',
+      iconColor: '#06B6D4',
+      searchQuery: 'Air Con',
+      price: 60,
+      duration: 60,
+      description: 'Recharge AC refrigerant gas R134a/R1234yf',
+    },
+    {
+      id: 'home_svc_align',
+      title: 'Wheel Alignment',
+      name: 'Wheel Alignment',
+      category: 'Workshop Add-ons',
+      icon: 'tire',
+      iconBg: '#EC489918',
+      iconColor: '#EC4899',
+      searchQuery: 'Wheel Alignment',
+      price: 40,
+      duration: 45,
+      description: 'Laser tracking & steering geometry check',
+    },
+    {
+      id: 'home_svc_diag',
+      title: 'Diagnostic Scan',
+      name: 'Diagnostic Engine Scan',
+      category: 'Workshop Add-ons',
+      icon: 'engine',
+      iconBg: '#EAB30818',
+      iconColor: '#EAB308',
+      searchQuery: 'Diagnostic',
+      price: 45,
+      duration: 45,
+      description: 'OBD-II computer fault code reading & check',
+    },
+    {
+      id: 'home_svc_dpf',
+      title: 'DPF Clean',
+      name: 'Full DPF Clean',
+      category: 'Workshop Add-ons',
+      icon: 'pipe',
+      iconBg: '#8B5CF618',
+      iconColor: '#8B5CF6',
+      searchQuery: 'DPF Clean',
+      price: 249,
+      duration: 120,
+      description: 'Deep particulate filter chemical flush & regeneration',
+    },
+  ], []);
 
-    return [];
-  }, [serviceCategories]);
+  // Filter dynamic services by selected Home Category
+  const dynamicBookableServices = useMemo(() => {
+    if (selectedHomeCategory === 'All') return allCurrentFlowServices;
+    return allCurrentFlowServices.filter(s => s.category.toLowerCase() === selectedHomeCategory.toLowerCase());
+  }, [allCurrentFlowServices, selectedHomeCategory]);
 
   const getGarageServices = (garage: any) => {
-    if (Array.isArray(garage?.services) && garage.services.length > 0) {
-      const activeSvcs = garage.services.filter((s: any) => s.isActive !== false);
-      if (activeSvcs.length > 0) {
-        return activeSvcs.map((s: any) => {
-          const sName = s.name || 'Service';
-          const sCategory = s.category || '';
-
-          // Match with Super Admin configured category if present
-          const matchedCategory = Array.isArray(serviceCategories)
-            ? serviceCategories.find((c: any) => c.name && sCategory && c.name.toLowerCase().trim() === sCategory.toLowerCase().trim())
-            : null;
-
-          const catDesign = resolveCategoryDetails(sCategory, sName);
-          const categoryName = matchedCategory?.name || sCategory || catDesign.category;
-          const categoryIcon = matchedCategory?.icon || catDesign.icon;
-          const categoryColor = matchedCategory?.iconColor || catDesign.iconColor;
-          const categoryBg = matchedCategory?.iconBg || (matchedCategory?.iconColor ? matchedCategory.iconColor + '18' : catDesign.iconBg);
-
-          return {
-            id: s._id || s.id || sName,
-            name: sName,
-            category: categoryName,
-            categoryIcon,
-            categoryColor,
-            categoryBg,
-            price: s.price !== undefined ? Number(s.price) : 45,
-            duration: s.duration,
-            icon: categoryIcon,
-            iconColor: categoryColor,
-            iconBg: categoryBg,
-          };
-        });
+    const pricing = garage?.pricing;
+    const motPrice = pricing?.mot?.standalonePrice || pricing?.mot?.class4Standalone || 45;
+    
+    // Default 1501-2000cc tier price or first bracket
+    let fullPrice = 120;
+    let interimPrice = 80;
+    if (Array.isArray(pricing?.servicing)) {
+      const standardTier = pricing.servicing.find((s: any) => s.bracket === '1501-2000cc') || pricing.servicing[1] || pricing.servicing[0];
+      if (standardTier) {
+        fullPrice = Number(standardTier.full) || fullPrice;
+        interimPrice = Number(standardTier.interim) || interimPrice;
+      }
+    } else if (pricing?.servicingTiers) {
+      const tier = pricing.servicingTiers['1501_to_2000'] || Object.values(pricing.servicingTiers)[0] as any;
+      if (tier) {
+        fullPrice = Number(tier.full) || fullPrice;
+        interimPrice = Number(tier.interim) || interimPrice;
       }
     }
-    // Default fallback if garage has not explicitly configured custom services
-    const motDesign = resolveCategoryDetails('MOT', 'MOT Test');
+
     return [
       {
-        id: 'mot_default',
+        id: 'g_mot',
         name: 'MOT Test',
         category: 'MOT',
-        categoryIcon: motDesign.icon,
-        categoryColor: motDesign.iconColor,
-        categoryBg: motDesign.iconBg,
-        price: 45,
+        categoryIcon: 'shield-check',
+        categoryColor: '#10B981',
+        categoryBg: '#10B98118',
+        price: Number(motPrice),
         duration: 45,
-        icon: motDesign.icon,
-        iconColor: motDesign.iconColor,
-        iconBg: motDesign.iconBg,
+        icon: 'shield-check',
+        iconColor: '#10B981',
+        iconBg: '#10B98118',
+      },
+      {
+        id: 'g_full',
+        name: 'Full Service',
+        category: 'Servicing',
+        categoryIcon: 'car-cog',
+        categoryColor: '#1677FF',
+        categoryBg: '#1677FF18',
+        price: Number(fullPrice),
+        duration: 180,
+        icon: 'car-cog',
+        iconColor: '#1677FF',
+        iconBg: '#1677FF18',
+      },
+      {
+        id: 'g_interim',
+        name: 'Interim Service',
+        category: 'Servicing',
+        categoryIcon: 'car-wrench',
+        categoryColor: '#0284C7',
+        categoryBg: '#0284C718',
+        price: Number(interimPrice),
+        duration: 90,
+        icon: 'car-wrench',
+        iconColor: '#0284C7',
+        iconBg: '#0284C718',
       },
     ];
   };
@@ -746,7 +904,6 @@ export default function HomeScreen({ navigation }: any) {
         </View>
 
         {/* 3. Book a Service Catalog */}
-        {dynamicBookableServices.length > 0 && (
         <View style={styles.servicesSectionWrap}>
           <View style={styles.servicesSectionHeader}>
             <View style={styles.servicesHeaderTitleRow}>
@@ -759,6 +916,55 @@ export default function HomeScreen({ navigation }: any) {
               </View>
             </View>
           </View>
+
+          {/* Category Tabs: All, Servicing, MOT, Mobility, Workshop Add-ons */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryTabsScroll}
+          >
+            {[
+              { id: 'All', label: 'All Services', icon: 'view-grid-outline' },
+              { id: 'Servicing', label: 'Servicing', icon: 'car-cog' },
+              { id: 'MOT', label: 'MOT Test', icon: 'shield-check' },
+              { id: 'Mobility', label: 'Mobility', icon: 'car-key' },
+              { id: 'Workshop Add-ons', label: 'Add-ons', icon: 'wrench-outline' },
+            ].map((cat) => {
+              const isSelected = selectedHomeCategory === cat.id;
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  activeOpacity={0.7}
+                  onPress={() => setSelectedHomeCategory(cat.id)}
+                  style={[
+                    styles.categoryTabPill,
+                    {
+                      backgroundColor: isSelected ? theme.colors.primary : (isDarkMode ? '#1E293B' : '#F1F5F9'),
+                      borderColor: isSelected ? theme.colors.primary : (isDarkMode ? '#334155' : '#E2E8F0'),
+                    },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={cat.icon as any}
+                    size={13}
+                    color={isSelected ? '#FFFFFF' : (isDarkMode ? '#94A3B8' : '#64748B')}
+                    style={{ marginRight: 5 }}
+                  />
+                  <Text
+                    style={[
+                      styles.categoryTabPillText,
+                      {
+                        color: isSelected ? '#FFFFFF' : theme.colors.text,
+                        fontFamily: isSelected ? fonts.bold : fonts.medium,
+                      },
+                    ]}
+                  >
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
           {loadingServices ? (
             <ServicesSkeletonCarousel isDarkMode={isDarkMode} />
@@ -795,7 +1001,6 @@ export default function HomeScreen({ navigation }: any) {
             </ScrollView>
           )}
         </View>
-        )}
 
         {/* 4. Local Garages (Vertical Garages with Horizontal Services Below Each) */}
         <View style={styles.nearbyGaragesSectionWrap}>
@@ -1847,6 +2052,22 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 12,
     marginTop: 2,
+  },
+  categoryTabsScroll: {
+    paddingVertical: 6,
+    gap: 8,
+    marginBottom: 8,
+  },
+  categoryTabPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  categoryTabPillText: {
+    fontSize: 12,
   },
   servicesHorizontalScroll: {
     paddingRight: 8,

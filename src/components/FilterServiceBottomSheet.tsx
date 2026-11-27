@@ -79,6 +79,113 @@ export const isServiceMatch = (service: any, filterKey: string): boolean => {
   return name.includes(key) || key.includes(name);
 };
 
+const STANDARD_BOOKABLE_SERVICES: ServiceItem[] = [
+  {
+    id: 'filter_mot',
+    title: 'MOT Test (Class 4)',
+    name: 'MOT Test (Class 4)',
+    keyword: 'mot',
+    category: 'MOT',
+    icon: 'shield-check',
+    iconColor: '#10B981',
+    iconBg: '#10B98118',
+    description: 'Official DVSA Class 4 vehicle safety & emissions inspection',
+    duration: 45,
+    minPrice: 45,
+  },
+  {
+    id: 'filter_full',
+    title: 'Full Service',
+    name: 'Full Service',
+    keyword: 'full service',
+    category: 'Servicing',
+    icon: 'car-cog',
+    iconColor: '#1677FF',
+    iconBg: '#1677FF18',
+    description: 'Comprehensive 70+ point annual inspection + filter renewal',
+    duration: 180,
+    minPrice: 120,
+  },
+  {
+    id: 'filter_interim',
+    title: 'Interim Service',
+    name: 'Interim Service',
+    keyword: 'interim',
+    category: 'Servicing',
+    icon: 'car-wrench',
+    iconColor: '#0284C7',
+    iconBg: '#0284C718',
+    description: 'Essential 6-month / 6,000-mile 35+ point service',
+    duration: 90,
+    minPrice: 80,
+  },
+  {
+    id: 'filter_major',
+    title: 'Major Service',
+    name: 'Major Service',
+    keyword: 'major',
+    category: 'Servicing',
+    icon: 'car-settings',
+    iconColor: '#8B5CF6',
+    iconBg: '#8B5CF618',
+    description: 'Master 24-month overhaul including spark plugs & diagnostic check',
+    duration: 240,
+    minPrice: 170,
+  },
+  {
+    id: 'filter_oil',
+    title: 'Oil & Filter Change',
+    name: 'Oil & Filter Change',
+    keyword: 'oil',
+    category: 'Servicing',
+    icon: 'oil',
+    iconColor: '#F97316',
+    iconBg: '#F9731618',
+    description: 'Engine oil drain & fresh filter replacement',
+    duration: 45,
+    minPrice: 45,
+  },
+  {
+    id: 'filter_aircon',
+    title: 'Air Conditioning Regas',
+    name: 'Air Conditioning Regas',
+    keyword: 'air con',
+    category: 'Workshop Add-on',
+    icon: 'snowflake',
+    iconColor: '#06B6D4',
+    iconBg: '#06B6D418',
+    description: 'Air con refrigerant gas recharge and leak check',
+    duration: 60,
+    minPrice: 60,
+  },
+  {
+    id: 'filter_alignment',
+    title: 'Wheel Alignment',
+    name: 'Wheel Alignment',
+    keyword: 'wheel alignment',
+    category: 'Workshop Add-on',
+    icon: 'tire',
+    iconColor: '#EC4899',
+    iconBg: '#EC489918',
+    description: 'Laser tracking and steering geometry alignment',
+    duration: 45,
+    minPrice: 40,
+  },
+  {
+    id: 'filter_diag',
+    title: 'Diagnostic Engine Scan',
+    name: 'Diagnostic Engine Scan',
+    keyword: 'diag',
+    category: 'Workshop Add-on',
+    icon: 'engine',
+    iconColor: '#EAB308',
+    iconBg: '#EAB30818',
+    description: 'OBD-II computer fault code reading and live sensor check',
+    duration: 45,
+    minPrice: 45,
+  },
+];
+
 export interface FilterServiceBottomSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -119,50 +226,15 @@ export default function FilterServiceBottomSheet({
     }
   }, [visible, fetchServices, fetchServiceCategories]);
 
-  // Dynamic category tabs strictly from backend Super Admin categories
+  // Standard BookMyGarage Category Tabs
   const categoryTabs = useMemo(() => {
-    if (serviceCategories && serviceCategories.length > 0) {
-      const activeCats = serviceCategories
-        .filter((c) => c.isActive !== false)
-        .map((c) => c.name);
-      return ['All', ...activeCats];
-    }
-    return ['All'];
-  }, [serviceCategories]);
+    return ['All', 'MOT', 'Servicing', 'Workshop Add-on'];
+  }, []);
 
-  // Dynamic services list strictly from backend Super Admin services (no hardcoded fallbacks)
+  // Standard BookMyGarage Services List (No redundant extra catalog)
   const allServices: ServiceItem[] = useMemo(() => {
-    if (contextServices && contextServices.length > 0) {
-      return contextServices
-        .filter((s) => s.isActive !== false)
-        .map((s) => {
-          const matchedCategory = (serviceCategories || []).find(
-            (c: any) => c.name && s.category && c.name.toLowerCase().trim() === s.category.toLowerCase().trim()
-          );
-
-          const finalIcon = matchedCategory?.icon || s.icon || 'wrench';
-          const finalColor = matchedCategory?.iconColor || s.iconColor || '#1677FF';
-          const finalBg = matchedCategory?.iconBg || s.iconBg || (finalColor ? finalColor + '18' : '#1677FF15');
-
-          return {
-            id: s.id || (s as any)._id || s.name,
-            title: s.title || s.name,
-            name: s.name || s.title,
-            keyword: s.searchQuery || s.name || s.title,
-            category: matchedCategory?.name || s.category || 'General',
-            icon: finalIcon,
-            iconColor: finalColor,
-            iconBg: finalBg,
-            description: s.description || '',
-            price: s.price,
-            minPrice: s.minPrice,
-            duration: s.duration !== undefined ? Number(s.duration) : undefined,
-            garageCount: s.garageCount,
-          };
-        });
-    }
-    return [];
-  }, [contextServices, serviceCategories]);
+    return STANDARD_BOOKABLE_SERVICES;
+  }, []);
 
   const allServicesRef = useRef<ServiceItem[]>(allServices);
   useEffect(() => {
@@ -226,11 +298,18 @@ export default function FilterServiceBottomSheet({
         return item.garageCount;
       }
       if (!garages || garages.length === 0) return 0;
+      const fk = (item.keyword || item.title || '').toLowerCase().trim();
       return garages.filter((g) => {
-        return (
-          Array.isArray(g.services) &&
-          g.services.some((s: any) => isServiceMatch(s, item.keyword || item.title))
-        );
+        if (fk.includes('mot')) {
+          return Boolean(g.pricing?.mot?.standalonePrice || g.pricing?.isConfigured || (Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))));
+        }
+        if (fk.includes('full') || fk.includes('interim') || fk.includes('major') || fk.includes('oil') || fk.includes('service')) {
+          return Boolean(g.pricing?.servicing || g.pricing?.servicingTiers || g.pricing?.isConfigured || (Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))));
+        }
+        if (Array.isArray(g.pricing?.customProducts)) {
+          if (g.pricing.customProducts.some((p: any) => (p.name || '').toLowerCase().includes(fk))) return true;
+        }
+        return Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk));
       }).length;
     },
     [garages]

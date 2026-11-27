@@ -13,7 +13,7 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
 import { useAppTheme } from '../context/ThemeContext';
-import { useAppValues, BASE_URL } from '../context/DataContext';
+import { useAppValues, BASE_URL, resolveEngineBracket, CC_BRACKET_NAMES } from '../context/DataContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { validateNewVehicleForm } from '../utils/validationUtils';
 import { fonts } from '../theme/theme';
@@ -60,6 +60,9 @@ export default function BookingScreen({ route, navigation }: any) {
   const [isSearchingNewPlate, setIsSearchingNewPlate] = useState(false);
   const [newLookupInfo, setNewLookupInfo] = useState<string | null>(null);
   const [isAddingCar, setIsAddingCar] = useState(false);
+  const [newEngineCapacity, setNewEngineCapacity] = useState<number | undefined>(undefined);
+  const [newEngineSize, setNewEngineSize] = useState<string>('');
+  const [selectedMobilityOption, setSelectedMobilityOption] = useState<'dropOff' | 'collectAndDeliver' | 'courtesyCar'>('dropOff');
 
   // Selected vehicle state
   const [selectedVehicle, setSelectedVehicle] = useState<any>(
@@ -174,18 +177,6 @@ export default function BookingScreen({ route, navigation }: any) {
 
   const isDateOnly = !hasMot;
 
-  const totalServicePrice = React.useMemo(() => {
-    return selectedServices.reduce((sum, s) => sum + (Number(s?.price) || 0), 0);
-  }, [selectedServices]);
-
-  const totalServiceDuration = React.useMemo(() => {
-    return selectedServices.reduce((sum, s) => sum + (Number(s?.duration) || 45), 0);
-  }, [selectedServices]);
-
-  const selectedServiceNames = React.useMemo(() => {
-    return selectedServices.map(s => s?.name).filter(Boolean).join(' + ') || 'Service';
-  }, [selectedServices]);
-
   const otherServices = React.useMemo(() => {
     return selectedServices.filter(s => {
       const sName = (s?.name || '').toLowerCase();
@@ -197,6 +188,160 @@ export default function BookingScreen({ route, navigation }: any) {
   const otherServicesNames = React.useMemo(() => {
     return otherServices.map(s => s?.name).filter(Boolean).join(', ');
   }, [otherServices]);
+
+  const selectedVehicleCc = selectedVehicle?.engineCapacity ? Number(selectedVehicle.engineCapacity) : undefined;
+  const vehicleCcBracket = selectedVehicleCc ? resolveEngineBracket(selectedVehicleCc) : '1501-2000cc';
+
+  const getServicePrice = React.useCallback((svc: any) => {
+    if (!svc) return 0;
+    const sName = (svc.name || '').toLowerCase();
+    const pricing = selectedGarage?.pricing;
+    if (pricing && pricing.servicing) {
+      let tierObj: any = null;
+      if (Array.isArray(pricing.servicing)) {
+        tierObj = pricing.servicing.find((s: any) => s.bracket === vehicleCcBracket);
+      } else if (typeof pricing.servicing === 'object') {
+        const altKey = vehicleCcBracket?.replace('-', '_to_')?.replace('+', '_and_above');
+        tierObj = pricing.servicing[vehicleCcBracket] || pricing.servicing[altKey] || pricing.servicing['1501-2000cc'];
+      }
+      if (tierObj) {
+        if (sName.includes('full')) return Number(tierObj.full) || Number(svc.price) || 0;
+        if (sName.includes('interim')) return Number(tierObj.interim) || Number(svc.price) || 0;
+        if (sName.includes('major')) return Number(tierObj.major) || Number(svc.price) || 0;
+        if (sName.includes('oil')) return Number(tierObj.oilChange ?? tierObj.oilFilter) || Number(svc.price) || 0;
+      }
+    }
+    const isMot = sName.includes('mot') || (svc.category || '').toLowerCase().includes('mot');
+    if (isMot && pricing?.mot) {
+      const hasFullOrMajor = selectedServices.some(s => {
+        const n = (s?.name || '').toLowerCase();
+        return n.includes('full') || n.includes('major');
+      });
+      if (hasFullOrMajor && (pricing.mot.comboWithFullMajor !== undefined || pricing.mot.comboPriceWithService !== undefined)) {
+        return Number(pricing.mot.comboWithFullMajor ?? pricing.mot.comboPriceWithService);
+      }
+      if (pricing.mot.standalonePrice !== undefined || pricing.mot.class4Standalone !== undefined) {
+        return Number(pricing.mot.standalonePrice ?? pricing.mot.class4Standalone);
+      }
+    }
+    return Number(svc.price) || 0;
+  }, [selectedGarage?.pricing, vehicleCcBracket, selectedServices]);
+
+  const totalServicePrice = React.useMemo(() => {
+    return selectedServices.reduce((sum, s) => sum + getServicePrice(s), 0);
+  }, [selectedServices, getServicePrice]);
+
+  const totalServiceDuration = React.useMemo(() => {
+    return selectedServices.reduce((sum, s) => sum + (Number(s?.duration) || 45), 0);
+  }, [selectedServices]);
+
+  const selectedServiceNames = React.useMemo(() => {
+    return selectedServices.map(s => s?.name).filter(Boolean).join(' + ') || 'Service';
+  }, [selectedServices]);
+
+  const deliveryFee = React.useMemo(() => {
+    const del = selectedGarage?.pricing?.delivery;
+    if (!del) return 0;
+    if (selectedMobilityOption === 'collectAndDeliver' && del.collectAndDeliver?.enabled) {
+      return Number(del.collectAndDeliver.price ?? 15);
+    }
+    if (selectedMobilityOption === 'courtesyCar' && del.courtesyCar?.enabled) {
+      return Number(del.courtesyCar.price ?? 20);
+    }
+    return 0;
+  }, [selectedGarage?.pricing, selectedMobilityOption]);
+
+  const motComboSaving = React.useMemo(() => {
+    const hasFullOrMajor = selectedServices.some(s => {
+      const n = (s?.name || '').toLowerCase();
+      return n.includes('full') || n.includes('major');
+    });
+    if (hasMot && hasFullOrMajor && selectedGarage?.pricing?.mot) {
+      const standalone = Number(selectedGarage.pricing.mot.class4Standalone || selectedGarage.pricing.mot.standalonePrice || 54.85);
+      const combo = Number(selectedGarage.pricing.mot.comboWithFullMajor || 34.85);
+      return Math.max(0, standalone - combo);
+    }
+    return 0;
+  }, [selectedServices, hasMot, selectedGarage?.pricing]);
+
+  const totalFinalPrice = React.useMemo(() => {
+    return totalServicePrice + deliveryFee;
+  }, [totalServicePrice, deliveryFee]);
+
+  // Available garage services built cleanly from BookMyGarage structure
+  const availableGarageServices = React.useMemo(() => {
+    if (!selectedGarage) return [];
+    const pricing = selectedGarage.pricing;
+    const list: any[] = [];
+
+    // 1. MOT Test
+    list.push({
+      _id: 'svc_mot_class4',
+      id: 'svc_mot_class4',
+      name: 'MOT Test (Class 4)',
+      category: 'MOT',
+      duration: 45,
+      price: Number(pricing?.mot?.standalonePrice || pricing?.mot?.class4Standalone || 45),
+    });
+
+    // 2. Full Service
+    list.push({
+      _id: 'svc_full_service',
+      id: 'svc_full_service',
+      name: 'Full Service',
+      category: 'Servicing',
+      duration: 180,
+      price: 120,
+    });
+
+    // 3. Interim Service
+    list.push({
+      _id: 'svc_interim_service',
+      id: 'svc_interim_service',
+      name: 'Interim Service',
+      category: 'Servicing',
+      duration: 90,
+      price: 80,
+    });
+
+    // 4. Major Service
+    list.push({
+      _id: 'svc_major_service',
+      id: 'svc_major_service',
+      name: 'Major Service',
+      category: 'Servicing',
+      duration: 240,
+      price: 170,
+    });
+
+    // 5. Oil & Filter Change
+    list.push({
+      _id: 'svc_oil_filter',
+      id: 'svc_oil_filter',
+      name: 'Oil & Filter Change',
+      category: 'Servicing',
+      duration: 45,
+      price: 45,
+    });
+
+    // 6. Custom Workshop Add-on Products from pricing.customProducts
+    if (Array.isArray(pricing?.customProducts) && pricing.customProducts.length > 0) {
+      pricing.customProducts.forEach((cp: any, idx: number) => {
+        if (!cp || !cp.name) return;
+        list.push({
+          _id: cp._id || cp.id || `cp_${idx}`,
+          id: cp.id || cp._id || `cp_${idx}`,
+          name: cp.name,
+          category: 'Workshop Add-on',
+          duration: Number(cp.duration) || 60,
+          description: cp.description || '',
+          price: Number(cp.price) || 0,
+        });
+      });
+    }
+
+    return list;
+  }, [selectedGarage]);
 
   // Fetch garages list
   useEffect(() => {
@@ -482,6 +627,9 @@ export default function BookingScreen({ route, navigation }: any) {
         setNewModel(v.model || '');
         setNewYear(v.year ? String(v.year) : '');
         setNewExpiry(v.motExpiryDate || '');
+        const cap = v.engineCapacity ? Number(v.engineCapacity) : (v.engineSize ? (parseInt(String(v.engineSize).replace(/\D/g, ''), 10) || undefined) : undefined);
+        setNewEngineCapacity(cap);
+        setNewEngineSize(v.engineSize || (cap ? `${cap}cc` : ''));
         const infoStr = `${v.make} ${v.model}${v.year ? ` (${v.year})` : ''}`;
         setNewLookupInfo(infoStr);
         setNewCarErrors({});
@@ -566,6 +714,8 @@ export default function BookingScreen({ route, navigation }: any) {
         model: modelClean,
         year: yearClean,
         motExpiryDate: expiryClean,
+        engineCapacity: newEngineCapacity,
+        engineSize: newEngineSize,
         status: 'Active',
       });
 
@@ -583,6 +733,8 @@ export default function BookingScreen({ route, navigation }: any) {
         model: modelClean,
         year: yearClean,
         motExpiryDate: expiryClean,
+        engineCapacity: newEngineCapacity,
+        engineSize: newEngineSize,
         status: 'Active',
       };
 
@@ -593,6 +745,8 @@ export default function BookingScreen({ route, navigation }: any) {
       setNewModel('');
       setNewYear('');
       setNewExpiry('');
+      setNewEngineCapacity(undefined);
+      setNewEngineSize('');
       setNewLookupInfo(null);
 
       Toast.show({
@@ -776,20 +930,26 @@ export default function BookingScreen({ route, navigation }: any) {
           customerMobile: customer.mobile || '',
           garageId: selectedGarage.id || selectedGarage._id,
           serviceName: selectedServiceNames,
-          services: selectedServices.map((s: any) => ({
-            name: s.name,
-            category: s.category || (s.name?.toLowerCase().includes('mot') ? 'MOT' : 'Servicing'),
-            price: Number(s.price) || 0,
-            duration: Number(s.duration) || 45,
-          })),
+          services: selectedServices.map((s: any) => {
+            const pr = getServicePrice(s);
+            return {
+              name: s.name,
+              category: s.category || (s.name?.toLowerCase().includes('mot') ? 'MOT' : 'Servicing'),
+              price: isNaN(pr) || pr < 0 ? 0 : pr,
+              duration: Number(s.duration) || 45,
+            };
+          }),
           hasMot,
           isDateOnly,
-          price: totalServicePrice,
+          price: isNaN(totalFinalPrice) || totalFinalPrice < 0 ? 0 : totalFinalPrice,
           duration: hasMot ? (selectedSlot?.slotDuration || totalServiceDuration) : totalServiceDuration,
           slotTime: targetSlotTime,
           slotNumber: hasMot ? selectedSlot?.slotNumber : undefined,
           registrationNumber: selectedVehicle.registrationNumber,
-          makeModel: `${selectedVehicle.make} ${selectedVehicle.model} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}${otherServicesNames ? ` & Service: ${otherServicesNames}` : ''}`,
+          makeModel: `${selectedVehicle.make} ${selectedVehicle.model}${vehicleCcBracket ? ` [${vehicleCcBracket}]` : ''} - ${hasMot ? `Slot: ${targetSlotTime}` : 'Workshop Drop-off'}${otherServicesNames ? ` & Service: ${otherServicesNames}` : ''} | Mobility: ${selectedMobilityOption === 'collectAndDeliver' ? `Collect & Deliver (+£${deliveryFee})` : selectedMobilityOption === 'courtesyCar' ? `Courtesy Car (+£${deliveryFee})` : 'Drop-off (Free)'}`,
+          mobilityOption: selectedMobilityOption,
+          deliveryFee,
+          engineBracket: vehicleCcBracket,
           status: isAdmin ? 'Approved' : 'Pending',
           date: selectedDate,
         });
@@ -1327,67 +1487,66 @@ export default function BookingScreen({ route, navigation }: any) {
                   </View>
 
                   {/* Toggle list of all garage services */}
-                  {selectedGarage.services && selectedGarage.services.filter((s: any) => s.isActive !== false).length > 0 && (
+                  {availableGarageServices.length > 0 && (
                     <View style={{ marginTop: 6, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: theme.colors.border }}>
                       <Text style={{ fontSize: 10, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase', marginBottom: 8 }}>
                         Tap services to add or remove for this booking:
                       </Text>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                        {selectedGarage.services
-                          .filter((s: any) => s.isActive !== false)
-                          .map((svc: any) => {
-                            const isChosen = selectedServices.some((s: any) =>
-                              (s._id && svc._id && s._id === svc._id) ||
-                              (s.id && svc.id && s.id === svc.id) ||
-                              (s.name?.trim().toLowerCase() === svc.name?.trim().toLowerCase())
-                            );
-                            return (
-                              <TouchableOpacity
-                                key={svc._id || svc.id || svc.name}
-                                onPress={() => toggleSelectService(svc)}
-                                activeOpacity={0.7}
-                                style={[
-                                  {
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 7,
-                                    borderRadius: 8,
-                                    borderWidth: 1.5,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    backgroundColor: isChosen
-                                      ? (theme.colors.primary + '18')
-                                      : theme.colors.background,
-                                    borderColor: isChosen
-                                      ? theme.colors.primary
-                                      : theme.colors.border,
-                                  }
-                                ]}
-                              >
-                                <MaterialCommunityIcons
-                                  name={isChosen ? 'check-circle' : 'circle-outline'}
-                                  size={16}
-                                  color={isChosen ? theme.colors.primary : theme.colors.placeholder}
-                                  style={{ marginRight: 6 }}
-                                />
-                                <View>
-                                  <Text style={{
-                                    fontSize: 12,
-                                    color: theme.colors.text,
-                                    fontFamily: isChosen ? fonts.bold : fonts.medium
-                                  }}>
-                                    {svc.name}
-                                  </Text>
-                                  <Text style={{
-                                    fontSize: 10,
-                                    color: isChosen ? theme.colors.primary : theme.colors.placeholder,
-                                    fontFamily: fonts.bold
-                                  }}>
-                                    £{Number(svc.price || 0).toFixed(2)} • {svc.duration || 45} mins
-                                  </Text>
-                                </View>
-                              </TouchableOpacity>
-                            );
-                          })}
+                        {availableGarageServices.map((svc: any) => {
+                          const isChosen = selectedServices.some((s: any) =>
+                            (s._id && svc._id && s._id === svc._id) ||
+                            (s.id && svc.id && s.id === svc.id) ||
+                            (s.name?.trim().toLowerCase() === svc.name?.trim().toLowerCase())
+                          );
+                          const effectivePrice = getServicePrice(svc);
+                          return (
+                            <TouchableOpacity
+                              key={svc._id || svc.id || svc.name}
+                              onPress={() => toggleSelectService(svc)}
+                              activeOpacity={0.7}
+                              style={[
+                                {
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 7,
+                                  borderRadius: 8,
+                                  borderWidth: 1.5,
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  backgroundColor: isChosen
+                                    ? (theme.colors.primary + '18')
+                                    : theme.colors.background,
+                                  borderColor: isChosen
+                                    ? theme.colors.primary
+                                    : theme.colors.border,
+                                }
+                              ]}
+                            >
+                              <MaterialCommunityIcons
+                                name={isChosen ? 'check-circle' : 'circle-outline'}
+                                size={16}
+                                color={isChosen ? theme.colors.primary : theme.colors.placeholder}
+                                style={{ marginRight: 6 }}
+                              />
+                              <View>
+                                <Text style={{
+                                  fontSize: 12,
+                                  color: theme.colors.text,
+                                  fontFamily: isChosen ? fonts.bold : fonts.medium
+                                }}>
+                                  {svc.name}
+                                </Text>
+                                <Text style={{
+                                  fontSize: 10,
+                                  color: isChosen ? theme.colors.primary : theme.colors.placeholder,
+                                  fontFamily: fonts.bold
+                                }}>
+                                  £{effectivePrice.toFixed(2)} • {svc.duration || 45} mins
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
                       </View>
                     </View>
                   )}
@@ -1710,6 +1869,71 @@ export default function BookingScreen({ route, navigation }: any) {
           ]}
         />
 
+        {/* Mobility & Delivery Selector */}
+        {(selectedGarage?.pricing?.delivery?.collectAndDeliver?.enabled || selectedGarage?.pricing?.delivery?.courtesyCar?.enabled) ? (
+          <View style={{ marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <MaterialCommunityIcons name="car-pickup" size={16} color={theme.colors.placeholder} style={{ marginRight: 6 }} />
+              <Text style={[styles.sectionHeading, { color: theme.colors.text, marginBottom: 0 }]}>
+                Delivery & Mobility Option
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              <TouchableOpacity
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  backgroundColor: selectedMobilityOption === 'dropOff' ? theme.colors.primary + '18' : theme.colors.card,
+                  borderColor: selectedMobilityOption === 'dropOff' ? theme.colors.primary : theme.colors.border,
+                }}
+                onPress={() => setSelectedMobilityOption('dropOff')}
+              >
+                <Text style={{ fontFamily: fonts.bold, fontSize: 11.5, color: selectedMobilityOption === 'dropOff' ? theme.colors.primary : theme.colors.placeholder }}>
+                  Customer Drop-off (Free)
+                </Text>
+              </TouchableOpacity>
+
+              {selectedGarage?.pricing?.delivery?.collectAndDeliver?.enabled ? (
+                <TouchableOpacity
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    backgroundColor: selectedMobilityOption === 'collectAndDeliver' ? theme.colors.primary + '18' : theme.colors.card,
+                    borderColor: selectedMobilityOption === 'collectAndDeliver' ? theme.colors.primary : theme.colors.border,
+                  }}
+                  onPress={() => setSelectedMobilityOption('collectAndDeliver')}
+                >
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 11.5, color: selectedMobilityOption === 'collectAndDeliver' ? theme.colors.primary : theme.colors.placeholder }}>
+                    Collect & Deliver (+£{Number(selectedGarage.pricing.delivery.collectAndDeliver.price ?? 15)})
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {selectedGarage?.pricing?.delivery?.courtesyCar?.enabled ? (
+                <TouchableOpacity
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    backgroundColor: selectedMobilityOption === 'courtesyCar' ? theme.colors.primary + '18' : theme.colors.card,
+                    borderColor: selectedMobilityOption === 'courtesyCar' ? theme.colors.primary : theme.colors.border,
+                  }}
+                  onPress={() => setSelectedMobilityOption('courtesyCar')}
+                >
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 11.5, color: selectedMobilityOption === 'courtesyCar' ? theme.colors.primary : theme.colors.placeholder }}>
+                    Courtesy Car (+£{Number(selectedGarage.pricing.delivery.courtesyCar.price ?? 20)})
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
         {/* Summary Card Before Confirmation */}
         <View style={[styles.vehicleCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, marginTop: 14, marginBottom: 4 }]}>
           <Text style={{ fontSize: 11, color: theme.colors.placeholder, fontFamily: fonts.bold, textTransform: 'uppercase', marginBottom: 8 }}>
@@ -1726,6 +1950,32 @@ export default function BookingScreen({ route, navigation }: any) {
                 {selectedServiceNames}
               </Text>
             </View>
+            {vehicleCcBracket ? (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 12, color: theme.colors.placeholder, fontFamily: fonts.medium }}>Engine CC Bracket:</Text>
+                <Text style={{ fontSize: 12, color: theme.colors.text, fontFamily: fonts.bold }}>
+                  {vehicleCcBracket} ({CC_BRACKET_NAMES[vehicleCcBracket] || 'Standard'})
+                </Text>
+              </View>
+            ) : null}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12, color: theme.colors.placeholder, fontFamily: fonts.medium }}>Mobility & Delivery:</Text>
+              <Text style={{ fontSize: 12, color: theme.colors.text, fontFamily: fonts.bold }}>
+                {selectedMobilityOption === 'collectAndDeliver' 
+                  ? `Collect & Deliver (+£${deliveryFee.toFixed(2)})`
+                  : selectedMobilityOption === 'courtesyCar'
+                  ? `Courtesy Car (+£${deliveryFee.toFixed(2)})`
+                  : 'Customer Drop-off (Free)'}
+              </Text>
+            </View>
+            {motComboSaving > 0 ? (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 12, color: '#10B981', fontFamily: fonts.bold }}>MOT Bundle Savings:</Text>
+                <Text style={{ fontSize: 12, color: '#10B981', fontFamily: fonts.bold }}>
+                  -£{motComboSaving.toFixed(2)}
+                </Text>
+              </View>
+            ) : null}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Text style={{ fontSize: 12, color: theme.colors.placeholder, fontFamily: fonts.medium }}>
                 {hasMot ? 'MOT Slot:' : 'Workshop Intake:'}
@@ -1737,7 +1987,7 @@ export default function BookingScreen({ route, navigation }: any) {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 0.5, borderTopColor: theme.colors.border, paddingTop: 6, marginTop: 2 }}>
               <Text style={{ fontSize: 13, color: theme.colors.text, fontFamily: fonts.bold }}>Total Price:</Text>
               <Text style={{ fontSize: 14, color: theme.colors.primary, fontFamily: fonts.bold }}>
-                £{totalServicePrice.toFixed(2)}
+                £{totalFinalPrice.toFixed(2)}
               </Text>
             </View>
           </View>

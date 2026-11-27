@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppTheme } from '../context/ThemeContext';
-import { useAppValues, BASE_URL } from '../context/DataContext';
+import { useAppValues, BASE_URL, resolveEngineBracket, CC_BRACKET_NAMES } from '../context/DataContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -427,9 +427,30 @@ export default function GarageListScreen({ route, navigation }: any) {
       };
     });
 
+    const doesGarageMatchFilter = (g: any, fk: string) => {
+      const filterLower = (fk || '').toLowerCase().trim();
+      if (!filterLower) return true;
+      if (filterLower.includes('mot')) {
+        return Boolean(g.pricing?.mot?.standalonePrice || g.pricing?.isConfigured || (Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))));
+      }
+      if (filterLower.includes('full') || filterLower.includes('interim') || filterLower.includes('major') || filterLower.includes('oil') || filterLower.includes('service')) {
+        return Boolean(g.pricing?.servicing || g.pricing?.servicingTiers || g.pricing?.isConfigured || (Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))));
+      }
+      if (filterLower.includes('collect') || filterLower.includes('deliver')) {
+        return Boolean(g.pricing?.delivery?.collectAndDeliver?.enabled || (Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))));
+      }
+      if (filterLower.includes('courtesy')) {
+        return Boolean(g.pricing?.delivery?.courtesyCar?.enabled || (Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))));
+      }
+      if (Array.isArray(g.pricing?.customProducts)) {
+        if (g.pricing.customProducts.some((p: any) => (p.name || '').toLowerCase().includes(filterLower))) return true;
+      }
+      return Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk));
+    };
+
     // Check if any garage matches all selected filters
     const hasAnyMatchingAll = effectiveFilters.length > 0 && mapped.some((g) =>
-      effectiveFilters.every((fk) => Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk)))
+      effectiveFilters.every((fk) => doesGarageMatchFilter(g, fk))
     );
 
     // Filter by search query (name, address, city, postcode) AND service filters
@@ -438,12 +459,12 @@ export default function GarageListScreen({ route, navigation }: any) {
       if (effectiveFilters.length > 0) {
         if (hasAnyMatchingAll) {
           const matchesAll = effectiveFilters.every((fk) =>
-            Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))
+            doesGarageMatchFilter(g, fk)
           );
           if (!matchesAll) return false;
         } else {
           const matchesAny = effectiveFilters.some((fk) =>
-            Array.isArray(g.services) && g.services.some((s: any) => isServiceMatch(s, fk))
+            doesGarageMatchFilter(g, fk)
           );
           if (!matchesAny) return false;
         }
@@ -507,10 +528,46 @@ export default function GarageListScreen({ route, navigation }: any) {
       ? effectiveFilters.map((fk) => item.services.find((s: any) => isServiceMatch(s, fk))).filter(Boolean)
       : [];
 
+    const activeVeh = route?.params?.selectedVehicle || route?.params?.vehicle;
+    const vehCc = activeVeh?.engineCapacity ? Number(activeVeh.engineCapacity) : undefined;
+    const vehBracket = vehCc ? resolveEngineBracket(vehCc) : '1501-2000cc';
+
     const totalPriceNum = matchingServices.reduce((sum: number, s: any) => sum + (Number(s.price) || 0), 0);
-    const displayPrice = totalPriceNum > 0
-      ? totalPriceNum.toFixed(0)
+    let finalDisplayPriceNum = totalPriceNum;
+    if (item.pricing && hasServiceFilter) {
+      const primaryFilterLower = (effectiveFilters[0] || '').toLowerCase();
+      let tierObj: any = null;
+      if (Array.isArray(item.pricing.servicing)) {
+        tierObj = item.pricing.servicing.find((s: any) => s.bracket === vehBracket);
+      } else if (item.pricing.servicing && typeof item.pricing.servicing === 'object') {
+        tierObj = item.pricing.servicing[vehBracket] || item.pricing.servicing['1501-2000cc'];
+      } else if (item.pricing.servicingTiers) {
+        tierObj = item.pricing.servicingTiers[vehBracket] || item.pricing.servicingTiers['1501_to_2000'];
+      }
+
+      if (tierObj) {
+        if (primaryFilterLower.includes('full')) {
+          finalDisplayPriceNum = Number(tierObj.full) || finalDisplayPriceNum;
+        } else if (primaryFilterLower.includes('interim')) {
+          finalDisplayPriceNum = Number(tierObj.interim) || finalDisplayPriceNum;
+        } else if (primaryFilterLower.includes('major')) {
+          finalDisplayPriceNum = Number(tierObj.major) || finalDisplayPriceNum;
+        } else if (primaryFilterLower.includes('oil')) {
+          finalDisplayPriceNum = Number(tierObj.oilChange ?? tierObj.oilFilter) || finalDisplayPriceNum;
+        }
+      }
+      if (primaryFilterLower.includes('mot') && (item.pricing.mot?.standalonePrice || item.pricing.mot?.class4Standalone)) {
+        finalDisplayPriceNum = Number(item.pricing.mot.standalonePrice || item.pricing.mot.class4Standalone);
+      }
+    }
+
+    const displayPrice = finalDisplayPriceNum > 0
+      ? finalDisplayPriceNum.toFixed(0)
       : (matchingServices[0]?.price ? Number(matchingServices[0].price).toFixed(0) : '45');
+
+    const comboSaving = (item.pricing?.mot?.standalonePrice && item.pricing?.mot?.comboWithFullMajor)
+      ? Number((item.pricing.mot.standalonePrice - item.pricing.mot.comboWithFullMajor).toFixed(0))
+      : 20;
 
     const serviceDisplayName = matchingServices.length === 1
       ? matchingServices[0].name
@@ -569,6 +626,26 @@ export default function GarageListScreen({ route, navigation }: any) {
                 </Text>
               </View>
             ) : null}
+
+            {/* BookMyGarage Badges: MOT Combo Savings & Delivery */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+              {item.pricing?.mot?.comboWithFullMajor ? (
+                <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="star-shooting" size={10} color="#D97706" style={{ marginRight: 2 }} />
+                  <Text style={{ fontSize: 9.5, fontFamily: fonts.bold, color: '#92400E' }}>
+                    MOT Combo Save £{comboSaving > 0 ? comboSaving : '20'}
+                  </Text>
+                </View>
+              ) : null}
+              {item.pricing?.delivery?.collectAndDeliver?.enabled ? (
+                <View style={{ backgroundColor: theme.colors.primary + '12', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, flexDirection: 'row', alignItems: 'center' }}>
+                  <MaterialCommunityIcons name="car-pickup" size={10} color={theme.colors.primary} style={{ marginRight: 2 }} />
+                  <Text style={{ fontSize: 9.5, fontFamily: fonts.semiBold, color: theme.colors.primary }}>
+                    Collect & Deliver
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
 
           {/* Show big price & Book button only when a service filter is applied; otherwise show chevron navigation indicator */}
