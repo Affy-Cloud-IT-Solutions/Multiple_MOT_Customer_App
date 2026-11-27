@@ -410,8 +410,14 @@ export default function GarageDetailScreen({ route, navigation }: any) {
 
   const hasVehicleBeenCalled = Boolean(currentTargetReg && calledVehiclesMap[currentTargetReg]);
 
-  const getCallToBookMeta = () => {
-    if (isCallingToBook) {
+  // Track which specific button initiated the call to book
+  // e.g. 'concierge_banner' | 'bottom_bar' | 'info_modal' | string (serviceKey) | null
+  const [callingButtonKey, setCallingButtonKey] = useState<string | null>(null);
+  const isCallingToBook = Boolean(callingButtonKey);
+
+  const getCallToBookMeta = (targetKey?: string) => {
+    const isThisButtonCalling = Boolean(targetKey && callingButtonKey === targetKey);
+    if (isThisButtonCalling) {
       return {
         text: 'Calling...',
         icon: null,
@@ -459,16 +465,13 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       loading: false,
       bg: '#10B981',
       textColor: '#FFFFFF',
-      disabled: false,
+      disabled: isCallingToBook,
     };
   };
 
-  // Loading state to prevent duplicate rapid clicks when initiating call-to-book
-  const [isCallingToBook, setIsCallingToBook] = useState(false);
-
-  const handleCallToBook = async (service?: any) => {
-    if (isCallingToBook) return; // Prevent spamming / multiple concurrent clicks
-    setIsCallingToBook(true);
+  const handleCallToBook = async (service?: any, buttonKey: string = 'general') => {
+    if (callingButtonKey) return; // Prevent spamming / multiple concurrent clicks
+    setCallingButtonKey(buttonKey);
 
     const sName = service?.name || selectedServiceNames || 'MOT / Car Service';
 
@@ -526,10 +529,10 @@ export default function GarageDetailScreen({ route, navigation }: any) {
       Alert.alert('Booking Helpline', `Please call our booking helpline directly: ${conciergePhone}`);
     });
 
-    // 3-second lockout debounce before button can be pressed again
+    // 2.5-second lockout debounce before button can be pressed again
     setTimeout(() => {
-      setIsCallingToBook(false);
-    }, 3000);
+      setCallingButtonKey(null);
+    }, 2500);
   };
 
   // All candidate photo URLs for the garage (loadable URIs, deduped, /uploads paths resolved) - see buildGarageImageList
@@ -1645,7 +1648,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                     backgroundColor: hasVehicleBeenCalled ? (isDarkMode ? '#064E3B40' : '#ECFDF5') : '#10B981',
                     borderColor: hasVehicleBeenCalled ? '#10B98160' : undefined,
                     borderWidth: hasVehicleBeenCalled ? 1 : 0,
-                    opacity: isCallingToBook ? 0.6 : 1,
+                    opacity: isCallingToBook ? 0.7 : 1,
                   },
                 ]}
                 onPress={() => {
@@ -1655,13 +1658,13 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       Alert.alert('Booking Helpline', `Please call our booking helpline directly: ${conciergePhone}`);
                     });
                   } else {
-                    handleCallToBook();
+                    handleCallToBook(undefined, 'concierge_banner');
                   }
                 }}
                 disabled={isCallingToBook}
                 activeOpacity={0.85}
               >
-                {isCallingToBook ? (
+                {callingButtonKey === 'concierge_banner' ? (
                   <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
                 ) : (
                   <MaterialCommunityIcons
@@ -1672,7 +1675,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                   />
                 )}
                 <Text style={[styles.conciergeCallPillText, hasVehicleBeenCalled && { color: '#059669' }]}>
-                  {isCallingToBook ? 'Calling...' : hasVehicleBeenCalled ? 'Called ✓' : 'Call'}
+                  {callingButtonKey === 'concierge_banner' ? 'Calling...' : hasVehicleBeenCalled ? 'Called ✓' : 'Call'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1902,7 +1905,9 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         </TouchableOpacity>
 
                         {(() => {
-                          const callMeta = getCallToBookMeta();
+                          const serviceKey = String(service._id || service.id || service.name);
+                          const isThisServiceCalling = callingButtonKey === serviceKey;
+                          const callMeta = getCallToBookMeta(serviceKey);
                           const isBtnDisabled = isConciergeBooking ? callMeta.disabled : false;
                           return (
                             <TouchableOpacity
@@ -1912,14 +1917,14 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                                   backgroundColor: isConciergeBooking ? callMeta.bg : theme.colors.primary,
                                   borderColor: isConciergeBooking && callMeta.borderColor ? callMeta.borderColor : undefined,
                                   borderWidth: isConciergeBooking && callMeta.borderColor ? 1 : 0,
-                                  opacity: isCallingToBook && isConciergeBooking ? 0.6 : 1,
+                                  opacity: isThisServiceCalling ? 0.7 : (isCallingToBook && isConciergeBooking ? 0.75 : 1),
                                 },
                               ]}
-                              onPress={() => isConciergeBooking ? handleCallToBook(service) : handleOpenBookingModal(service)}
+                              onPress={() => isConciergeBooking ? handleCallToBook(service, serviceKey) : handleOpenBookingModal(service)}
                               disabled={isBtnDisabled}
                               activeOpacity={0.8}
                             >
-                              {isCallingToBook && isConciergeBooking ? (
+                              {isThisServiceCalling && isConciergeBooking ? (
                                 <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
                               ) : (
                                 <MaterialCommunityIcons
@@ -2092,7 +2097,8 @@ export default function GarageDetailScreen({ route, navigation }: any) {
             </View>
 
             {(() => {
-              const callMeta = getCallToBookMeta();
+              const isBottomBarCalling = callingButtonKey === 'bottom_bar';
+              const callMeta = getCallToBookMeta('bottom_bar');
               const isBtnDisabled = isConciergeBooking ? callMeta.disabled : false;
               return (
                 <TouchableOpacity
@@ -2102,14 +2108,14 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       backgroundColor: isConciergeBooking ? callMeta.bg : theme.colors.primary,
                       borderColor: isConciergeBooking && callMeta.borderColor ? callMeta.borderColor : undefined,
                       borderWidth: isConciergeBooking && callMeta.borderColor ? 1 : 0,
-                      opacity: isCallingToBook && isConciergeBooking ? 0.6 : 1,
+                      opacity: isBottomBarCalling ? 0.7 : (isCallingToBook && isConciergeBooking ? 0.75 : 1),
                     },
                   ]}
-                  onPress={() => isConciergeBooking ? handleCallToBook() : handleOpenBookingModal()}
+                  onPress={() => isConciergeBooking ? handleCallToBook(undefined, 'bottom_bar') : handleOpenBookingModal()}
                   disabled={isBtnDisabled}
                   activeOpacity={0.85}
                 >
-                  {isCallingToBook && isConciergeBooking ? (
+                  {isBottomBarCalling && isConciergeBooking ? (
                     <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
                   ) : (
                     <MaterialCommunityIcons
@@ -2330,7 +2336,7 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                       </Text>
                     </View>
                     <TouchableOpacity
-                      onPress={() => handleCallToBook()}
+                      onPress={() => handleCallToBook(undefined, 'info_modal')}
                       disabled={isCallingToBook}
                       style={[
                         styles.callBtn,
@@ -2341,12 +2347,12 @@ export default function GarageDetailScreen({ route, navigation }: any) {
                         },
                       ]}
                     >
-                      {isCallingToBook ? (
+                      {callingButtonKey === 'info_modal' ? (
                         <ActivityIndicator size="small" color="#10B981" style={{ marginRight: 4 }} />
                       ) : (
                         <MaterialCommunityIcons name="phone" size={14} color="#10B981" style={{ marginRight: 4 }} />
                       )}
-                      <Text style={[styles.callBtnText, { color: '#10B981' }]}>{isCallingToBook ? 'Calling...' : 'Call'}</Text>
+                      <Text style={[styles.callBtnText, { color: '#10B981' }]}>{callingButtonKey === 'info_modal' ? 'Calling...' : 'Call'}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
